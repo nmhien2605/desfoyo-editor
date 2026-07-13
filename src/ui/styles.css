@@ -1,0 +1,4 @@
+/* Tailwind v4 is CSS-first and zero-config by default (auto-detects content).
+   Not imported anywhere yet — src/ui/ has no components. Import this from
+   the first real UI entry point when that work starts. */
+@import 'tailwindcss';

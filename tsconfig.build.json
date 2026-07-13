@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "dist",
+    // tsup's internal dts bundler synthesizes a temp config with baseUrl,
+    // which TS 6 flags ahead of its removal in 7.0. Our own tsconfig never
+    // sets baseUrl; this only silences tsup's transient one.
+    "ignoreDeprecations": "6.0"
+  },
+  "include": ["src"],
+  "exclude": ["src/**/__tests__/**", "demo"]
+}
