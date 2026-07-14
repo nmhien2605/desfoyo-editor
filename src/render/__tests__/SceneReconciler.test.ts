@@ -167,4 +167,83 @@ describe('SceneReconciler', () => {
     expect(layer.getChildIndex(obj)).toBe(1);
     expect(reconciler.getDisplayObject('text-1')).toBe(obj);
   });
+
+  it('mounts a nested group recursively, into its own Container, not the page layer', () => {
+    const layer = new Container();
+    const reconciler = new SceneReconciler(layer);
+    const page = makePage();
+    const nestedShape: Page['children'][number] = {
+      id: 'nested-shape',
+      type: 'shape',
+      transform: { x: 5, y: 5, scaleX: 1, scaleY: 1, rotation: 0 },
+      size: { width: 10, height: 10 },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      shape: 'ellipse',
+      fill: { type: 'solid', color: '#0000ff' },
+    };
+    const group: Page['children'][number] = {
+      id: 'group-1',
+      type: 'group',
+      transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+      size: { width: 10, height: 10 },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      children: [nestedShape],
+    };
+    page.children.push(group);
+    const doc = makeDoc(page);
+    reconciler.mount(page, doc);
+
+    expect(layer.children).toHaveLength(4); // 3 leaf nodes + 1 group container at the top level
+    const groupContainer = reconciler.getDisplayObject('group-1')!;
+    expect(groupContainer).toBeInstanceOf(Container);
+    expect(groupContainer.parent).toBe(layer);
+
+    const nestedContainer = reconciler.getDisplayObject('nested-shape')!;
+    expect(nestedContainer).toBeInstanceOf(Graphics);
+    expect(nestedContainer.parent).toBe(groupContainer); // mounted into the group, not the page layer
+  });
+
+  it('RemoveNode on a group destroys its nested descendants too', () => {
+    const layer = new Container();
+    const reconciler = new SceneReconciler(layer);
+    const page = makePage();
+    const nestedShape: Page['children'][number] = {
+      id: 'nested-shape',
+      type: 'shape',
+      transform: { x: 5, y: 5, scaleX: 1, scaleY: 1, rotation: 0 },
+      size: { width: 10, height: 10 },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      shape: 'ellipse',
+      fill: { type: 'solid', color: '#0000ff' },
+    };
+    const group: Page['children'][number] = {
+      id: 'group-1',
+      type: 'group',
+      transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+      size: { width: 10, height: 10 },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      children: [nestedShape],
+    };
+    page.children.push(group);
+    let doc = makeDoc(page);
+    reconciler.mount(page, doc);
+
+    const nestedContainer = reconciler.getDisplayObject('nested-shape')!;
+    page.children = page.children.filter((n) => n.id !== 'group-1');
+    doc = { ...doc, pages: [page] };
+
+    reconciler.apply({ type: 'RemoveNode', pageId: 'page-1', nodeId: 'group-1' }, doc);
+
+    expect(reconciler.getDisplayObject('group-1')).toBeUndefined();
+    expect(reconciler.getDisplayObject('nested-shape')).toBeUndefined();
+    expect(nestedContainer.destroyed).toBe(true);
+  });
 });

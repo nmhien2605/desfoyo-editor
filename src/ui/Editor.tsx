@@ -9,6 +9,7 @@ import { Toolbar } from './Toolbar';
 import { LayersPanel } from './LayersPanel';
 import { loadDefaultFonts } from '../services/fontService';
 import { exportPng } from '../services/exportService';
+import { attachShortcuts } from '../services/shortcuts';
 
 export interface EditorHandle {
   getDocument(): Document;
@@ -34,6 +35,8 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     void loadDefaultFonts().then(() => setFontsReady(true));
   }, []);
 
+  useEffect(() => attachShortcuts(store), [store]);
+
   useEffect(() => {
     if (!props.onChange) return;
     return store.subscribe((state, prev) => {
@@ -51,8 +54,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
         store.setState({
           document: validated,
           activePageId: validated.pages[0]?.id ?? '',
-          selectedNodeId: null,
+          selectedNodeIds: new Set(),
           lastCommand: null,
+          past: [],
+          future: [],
         });
       },
       export: async (format) => {
@@ -61,10 +66,8 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
         if (!app || !pageContainer) throw new Error('Editor is not mounted yet');
         return exportPng(app, pageContainer);
       },
-      // Stubs — history/undo lands in Phase 2. Method shape exists now so
-      // the public API doesn't change when it's filled in.
-      undo: () => {},
-      redo: () => {},
+      undo: () => store.getState().undo(),
+      redo: () => store.getState().redo(),
     }),
     [store],
   );

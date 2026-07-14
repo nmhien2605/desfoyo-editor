@@ -1,7 +1,13 @@
 import { create } from 'zustand';
-import { immer } from 'zustand/middleware/immer';
+import { applyPatches, enablePatches, produceWithPatches, type Patch } from 'immer';
 import type { Command } from './commands';
-import type { Document, Node, Transform } from '../schema';
+import { requireNodeInPage, findNodeInTree } from './tree';
+import type { Document, GroupNode, Node, Page, Transform } from '../schema';
+import { composeTransform, decomposeTransform } from '../render/applyTransform';
+import { computeSelectionBounds } from '../render/interactions/groupTransformMath';
+import type { Camera } from '../render/viewport';
+
+enablePatches();
 
 export interface DragState {
   nodeId: string;
@@ -9,26 +15,52 @@ export interface DragState {
   startTransform: Transform;
 }
 
+export interface HistoryEntry {
+  patches: Patch[];
+  inversePatches: Patch[];
+}
+
+const MAX_HISTORY = 100;
+export const MIN_ZOOM = 0.05;
+export const MAX_ZOOM = 8;
+
 export interface EditorStore {
   // documentSlice — mutated only via dispatch(). lastCommand is stamped
-  // alongside every mutation in the same set() call; the SceneReconciler
-  // subscribes to it to do a single targeted update instead of diffing the
-  // whole document. See CONTEXT.md "Command".
+  // alongside every mutation so the SceneReconciler can do a single
+  // targeted update instead of diffing the whole document. See CONTEXT.md
+  // "Command". Setting lastCommand to null (undo/redo) signals CanvasHost
+  // to do a full rebuild instead of a targeted apply().
   document: Document;
   lastCommand: Command | null;
   dispatch: (cmd: Command) => void;
-  // Asset registration isn't node CRUD/transform, so it isn't a Command —
-  // Phase 1 has no undo yet, so this doesn't need to be undo-tracked.
-  // Revisit if Phase 2 wants asset changes in history too.
   addAsset: (assetId: string, dataUri: string) => void;
 
+  // History — patch-based via Immer, not command apply/invert (the store
+  // already runs every mutation through Immer, so this reuses that instead
+  // of retrofitting inverses onto every Command variant).
+  past: HistoryEntry[];
+  future: HistoryEntry[];
+  undo: () => void;
+  redo: () => void;
+
+  // Gesture coalescing: a continuous drag/resize/rotate calls
+  // beginGesture() once, dispatch() repeatedly (live document updates, no
+  // history entries pushed), then endGesture() once to commit exactly one
+  // history entry for the whole gesture.
+  activeGestureId: string | null;
+  gestureStartDocument: Document | null;
+  beginGesture: (gestureId: string) => void;
+  endGesture: () => void;
+
   // uiSlice — ephemeral, never persisted as part of the document.
-  selectedNodeId: string | null;
+  selectedNodeIds: Set<string>;
   activePageId: string;
   dragState: DragState | null;
-  select: (nodeId: string | null) => void;
+  camera: Camera;
+  select: (nodeId: string | null, mode?: 'replace' | 'toggle') => void;
   setActivePage: (pageId: string) => void;
   setDragState: (state: DragState | null) => void;
+  setCamera: (partial: Partial<Camera>) => void;
 }
 
 function findPageIndex(document: Document, pageId: string): number {
@@ -37,83 +69,234 @@ function findPageIndex(document: Document, pageId: string): number {
   return index;
 }
 
-function findNodeIndex(children: Node[], nodeId: string): number {
-  const index = children.findIndex((n) => n.id === nodeId);
-  if (index === -1) throw new Error(`Unknown nodeId: ${nodeId}`);
-  return index;
+// Which array a node lives in: page.children, or (if parentId names a
+// GroupNode) that group's children. Only needed for AddNode, since the
+// node doesn't exist yet for a tree lookup to find.
+function containerFor(page: Page, parentId: string | null | undefined): Node[] {
+  if (!parentId) return page.children;
+  const location = findNodeInTree(page.children, parentId);
+  if (!location || location.node.type !== 'group') {
+    throw new Error(`Unknown group parentId: ${parentId}`);
+  }
+  return (location.node as GroupNode).children;
+}
+
+function reorderIndex(children: Node[], index: number, to: 'up' | 'down' | 'top' | 'bottom'): number {
+  switch (to) {
+    case 'up':
+      return Math.min(index + 1, children.length);
+    case 'down':
+      return Math.max(index - 1, 0);
+    case 'top':
+      return children.length;
+    case 'bottom':
+      return 0;
+  }
+}
+
+function mutateDocument(draft: Document, cmd: Command): void {
+  const page = draft.pages[findPageIndex(draft, cmd.pageId)];
+
+  switch (cmd.type) {
+    case 'AddNode': {
+      const container = containerFor(page, cmd.parentId);
+      const index = cmd.index ?? container.length;
+      container.splice(index, 0, cmd.node);
+      break;
+    }
+    case 'RemoveNode': {
+      const location = requireNodeInPage(page, cmd.nodeId);
+      location.parent.splice(location.index, 1);
+      break;
+    }
+    case 'UpdateProps': {
+      const location = requireNodeInPage(page, cmd.nodeId);
+      Object.assign(location.node, cmd.patch);
+      break;
+    }
+    case 'UpdateTransform': {
+      const location = requireNodeInPage(page, cmd.nodeId);
+      Object.assign(location.node.transform, cmd.patch);
+      break;
+    }
+    case 'Reorder': {
+      const location = requireNodeInPage(page, cmd.nodeId);
+      const [node] = location.parent.splice(location.index, 1);
+      const to = reorderIndex(location.parent, location.index, cmd.to);
+      location.parent.splice(to, 0, node);
+      break;
+    }
+    case 'GroupNodes': {
+      const locations = cmd.nodeIds.map((id) => requireNodeInPage(page, id));
+      const parent = locations[0].parent;
+      if (!locations.every((l) => l.parent === parent)) break; // cross-container grouping unsupported, no-op
+
+      const bounds = computeSelectionBounds(locations.map((l) => l.node));
+      const groupTransform: Transform = {
+        x: bounds.pivot.x,
+        y: bounds.pivot.y,
+        scaleX: 1,
+        scaleY: 1,
+        rotation: 0,
+        originX: 0.5,
+        originY: 0.5,
+      };
+      const groupSize = { width: bounds.max.x - bounds.min.x, height: bounds.max.y - bounds.min.y };
+
+      const sorted = [...locations].sort((a, b) => a.index - b.index);
+      const children: Node[] = sorted.map((loc) => ({
+        ...loc.node,
+        transform: decomposeTransform(groupTransform, groupSize, loc.node.transform, loc.node.size),
+      }));
+
+      const topmostIndex = sorted[sorted.length - 1].index;
+      const indicesDesc = sorted.map((l) => l.index).sort((a, b) => b - a);
+      for (const idx of indicesDesc) parent.splice(idx, 1);
+      const removedBeforeTopmost = indicesDesc.filter((idx) => idx < topmostIndex).length;
+      const insertIndex = topmostIndex - removedBeforeTopmost;
+
+      const groupNode: GroupNode = {
+        id: cmd.groupId,
+        type: 'group',
+        transform: groupTransform,
+        size: groupSize,
+        opacity: 1,
+        visible: true,
+        locked: false,
+        children,
+      };
+      parent.splice(insertIndex, 0, groupNode);
+      break;
+    }
+    case 'UngroupNode': {
+      const location = requireNodeInPage(page, cmd.groupId);
+      if (location.node.type !== 'group') break;
+      const group = location.node;
+      const worldChildren: Node[] = group.children.map((child) => ({
+        ...child,
+        transform: composeTransform(group.transform, group.size, child.transform, child.size),
+      }));
+      location.parent.splice(location.index, 1, ...worldChildren);
+      break;
+    }
+  }
+}
+
+function pushHistory(past: HistoryEntry[], entry: HistoryEntry): HistoryEntry[] {
+  const next = [...past, entry];
+  return next.length > MAX_HISTORY ? next.slice(next.length - MAX_HISTORY) : next;
+}
+
+function clampZoom(zoom: number): number {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }
 
 export function createEditorStore(initialDocument: Document) {
-  return create<EditorStore>()(
-    immer((set, get) => ({
-      document: initialDocument,
-      lastCommand: null,
-      dispatch: (cmd) =>
-        set((state) => {
-          const page = state.document.pages[findPageIndex(state.document, cmd.pageId)];
+  return create<EditorStore>()((set, get) => ({
+    document: initialDocument,
+    lastCommand: null,
+    dispatch: (cmd) => {
+      const state = get();
+      const [nextDocument, patches, inversePatches] = produceWithPatches(state.document, (draft) => {
+        mutateDocument(draft, cmd);
+      });
 
-          switch (cmd.type) {
-            case 'AddNode': {
-              const index = cmd.index ?? page.children.length;
-              page.children.splice(index, 0, cmd.node);
-              break;
-            }
-            case 'RemoveNode': {
-              const nodeIndex = findNodeIndex(page.children, cmd.nodeId);
-              page.children.splice(nodeIndex, 1);
-              if (get().selectedNodeId === cmd.nodeId) state.selectedNodeId = null;
-              break;
-            }
-            case 'UpdateProps': {
-              const nodeIndex = findNodeIndex(page.children, cmd.nodeId);
-              Object.assign(page.children[nodeIndex], cmd.patch);
-              break;
-            }
-            case 'UpdateTransform': {
-              const nodeIndex = findNodeIndex(page.children, cmd.nodeId);
-              Object.assign(page.children[nodeIndex].transform, cmd.patch);
-              break;
-            }
-            case 'Reorder': {
-              const nodeIndex = findNodeIndex(page.children, cmd.nodeId);
-              const [node] = page.children.splice(nodeIndex, 1);
-              const to =
-                cmd.to === 'up'
-                  ? Math.min(nodeIndex + 1, page.children.length)
-                  : cmd.to === 'down'
-                    ? Math.max(nodeIndex - 1, 0)
-                    : cmd.to === 'top'
-                      ? page.children.length
-                      : 0;
-              page.children.splice(to, 0, node);
-              break;
-            }
-          }
+      set((s) => {
+        const selectedNodeIds = new Set(s.selectedNodeIds);
+        if (cmd.type === 'RemoveNode') selectedNodeIds.delete(cmd.nodeId);
+        if (cmd.type === 'UngroupNode') selectedNodeIds.delete(cmd.groupId);
 
-          state.lastCommand = cmd;
-        }),
-      addAsset: (assetId, dataUri) =>
-        set((state) => {
-          state.document.assets[assetId] = { type: 'image', dataUri };
-        }),
+        if (s.activeGestureId) {
+          return { document: nextDocument, lastCommand: cmd, selectedNodeIds };
+        }
+        return {
+          document: nextDocument,
+          lastCommand: cmd,
+          selectedNodeIds,
+          past: pushHistory(s.past, { patches, inversePatches }),
+          future: [],
+        };
+      });
+    },
+    addAsset: (assetId, dataUri) =>
+      set((s) => ({
+        document: { ...s.document, assets: { ...s.document.assets, [assetId]: { type: 'image', dataUri } } },
+      })),
 
-      selectedNodeId: null,
-      activePageId: initialDocument.pages[0]?.id ?? '',
-      dragState: null,
-      select: (nodeId) =>
-        set((state) => {
-          state.selectedNodeId = nodeId;
-        }),
-      setActivePage: (pageId) =>
-        set((state) => {
-          state.activePageId = pageId;
-        }),
-      setDragState: (dragState) =>
-        set((state) => {
-          state.dragState = dragState;
-        }),
-    })),
-  );
+    past: [],
+    future: [],
+    undo: () =>
+      set((s) => {
+        if (s.past.length === 0) return {};
+        const entry = s.past[s.past.length - 1];
+        return {
+          document: applyPatches(s.document, entry.inversePatches),
+          lastCommand: null,
+          past: s.past.slice(0, -1),
+          future: [...s.future, entry],
+        };
+      }),
+    redo: () =>
+      set((s) => {
+        if (s.future.length === 0) return {};
+        const entry = s.future[s.future.length - 1];
+        return {
+          document: applyPatches(s.document, entry.patches),
+          lastCommand: null,
+          past: [...s.past, entry],
+          future: s.future.slice(0, -1),
+        };
+      }),
+
+    activeGestureId: null,
+    gestureStartDocument: null,
+    beginGesture: (gestureId) =>
+      set((s) => (s.activeGestureId ? {} : { activeGestureId: gestureId, gestureStartDocument: s.document })),
+    endGesture: () =>
+      set((s) => {
+        if (!s.activeGestureId || !s.gestureStartDocument) return {};
+        if (s.gestureStartDocument === s.document) {
+          return { activeGestureId: null, gestureStartDocument: null };
+        }
+        const startDocument = s.gestureStartDocument;
+        const endDocument = s.document;
+        const [, patches, inversePatches] = produceWithPatches(startDocument, () => endDocument);
+        return {
+          activeGestureId: null,
+          gestureStartDocument: null,
+          past: pushHistory(s.past, { patches, inversePatches }),
+          future: [],
+        };
+      }),
+
+    selectedNodeIds: new Set(),
+    activePageId: initialDocument.pages[0]?.id ?? '',
+    dragState: null,
+    camera: { zoom: 1, panX: 0, panY: 0 },
+    select: (nodeId, mode = 'replace') =>
+      set((s) => {
+        if (nodeId === null) return { selectedNodeIds: new Set<string>() };
+        const next = new Set(s.selectedNodeIds);
+        if (mode === 'toggle') {
+          if (next.has(nodeId)) next.delete(nodeId);
+          else next.add(nodeId);
+        } else {
+          next.clear();
+          next.add(nodeId);
+        }
+        return { selectedNodeIds: next };
+      }),
+    setActivePage: (pageId) => set({ activePageId: pageId }),
+    setDragState: (dragState) => set({ dragState }),
+    setCamera: (partial) =>
+      set((s) => ({
+        camera: {
+          ...s.camera,
+          ...partial,
+          ...(partial.zoom !== undefined ? { zoom: clampZoom(partial.zoom) } : {}),
+        },
+      })),
+  }));
 }
 
 export type EditorStoreApi = ReturnType<typeof createEditorStore>;

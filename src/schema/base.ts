@@ -47,3 +47,9 @@ export const BaseNodeShape = {
   blendMode: BlendModeSchema.optional(),
   effects: z.array(EffectSchema).optional(),
 };
+
+// Real schema + inferred type for the fields every node shares — used by
+// GroupNode (src/schema/node.ts) to extend cleanly without re-deriving the
+// shape by hand.
+export const BaseNodeSchema = z.object(BaseNodeShape);
+export type BaseNode = z.infer<typeof BaseNodeSchema>;

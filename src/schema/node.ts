@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { BaseNodeShape } from './base';
+import { BaseNodeShape, type BaseNode } from './base';
 import { FillSchema, StrokeSchema } from './fill-stroke';
 
-// Phase 1 scope: only 'text' | 'shape' | 'image' are valid node types.
-// 'group' arrives in Phase 2, 'svg' in Phase 4 (see CONTEXT.md "Node" and
-// plan/04-data-model.md) — until then, Zod rejects documents containing
-// them rather than silently accepting an out-of-phase node.
+// Phase 2 scope: 'text' | 'shape' | 'image' | 'group' are valid node types.
+// 'svg' arrives in Phase 4 (see CONTEXT.md "Node" and plan/04-data-model.md)
+// — until then, Zod rejects documents containing it rather than silently
+// accepting an out-of-phase node.
 
 export const TextNodeSchema = z.object({
   ...BaseNodeShape,
@@ -63,9 +63,28 @@ export const ImageNodeSchema = z.object({
 });
 export type ImageNode = z.infer<typeof ImageNodeSchema>;
 
-export const NodeSchema = z.discriminatedUnion('type', [
+// GroupNode per plan/04-data-model.md: exactly BaseNode + children, no other
+// fields. z.lazy() is required because NodeSchema is now self-referential
+// (a group's children can themselves include groups).
+export interface GroupNode extends BaseNode {
+  type: 'group';
+  children: Node[];
+}
+
+// Only the recursive `children` field needs z.lazy() — NodeSchema itself
+// can stay a plain discriminatedUnion since module evaluation order means
+// NodeSchema exists by the time this getter actually runs (at parse time,
+// not at module-load time).
+export const GroupNodeSchema = z.object({
+  ...BaseNodeShape,
+  type: z.literal('group'),
+  children: z.lazy(() => z.array(NodeSchema)),
+});
+
+export const NodeSchema: z.ZodType<Node> = z.discriminatedUnion('type', [
   TextNodeSchema,
   ShapeNodeSchema,
   ImageNodeSchema,
+  GroupNodeSchema,
 ]);
-export type Node = z.infer<typeof NodeSchema>;
+export type Node = TextNode | ShapeNode | ImageNode | GroupNode;

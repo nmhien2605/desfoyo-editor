@@ -1,8 +1,10 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useEditorStore, useEditorStoreApi, useCanvasContext } from './EditorContext';
 import { createViewport, type Point } from '../render/viewport';
 import { rotateVector, computeResize, type ResizeHandle } from '../render/interactions/resizeMath';
 import { angleBetween, computeRotation } from '../render/interactions/rotate';
+import { computeSelectionBounds, applyGroupRotate } from '../render/interactions/groupTransformMath';
 import type { Node, Transform } from '../schema';
 
 const HANDLES: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
@@ -27,24 +29,40 @@ export function SelectionOverlay() {
   const store = useEditorStoreApi();
   const { canvas } = useCanvasContext();
   const activePageId = useEditorStore((s) => s.activePageId);
-  const selectedNodeId = useEditorStore((s) => s.selectedNodeId);
-  const node = useEditorStore((s) =>
-    s.document.pages.find((p) => p.id === s.activePageId)?.children.find((n) => n.id === selectedNodeId),
+  const camera = useEditorStore((s) => s.camera);
+  // useShallow: .filter() below allocates a new array every call — without
+  // shallow comparison, useSyncExternalStore sees a "new" snapshot on every
+  // render (even when the selection is unchanged) and loops.
+  const selectedNodes = useEditorStore(
+    useShallow((s) => {
+      const children = s.document.pages.find((p) => p.id === s.activePageId)?.children ?? [];
+      return children.filter((n) => s.selectedNodeIds.has(n.id));
+    }),
   );
 
-  if (!node || !canvas || node.locked) return null;
-  const viewport = createViewport(canvas);
-  // World space and the overlay's local pixel space coincide (the overlay
-  // div shares the canvas element's exact top-left origin — no viewport
-  // offset applies here). getBoundingClientRect-based conversion is only
-  // needed for native PointerEvents below, whose clientX/clientY are
-  // viewport-relative.
-  const pivotLocal = { x: node.transform.x, y: node.transform.y };
+  if (!canvas || selectedNodes.length === 0) return null;
+  if (selectedNodes.length > 1) {
+    return <MultiSelectionOverlay nodes={selectedNodes} activePageId={activePageId} />;
+  }
+
+  const node = selectedNodes[0];
+  if (node.locked) return null;
+  const viewport = createViewport(canvas, () => camera);
+  const originX = node.transform.originX ?? 0;
+  const originY = node.transform.originY ?? 0;
+  // Un-rotated top-left corner in world space; CSS `transform: rotate()`
+  // with transformOrigin does the visual rotation, so this only needs the
+  // camera's zoom/pan applied, not the node's own rotation.
+  const topLeftScreen = viewport.toScreen({
+    x: node.transform.x - originX * node.size.width,
+    y: node.transform.y - originY * node.size.height,
+  });
   const rotationDeg = (node.transform.rotation * 180) / Math.PI;
 
   const startResize = (handle: ResizeHandle) => (downEvent: ReactPointerEvent) => {
     downEvent.stopPropagation();
     const startWorld = viewport.toWorld({ x: downEvent.clientX, y: downEvent.clientY });
+    store.getState().beginGesture(`resize:${node.id}`);
 
     const onMove = (moveEvent: PointerEvent) => {
       const currentWorld = viewport.toWorld({ x: moveEvent.clientX, y: moveEvent.clientY });
@@ -66,6 +84,7 @@ export function SelectionOverlay() {
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      store.getState().endGesture();
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -76,6 +95,7 @@ export function SelectionOverlay() {
     const pivotWorld = { x: node.transform.x, y: node.transform.y };
     const grabWorld = viewport.toWorld({ x: downEvent.clientX, y: downEvent.clientY });
     const grabOffset = angleBetween(pivotWorld, grabWorld) - node.transform.rotation;
+    store.getState().beginGesture(`rotate:${node.id}`);
 
     const onMove = (moveEvent: PointerEvent) => {
       const pointerWorld = viewport.toWorld({ x: moveEvent.clientX, y: moveEvent.clientY });
@@ -90,29 +110,30 @@ export function SelectionOverlay() {
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      store.getState().endGesture();
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   };
 
-  const rotateHandleLocal = { x: node.size.width / 2, y: -24 };
-  const rotateHandlePos = worldPoint(node, rotateHandleLocal);
+  const rotateHandleLocal = { x: node.size.width / 2, y: -24 / camera.zoom };
+  const rotateHandlePos = viewport.toScreen(worldPoint(node, rotateHandleLocal));
 
   return (
     <div className="pointer-events-none absolute inset-0">
       <div
         className="absolute border-2 border-blue-500"
         style={{
-          left: pivotLocal.x - (node.transform.originX ?? 0) * node.size.width,
-          top: pivotLocal.y - (node.transform.originY ?? 0) * node.size.height,
-          width: node.size.width,
-          height: node.size.height,
-          transformOrigin: `${(node.transform.originX ?? 0) * 100}% ${(node.transform.originY ?? 0) * 100}%`,
+          left: topLeftScreen.x,
+          top: topLeftScreen.y,
+          width: node.size.width * camera.zoom,
+          height: node.size.height * camera.zoom,
+          transformOrigin: `${originX * 100}% ${originY * 100}%`,
           transform: `rotate(${rotationDeg}deg)`,
         }}
       />
       {HANDLES.map((handle) => {
-        const pos = worldPoint(node, localCorner(handle, node.size.width, node.size.height));
+        const pos = viewport.toScreen(worldPoint(node, localCorner(handle, node.size.width, node.size.height)));
         return (
           <div
             key={handle}
@@ -122,6 +143,73 @@ export function SelectionOverlay() {
           />
         );
       })}
+      <div
+        onPointerDown={startRotate}
+        className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border border-blue-500 bg-white"
+        style={{ left: rotateHandlePos.x, top: rotateHandlePos.y }}
+      />
+    </div>
+  );
+}
+
+// Ungrouped multi-select: one axis-aligned bbox outline (rotation is always
+// 0 here since members may have independent rotations — matches standard
+// multi-select UX) with a single rotate handle that orbits every member
+// around the shared bbox-center pivot. No resize handles — multi-select
+// resize isn't required by the Phase 2 Pass A DoD, deferred alongside the
+// rest of groupTransformMath's documented scope cut.
+function MultiSelectionOverlay({ nodes, activePageId }: { nodes: Node[]; activePageId: string }) {
+  const store = useEditorStoreApi();
+  const { canvas } = useCanvasContext();
+  const camera = useEditorStore((s) => s.camera);
+  if (!canvas) return null;
+  const viewport = createViewport(canvas, () => camera);
+  const bounds = computeSelectionBounds(nodes);
+  const screenMin = viewport.toScreen(bounds.min);
+
+  const startRotate = (downEvent: ReactPointerEvent) => {
+    downEvent.stopPropagation();
+    const pivotWorld = bounds.pivot;
+    const grabWorld = viewport.toWorld({ x: downEvent.clientX, y: downEvent.clientY });
+    let lastAngle = angleBetween(pivotWorld, grabWorld);
+    store.getState().beginGesture('group-rotate');
+
+    const onMove = (moveEvent: PointerEvent) => {
+      const pointerWorld = viewport.toWorld({ x: moveEvent.clientX, y: moveEvent.clientY });
+      const angle = angleBetween(pivotWorld, pointerWorld);
+      const deltaRotation = angle - lastAngle;
+      lastAngle = angle;
+      for (const patch of applyGroupRotate(nodes, pivotWorld, deltaRotation)) {
+        store.getState().dispatch({
+          type: 'UpdateTransform',
+          pageId: activePageId,
+          nodeId: patch.nodeId,
+          patch: patch.transform,
+        });
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      store.getState().endGesture();
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  const rotateHandlePos = viewport.toScreen({ x: bounds.pivot.x, y: bounds.min.y - 24 / camera.zoom });
+
+  return (
+    <div className="pointer-events-none absolute inset-0">
+      <div
+        className="absolute border-2 border-dashed border-blue-500"
+        style={{
+          left: screenMin.x,
+          top: screenMin.y,
+          width: (bounds.max.x - bounds.min.x) * camera.zoom,
+          height: (bounds.max.y - bounds.min.y) * camera.zoom,
+        }}
+      />
       <div
         onPointerDown={startRotate}
         className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border border-blue-500 bg-white"

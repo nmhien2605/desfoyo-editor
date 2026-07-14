@@ -38,7 +38,7 @@ describe('DocumentSchema', () => {
     expect(() => DocumentSchema.parse(validDocument())).not.toThrow();
   });
 
-  it('rejects an out-of-phase node type (group)', () => {
+  it('accepts a group node nested inside a page (Phase 2)', () => {
     const doc = validDocument();
     doc.pages[0].children[0] = {
       id: 'node_2',
@@ -48,10 +48,22 @@ describe('DocumentSchema', () => {
       opacity: 1,
       visible: true,
       locked: false,
-      children: [],
+      children: [
+        {
+          id: 'node_3',
+          type: 'shape',
+          transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+          size: { width: 50, height: 50 },
+          opacity: 1,
+          visible: true,
+          locked: false,
+          shape: 'rect',
+          fill: { type: 'solid', color: '#00ff00' },
+        },
+      ],
     } as unknown as ReturnType<typeof validDocument>['pages'][0]['children'][0];
 
-    expect(() => DocumentSchema.parse(doc)).toThrow();
+    expect(() => DocumentSchema.parse(doc)).not.toThrow();
   });
 
   it('NodeSchema rejects svg nodes until Phase 4', () => {

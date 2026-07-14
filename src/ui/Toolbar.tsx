@@ -1,6 +1,8 @@
 import { useRef } from 'react';
 import { nanoid } from 'nanoid';
-import { useEditorStore, useEditorStoreApi } from './EditorContext';
+import { useEditorStore, useEditorStoreApi, useCanvasContext } from './EditorContext';
+import { deleteSelection, groupSelection, ungroupSelection, isSingleGroupSelected } from '../core/actions';
+import { fitToScreen } from '../render/interactions/viewportControls';
 import type { ImageNode, ShapeNode, TextNode, Transform } from '../schema';
 
 const DEFAULT_TRANSFORM: Transform = { x: 100, y: 100, scaleX: 1, scaleY: 1, rotation: 0, originX: 0.5, originY: 0.5 };
@@ -71,8 +73,19 @@ function loadImageSize(dataUri: string): Promise<{ width: number; height: number
 export function Toolbar() {
   const store = useEditorStoreApi();
   const activePageId = useEditorStore((s) => s.activePageId);
-  const selectedNodeId = useEditorStore((s) => s.selectedNodeId);
+  const selectedNodeIds = useEditorStore((s) => s.selectedNodeIds);
+  const canUndo = useEditorStore((s) => s.past.length > 0);
+  const canRedo = useEditorStore((s) => s.future.length > 0);
+  const isSingleGroup = useEditorStore(() => isSingleGroupSelected(store) !== null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { app } = useCanvasContext();
+
+  const handleFitToScreen = () => {
+    if (!app) return;
+    const page = store.getState().document.pages.find((p) => p.id === activePageId);
+    if (!page) return;
+    fitToScreen(store, { width: app.screen.width, height: app.screen.height }, page.size);
+  };
 
   const addNode = (node: TextNode | ShapeNode | ImageNode) => {
     store.getState().dispatch({ type: 'AddNode', pageId: activePageId, node });
@@ -89,6 +102,15 @@ export function Toolbar() {
 
   return (
     <div className="flex gap-2 border-b border-gray-200 p-2">
+      <button type="button" onClick={() => store.getState().undo()} disabled={!canUndo} className="rounded bg-gray-100 px-3 py-1 disabled:opacity-50">
+        Undo
+      </button>
+      <button type="button" onClick={() => store.getState().redo()} disabled={!canRedo} className="rounded bg-gray-100 px-3 py-1 disabled:opacity-50">
+        Redo
+      </button>
+      <button type="button" onClick={handleFitToScreen} className="rounded bg-gray-100 px-3 py-1">
+        Fit to Screen
+      </button>
       <button type="button" onClick={() => addNode(defaultTextNode())} className="rounded bg-gray-100 px-3 py-1">
         Add Text
       </button>
@@ -115,11 +137,24 @@ export function Toolbar() {
       />
       <button
         type="button"
-        disabled={!selectedNodeId}
-        onClick={() => {
-          if (!selectedNodeId) return;
-          store.getState().dispatch({ type: 'RemoveNode', pageId: activePageId, nodeId: selectedNodeId });
-        }}
+        disabled={selectedNodeIds.size < 2}
+        onClick={() => groupSelection(store)}
+        className="rounded bg-gray-100 px-3 py-1 disabled:opacity-50"
+      >
+        Group
+      </button>
+      <button
+        type="button"
+        disabled={!isSingleGroup}
+        onClick={() => ungroupSelection(store)}
+        className="rounded bg-gray-100 px-3 py-1 disabled:opacity-50"
+      >
+        Ungroup
+      </button>
+      <button
+        type="button"
+        disabled={selectedNodeIds.size === 0}
+        onClick={() => deleteSelection(store)}
         className="rounded bg-gray-100 px-3 py-1 disabled:opacity-50"
       >
         Delete

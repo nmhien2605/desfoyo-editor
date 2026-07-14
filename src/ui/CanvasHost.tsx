@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Application, Container } from 'pixi.js';
 import { SceneReconciler } from '../render/SceneReconciler';
 import { attachDrag } from '../render/interactions/drag';
+import { attachViewportControls } from '../render/interactions/viewportControls';
 import { fillToColor } from '../render/fillToColor';
 import { useEditorStoreApi } from './EditorContext';
 import type { PageBackground } from '../schema';
@@ -25,6 +26,8 @@ export function CanvasHost({ onReady }: CanvasHostProps) {
     const pageContainer = new Container();
     let reconciler: SceneReconciler | null = null;
     let unsubscribe: (() => void) | null = null;
+    let unsubscribeCamera: (() => void) | null = null;
+    let detachViewportControls: (() => void) | null = null;
 
     (async () => {
       const { document, activePageId } = store.getState();
@@ -46,8 +49,19 @@ export function CanvasHost({ onReady }: CanvasHostProps) {
       app.stage.eventMode = 'static';
       app.stage.hitArea = app.screen;
 
+      const applyCamera = () => {
+        const { camera } = store.getState();
+        pageContainer.scale.set(camera.zoom);
+        pageContainer.position.set(camera.panX, camera.panY);
+      };
+      applyCamera();
+      unsubscribeCamera = store.subscribe((state, prevState) => {
+        if (state.camera !== prevState.camera) applyCamera();
+      });
+      detachViewportControls = attachViewportControls(app.canvas as HTMLCanvasElement, store);
+
       reconciler = new SceneReconciler(pageContainer, (obj, node) => {
-        attachDrag(obj, node, store, app.stage);
+        attachDrag(obj, node, store, app.stage, pageContainer);
       });
       reconciler.mount(page, document);
 
@@ -61,7 +75,7 @@ export function CanvasHost({ onReady }: CanvasHostProps) {
           const newPage =
             state.document.pages.find((p) => p.id === state.activePageId) ?? state.document.pages[0];
           reconciler = new SceneReconciler(pageContainer, (obj, node) => {
-            attachDrag(obj, node, store, app.stage);
+            attachDrag(obj, node, store, app.stage, pageContainer);
           });
           reconciler.mount(newPage, state.document);
           return;
@@ -77,6 +91,8 @@ export function CanvasHost({ onReady }: CanvasHostProps) {
     return () => {
       cancelled = true;
       unsubscribe?.();
+      unsubscribeCamera?.();
+      detachViewportControls?.();
       reconciler?.destroy();
       if (app.renderer) app.destroy(true);
     };
