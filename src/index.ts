@@ -1,3 +1,4 @@
-// Public API of the library. Only the document schema exists so far —
-// <Editor> and the rest of core/render/ui land in the next pass.
+// Public API of the library.
 export * from './schema';
+export { Editor } from './ui/Editor';
+export type { EditorProps, EditorHandle } from './ui/Editor';

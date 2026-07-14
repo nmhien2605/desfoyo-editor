@@ -25,7 +25,11 @@
     "react-dom": "^19.0.0"
   },
   "dependencies": {
-    "zod": "^4.4.3"
+    "immer": "^11.1.11",
+    "nanoid": "^6.0.0",
+    "pixi-filters": "^6.1.5",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -35,6 +39,7 @@
     "@vitejs/plugin-react": "^6.0.3",
     "eslint": "^10.7.0",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "jsdom": "^29.1.1",
     "pixi.js": "^8.19.0",
     "postcss": "^8.5.18",
     "prettier": "^3.9.5",
