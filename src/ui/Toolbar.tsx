@@ -1,7 +1,14 @@
 import { useRef } from 'react';
 import { nanoid } from 'nanoid';
 import { useEditorStore, useEditorStoreApi, useCanvasContext } from './EditorContext';
-import { deleteSelection, groupSelection, ungroupSelection, isSingleGroupSelected } from '../core/actions';
+import {
+  deleteSelection,
+  groupSelection,
+  ungroupSelection,
+  isSingleGroupSelected,
+  alignSelection,
+  distributeSelection,
+} from '../core/actions';
 import { fitToScreen } from '../render/interactions/viewportControls';
 import type { ImageNode, ShapeNode, TextNode, Transform } from '../schema';
 
@@ -77,6 +84,7 @@ export function Toolbar() {
   const canUndo = useEditorStore((s) => s.past.length > 0);
   const canRedo = useEditorStore((s) => s.future.length > 0);
   const isSingleGroup = useEditorStore(() => isSingleGroupSelected(store) !== null);
+  const grid = useEditorStore((s) => s.grid);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { app } = useCanvasContext();
 
@@ -158,6 +166,57 @@ export function Toolbar() {
         className="rounded bg-gray-100 px-3 py-1 disabled:opacity-50"
       >
         Delete
+      </button>
+      {(
+        [
+          ['left', 'Align Left'],
+          ['center', 'Align Center'],
+          ['right', 'Align Right'],
+          ['top', 'Align Top'],
+          ['middle', 'Align Middle'],
+          ['bottom', 'Align Bottom'],
+        ] as const
+      ).map(([edge, label]) => (
+        <button
+          key={edge}
+          type="button"
+          disabled={selectedNodeIds.size < 2}
+          onClick={() => alignSelection(store, edge)}
+          className="rounded bg-gray-100 px-3 py-1 disabled:opacity-50"
+        >
+          {label}
+        </button>
+      ))}
+      <button
+        type="button"
+        disabled={selectedNodeIds.size < 3}
+        onClick={() => distributeSelection(store, 'horizontal')}
+        className="rounded bg-gray-100 px-3 py-1 disabled:opacity-50"
+      >
+        Distribute H
+      </button>
+      <button
+        type="button"
+        disabled={selectedNodeIds.size < 3}
+        onClick={() => distributeSelection(store, 'vertical')}
+        className="rounded bg-gray-100 px-3 py-1 disabled:opacity-50"
+      >
+        Distribute V
+      </button>
+      <button
+        type="button"
+        onClick={() => store.getState().setGrid({ enabled: !grid.enabled })}
+        className={`rounded px-3 py-1 ${grid.enabled ? 'bg-blue-200' : 'bg-gray-100'}`}
+      >
+        Grid
+      </button>
+      <button
+        type="button"
+        disabled={!grid.enabled}
+        onClick={() => store.getState().setGrid({ snap: !grid.snap })}
+        className={`rounded px-3 py-1 disabled:opacity-50 ${grid.snap ? 'bg-blue-200' : 'bg-gray-100'}`}
+      >
+        Snap to Grid
       </button>
     </div>
   );

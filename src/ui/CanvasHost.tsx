@@ -1,14 +1,28 @@
 import { useEffect, useRef } from 'react';
-import { Application, Container } from 'pixi.js';
+import { Application, Container, Graphics } from 'pixi.js';
 import { SceneReconciler } from '../render/SceneReconciler';
 import { attachDrag } from '../render/interactions/drag';
-import { attachViewportControls } from '../render/interactions/viewportControls';
+import { attachViewportControls, attachPan } from '../render/interactions/viewportControls';
+import { attachMarquee } from '../render/interactions/marquee';
 import { fillToColor } from '../render/fillToColor';
 import { useEditorStoreApi } from './EditorContext';
-import type { PageBackground } from '../schema';
+import type { GridSettings } from '../core/store';
+import type { PageBackground, Size } from '../schema';
 
 function backgroundColor(bg: PageBackground) {
   return bg.type === 'color' ? bg.value : fillToColor(bg.value);
+}
+
+function drawGrid(graphics: Graphics, pageSize: Size, grid: GridSettings): void {
+  graphics.clear();
+  if (!grid.enabled || grid.size <= 0) return;
+  for (let x = 0; x <= pageSize.width; x += grid.size) {
+    graphics.moveTo(x, 0).lineTo(x, pageSize.height);
+  }
+  for (let y = 0; y <= pageSize.height; y += grid.size) {
+    graphics.moveTo(0, y).lineTo(pageSize.width, y);
+  }
+  graphics.stroke({ width: 1, color: '#000000', alpha: 0.08 });
 }
 
 export interface CanvasHostProps {
@@ -27,7 +41,9 @@ export function CanvasHost({ onReady }: CanvasHostProps) {
     let reconciler: SceneReconciler | null = null;
     let unsubscribe: (() => void) | null = null;
     let unsubscribeCamera: (() => void) | null = null;
+    let unsubscribeGrid: (() => void) | null = null;
     let detachViewportControls: (() => void) | null = null;
+    let detachPan: (() => void) | null = null;
 
     (async () => {
       const { document, activePageId } = store.getState();
@@ -59,6 +75,16 @@ export function CanvasHost({ onReady }: CanvasHostProps) {
         if (state.camera !== prevState.camera) applyCamera();
       });
       detachViewportControls = attachViewportControls(app.canvas as HTMLCanvasElement, store);
+      detachPan = attachPan(app.canvas as HTMLCanvasElement, store);
+      attachMarquee(app.stage, pageContainer, store);
+
+      const gridGraphics = new Graphics();
+      gridGraphics.eventMode = 'none';
+      pageContainer.addChild(gridGraphics);
+      drawGrid(gridGraphics, page.size, store.getState().grid);
+      unsubscribeGrid = store.subscribe((state, prevState) => {
+        if (state.grid !== prevState.grid) drawGrid(gridGraphics, page.size, state.grid);
+      });
 
       reconciler = new SceneReconciler(pageContainer, (obj, node) => {
         attachDrag(obj, node, store, app.stage, pageContainer);
@@ -74,6 +100,8 @@ export function CanvasHost({ onReady }: CanvasHostProps) {
           pageContainer.removeChildren();
           const newPage =
             state.document.pages.find((p) => p.id === state.activePageId) ?? state.document.pages[0];
+          pageContainer.addChild(gridGraphics);
+          drawGrid(gridGraphics, newPage.size, state.grid);
           reconciler = new SceneReconciler(pageContainer, (obj, node) => {
             attachDrag(obj, node, store, app.stage, pageContainer);
           });
@@ -92,7 +120,9 @@ export function CanvasHost({ onReady }: CanvasHostProps) {
       cancelled = true;
       unsubscribe?.();
       unsubscribeCamera?.();
+      unsubscribeGrid?.();
       detachViewportControls?.();
+      detachPan?.();
       reconciler?.destroy();
       if (app.renderer) app.destroy(true);
     };

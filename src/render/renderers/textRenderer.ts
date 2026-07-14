@@ -1,7 +1,7 @@
 import { Text, type TextStyleFontWeight } from 'pixi.js';
 import type { TextNode } from '../../schema';
 import { applyTransform } from '../applyTransform';
-import { fillToColor } from '../fillToColor';
+import { resolveFill } from '../fillToColor';
 
 function toFontWeight(weight: number): TextStyleFontWeight {
   const clamped = Math.min(900, Math.max(100, Math.round(weight / 100) * 100));
@@ -17,7 +17,7 @@ function buildStyle(node: TextNode) {
     align: node.align,
     letterSpacing: node.letterSpacing,
     lineHeight: node.lineHeight,
-    fill: fillToColor(node.fill),
+    fill: resolveFill(node.fill),
   };
 }
 

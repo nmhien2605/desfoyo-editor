@@ -1,10 +1,12 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useEditorStore, useEditorStoreApi, useCanvasContext } from './EditorContext';
-import { createViewport, type Point } from '../render/viewport';
+import { createViewport, type Point, type Viewport } from '../render/viewport';
 import { rotateVector, computeResize, type ResizeHandle } from '../render/interactions/resizeMath';
 import { angleBetween, computeRotation } from '../render/interactions/rotate';
 import { computeSelectionBounds, applyGroupRotate } from '../render/interactions/groupTransformMath';
+import type { Rect } from '../render/interactions/marquee';
+import type { SnapGuide } from '../render/interactions/snapping';
 import type { Node, Transform } from '../schema';
 
 const HANDLES: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
@@ -30,6 +32,8 @@ export function SelectionOverlay() {
   const { canvas } = useCanvasContext();
   const activePageId = useEditorStore((s) => s.activePageId);
   const camera = useEditorStore((s) => s.camera);
+  const marqueeRect = useEditorStore((s) => s.marqueeRect);
+  const activeGuides = useEditorStore((s) => s.activeGuides);
   // useShallow: .filter() below allocates a new array every call — without
   // shallow comparison, useSyncExternalStore sees a "new" snapshot on every
   // render (even when the selection is unchanged) and loops.
@@ -40,14 +44,28 @@ export function SelectionOverlay() {
     }),
   );
 
-  if (!canvas || selectedNodes.length === 0) return null;
+  if (!canvas) return null;
+  const viewport = createViewport(canvas, () => camera);
+
+  const extras = (
+    <>
+      {marqueeRect && <Marquee rect={marqueeRect} viewport={viewport} />}
+      {activeGuides.length > 0 && <SnapGuides guides={activeGuides} viewport={viewport} />}
+    </>
+  );
+
+  if (selectedNodes.length === 0) return <div className="pointer-events-none absolute inset-0">{extras}</div>;
   if (selectedNodes.length > 1) {
-    return <MultiSelectionOverlay nodes={selectedNodes} activePageId={activePageId} />;
+    return (
+      <>
+        <MultiSelectionOverlay nodes={selectedNodes} activePageId={activePageId} />
+        <div className="pointer-events-none absolute inset-0">{extras}</div>
+      </>
+    );
   }
 
   const node = selectedNodes[0];
-  if (node.locked) return null;
-  const viewport = createViewport(canvas, () => camera);
+  if (node.locked) return <div className="pointer-events-none absolute inset-0">{extras}</div>;
   const originX = node.transform.originX ?? 0;
   const originY = node.transform.originY ?? 0;
   // Un-rotated top-left corner in world space; CSS `transform: rotate()`
@@ -148,6 +166,7 @@ export function SelectionOverlay() {
         className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border border-blue-500 bg-white"
         style={{ left: rotateHandlePos.x, top: rotateHandlePos.y }}
       />
+      {extras}
     </div>
   );
 }
@@ -216,5 +235,45 @@ function MultiSelectionOverlay({ nodes, activePageId }: { nodes: Node[]; activeP
         style={{ left: rotateHandlePos.x, top: rotateHandlePos.y }}
       />
     </div>
+  );
+}
+
+function Marquee({ rect, viewport }: { rect: Rect; viewport: Viewport }) {
+  const topLeft = viewport.toScreen({ x: rect.x, y: rect.y });
+  const bottomRight = viewport.toScreen({ x: rect.x + rect.width, y: rect.y + rect.height });
+  return (
+    <div
+      className="absolute border border-dashed border-blue-400 bg-blue-400/10"
+      style={{
+        left: topLeft.x,
+        top: topLeft.y,
+        width: bottomRight.x - topLeft.x,
+        height: bottomRight.y - topLeft.y,
+      }}
+    />
+  );
+}
+
+// Full-length lines through each matched snap candidate, spanning the whole
+// overlay rather than just the dragged object — matches standard smart-guide
+// UX (Figma/Canva draw guides across the visible canvas, not just locally).
+function SnapGuides({ guides, viewport }: { guides: SnapGuide[]; viewport: Viewport }) {
+  return (
+    <>
+      {guides.map((guide, i) => {
+        const a = viewport.toScreen(guide.axis === 'x' ? { x: guide.value, y: 0 } : { x: 0, y: guide.value });
+        return (
+          <div
+            key={i}
+            className="absolute bg-pink-500"
+            style={
+              guide.axis === 'x'
+                ? { left: a.x, top: 0, width: 1, height: '100%' }
+                : { left: 0, top: a.y, width: '100%', height: 1 }
+            }
+          />
+        );
+      })}
+    </>
   );
 }

@@ -6,6 +6,8 @@ import type { Document, GroupNode, Node, Page, Transform } from '../schema';
 import { composeTransform, decomposeTransform } from '../render/applyTransform';
 import { computeSelectionBounds } from '../render/interactions/groupTransformMath';
 import type { Camera } from '../render/viewport';
+import type { Rect } from '../render/interactions/marquee';
+import type { SnapGuide } from '../render/interactions/snapping';
 
 enablePatches();
 
@@ -57,10 +59,29 @@ export interface EditorStore {
   activePageId: string;
   dragState: DragState | null;
   camera: Camera;
+  // World-space marquee (rubber-band select) rect, live while dragging on
+  // empty canvas; null otherwise. See src/render/interactions/marquee.ts.
+  marqueeRect: Rect | null;
+  // World-space snap guide lines, live only during a drag gesture. See
+  // src/render/interactions/snapping.ts.
+  activeGuides: SnapGuide[];
+  // Visual grid + snap-to-grid toggle — ephemeral view state, never part of
+  // the document (like camera). Bounded to the page's own size, not an
+  // infinite viewport-relative grid — this is a bounded design canvas.
+  grid: GridSettings;
   select: (nodeId: string | null, mode?: 'replace' | 'toggle') => void;
   setActivePage: (pageId: string) => void;
   setDragState: (state: DragState | null) => void;
   setCamera: (partial: Partial<Camera>) => void;
+  setMarqueeRect: (rect: Rect | null) => void;
+  setActiveGuides: (guides: SnapGuide[]) => void;
+  setGrid: (partial: Partial<GridSettings>) => void;
+}
+
+export interface GridSettings {
+  enabled: boolean;
+  size: number;
+  snap: boolean;
 }
 
 function findPageIndex(document: Document, pageId: string): number {
@@ -273,6 +294,12 @@ export function createEditorStore(initialDocument: Document) {
     activePageId: initialDocument.pages[0]?.id ?? '',
     dragState: null,
     camera: { zoom: 1, panX: 0, panY: 0 },
+    marqueeRect: null,
+    activeGuides: [],
+    grid: { enabled: false, size: 20, snap: false },
+    setMarqueeRect: (marqueeRect) => set({ marqueeRect }),
+    setActiveGuides: (activeGuides) => set({ activeGuides }),
+    setGrid: (partial) => set((s) => ({ grid: { ...s.grid, ...partial } })),
     select: (nodeId, mode = 'replace') =>
       set((s) => {
         if (nodeId === null) return { selectedNodeIds: new Set<string>() };

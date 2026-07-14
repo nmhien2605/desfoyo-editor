@@ -20,6 +20,7 @@ export function applyTransform(obj: Container, node: Node): void {
   obj.skew.set(transform.skewX ?? 0, transform.skewY ?? 0);
   obj.alpha = node.opacity;
   obj.visible = node.visible;
+  obj.blendMode = node.blendMode ?? 'normal';
   obj.filters = buildFilters(node.effects);
 }
 

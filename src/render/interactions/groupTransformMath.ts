@@ -23,7 +23,13 @@ export function computeSelectionBounds(nodes: Node[]): SelectionBounds {
   return { pivot: { x: (min.x + max.x) / 2, y: (min.y + max.y) / 2 }, min, max };
 }
 
-function nodeWorldCorners(node: Node): Array<{ x: number; y: number }> {
+// Single-node axis-aligned world bbox — shared by marquee hit-testing,
+// align/distribute, and snapping. Just computeSelectionBounds([node]).
+export function nodeBounds(node: Node): SelectionBounds {
+  return computeSelectionBounds([node]);
+}
+
+export function nodeWorldCorners(node: Node): Array<{ x: number; y: number }> {
   const { transform, size } = node;
   const originX = transform.originX ?? 0;
   const originY = transform.originY ?? 0;

@@ -5,8 +5,10 @@ import { DocumentSchema, type Document } from '../schema';
 import { EditorStoreProvider, CanvasProvider, type CanvasContextValue } from './EditorContext';
 import { CanvasHost } from './CanvasHost';
 import { SelectionOverlay } from './SelectionOverlay';
+import { Rulers } from './Rulers';
 import { Toolbar } from './Toolbar';
 import { LayersPanel } from './LayersPanel';
+import { PropertiesPanel } from './PropertiesPanel';
 import { loadDefaultFonts } from '../services/fontService';
 import { exportPng } from '../services/exportService';
 import { attachShortcuts } from '../services/shortcuts';
@@ -89,8 +91,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
                 }}
               />
               <SelectionOverlay />
+              <Rulers />
             </div>
             <LayersPanel />
+            <PropertiesPanel />
           </div>
         </div>
       </CanvasProvider>

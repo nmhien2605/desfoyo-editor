@@ -1,7 +1,17 @@
-import { Graphics } from 'pixi.js';
-import type { ShapeNode } from '../../schema';
+import { FillGradient, Graphics, type StrokeStyle } from 'pixi.js';
+import type { Fill, ShapeNode, Stroke } from '../../schema';
 import { applyTransform } from '../applyTransform';
-import { fillToColor } from '../fillToColor';
+import { resolveFill } from '../fillToColor';
+
+const STROKE_ALIGNMENT: Record<Stroke['align'], number> = { inside: 1, center: 0.5, outside: 0 };
+
+// StrokeStyle takes a gradient under a separate `fill` key from the plain
+// `color` key used for solids — resolveFill() returns whichever FillInput
+// is correct, this just routes it to the matching StrokeStyle field.
+function strokeColorFields(fill: Fill): Pick<StrokeStyle, 'color' | 'fill'> {
+  const resolved = resolveFill(fill);
+  return resolved instanceof FillGradient ? { fill: resolved } : { color: resolved };
+}
 
 function draw(obj: Graphics, node: ShapeNode): void {
   const { width, height } = node.size;
@@ -32,10 +42,16 @@ function draw(obj: Graphics, node: ShapeNode): void {
   }
 
   if (node.shape === 'line') {
-    obj.stroke({ width: node.stroke?.width ?? 1, color: fillToColor(node.stroke?.fill ?? node.fill) });
+    obj.stroke({ width: node.stroke?.width ?? 1, ...strokeColorFields(node.stroke?.fill ?? node.fill) });
   } else {
-    obj.fill(fillToColor(node.fill));
-    if (node.stroke) obj.stroke({ width: node.stroke.width, color: fillToColor(node.stroke.fill) });
+    obj.fill(resolveFill(node.fill));
+    if (node.stroke) {
+      obj.stroke({
+        width: node.stroke.width,
+        alignment: STROKE_ALIGNMENT[node.stroke.align],
+        ...strokeColorFields(node.stroke.fill),
+      });
+    }
   }
 }
 

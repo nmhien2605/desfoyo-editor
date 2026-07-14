@@ -4,6 +4,7 @@ import { duplicateSelection, copySelection, cutSelection, pasteClipboard } from 
 
 const NUDGE = 1;
 const NUDGE_LARGE = 10;
+const ZOOM_FACTOR = 1.2;
 
 type ShortcutHandler = (store: EditorStoreApi) => void;
 
@@ -30,7 +31,18 @@ const SHORTCUTS: Record<string, ShortcutHandler> = {
   'shift+arrowdown': (store) => nudgeSelection(store, 0, NUDGE_LARGE),
   'shift+arrowleft': (store) => nudgeSelection(store, -NUDGE_LARGE, 0),
   'shift+arrowright': (store) => nudgeSelection(store, NUDGE_LARGE, 0),
+  // ponytail: not cursor-anchored like wheel-zoom (that needs canvas size,
+  // which this store-only handler doesn't have) — just scales the current
+  // view. Add cursor-anchoring later if it's actually requested.
+  'mod+=': (store) => zoomBy(store, ZOOM_FACTOR),
+  'mod++': (store) => zoomBy(store, ZOOM_FACTOR),
+  'mod+-': (store) => zoomBy(store, 1 / ZOOM_FACTOR),
 };
+
+function zoomBy(store: EditorStoreApi, factor: number): void {
+  const { camera } = store.getState();
+  store.getState().setCamera({ zoom: camera.zoom * factor });
+}
 
 function isTypingInField(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
