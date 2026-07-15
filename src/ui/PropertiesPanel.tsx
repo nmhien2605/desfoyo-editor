@@ -1,8 +1,31 @@
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
-import type { BlendMode, Fill, Node, Stroke } from '../schema';
+import { DEFAULT_FONT_FAMILIES } from '../services/fontService';
+import type { BlendMode, Effect, Fill, Node, Stroke, TextNode } from '../schema';
 
 const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten'];
 const STROKE_ALIGNS: Stroke['align'][] = ['inside', 'center', 'outside'];
+// The 5 variants buildFilters.ts actually renders (see src/effects/buildFilters.ts)
+// — 'inner-shadow'/'custom' are valid schema data but have no renderer yet,
+// so offering them here would silently do nothing.
+const EFFECT_TYPES: Effect['type'][] = ['shadow', 'glow', 'outline', 'blur', 'extrude3d'];
+
+function defaultEffect(type: Effect['type']): Effect {
+  switch (type) {
+    case 'shadow':
+    case 'inner-shadow':
+      return { type, color: '#000000', blur: 4, offset: [2, 2], alpha: 0.5 };
+    case 'glow':
+      return { type: 'glow', color: '#ffffff', strength: 2, outer: true };
+    case 'outline':
+      return { type: 'outline', color: '#000000', thickness: 2 };
+    case 'blur':
+      return { type: 'blur', amount: 4 };
+    case 'extrude3d':
+      return { type: 'extrude3d', depth: 4, angle: Math.PI / 4, color: '#000000' };
+    case 'custom':
+      return { type: 'custom', shaderId: '', uniforms: {} };
+  }
+}
 
 function hasFill(node: Node): node is Node & { fill: Fill } {
   return node.type === 'text' || node.type === 'shape';
@@ -33,6 +56,7 @@ export function PropertiesPanel() {
     const [id] = s.selectedNodeIds;
     return s.document.pages.find((p) => p.id === s.activePageId)?.children.find((n) => n.id === id) ?? null;
   });
+  const documentFonts = useEditorStore((s) => s.document.fonts);
 
   if (selectedNodeIds.size !== 1 || !node) return <div className="w-64 border-l border-gray-200 p-2 text-sm text-gray-400">No selection</div>;
 
@@ -42,6 +66,14 @@ export function PropertiesPanel() {
 
   return (
     <div className="flex w-64 flex-col gap-3 border-l border-gray-200 p-2 text-sm">
+      {node.type === 'text' && (
+        <FontControls
+          font={node.font}
+          families={[...DEFAULT_FONT_FAMILIES, ...documentFonts.filter((f) => !DEFAULT_FONT_FAMILIES.includes(f))]}
+          onChange={(font) => updateProps({ font } as Partial<Node>)}
+        />
+      )}
+
       {hasFill(node) && <FillControls fill={node.fill} onChange={(fill) => updateProps({ fill })} />}
 
       <label className="flex flex-col gap-1">
@@ -73,13 +105,141 @@ export function PropertiesPanel() {
         </select>
       </label>
 
-      {node.type === 'shape' && (
+      {(node.type === 'shape' || node.type === 'text') && (
         <StrokeControls
           stroke={node.stroke}
           onChange={(stroke) => updateProps({ stroke } as Partial<Node>)}
         />
       )}
+
+      <EffectsControls effects={node.effects} onChange={(effects) => updateProps({ effects })} />
     </div>
+  );
+}
+
+function EffectsControls({ effects, onChange }: { effects: Effect[] | undefined; onChange: (effects: Effect[]) => void }) {
+  const list = effects ?? [];
+
+  return (
+    <fieldset className="flex flex-col gap-1">
+      <legend className="font-medium">Effects</legend>
+      {list.map((effect, i) => (
+        <div key={i} className="flex flex-col gap-1 border-t border-gray-200 pt-1">
+          <div className="flex items-center justify-between">
+            <span>{effect.type}</span>
+            <button type="button" onClick={() => onChange(list.filter((_, j) => j !== i))} className="text-xs text-gray-500">
+              Remove
+            </button>
+          </div>
+          <EffectParams effect={effect} onChange={(next) => onChange(list.map((e, j) => (j === i ? next : e)))} />
+        </div>
+      ))}
+      <select
+        value=""
+        onChange={(e) => {
+          if (e.target.value) onChange([...list, defaultEffect(e.target.value as Effect['type'])]);
+        }}
+        className="rounded border border-gray-300 px-1 py-0.5"
+      >
+        <option value="">+ Add Effect</option>
+        {EFFECT_TYPES.map((type) => (
+          <option key={type} value={type}>
+            {type}
+          </option>
+        ))}
+      </select>
+    </fieldset>
+  );
+}
+
+function EffectParams({ effect, onChange }: { effect: Effect; onChange: (effect: Effect) => void }) {
+  switch (effect.type) {
+    case 'shadow':
+    case 'inner-shadow':
+      return (
+        <>
+          <input type="color" value={effect.color} onChange={(e) => onChange({ ...effect, color: e.target.value })} />
+          <input type="number" min={0} value={effect.blur} onChange={(e) => onChange({ ...effect, blur: Number(e.target.value) })} placeholder="blur" className="rounded border border-gray-300 px-1 py-0.5" />
+        </>
+      );
+    case 'glow':
+      return (
+        <>
+          <input type="color" value={effect.color} onChange={(e) => onChange({ ...effect, color: e.target.value })} />
+          <input type="number" min={0} value={effect.strength} onChange={(e) => onChange({ ...effect, strength: Number(e.target.value) })} placeholder="strength" className="rounded border border-gray-300 px-1 py-0.5" />
+          <label className="flex items-center gap-1">
+            <input type="checkbox" checked={effect.outer} onChange={(e) => onChange({ ...effect, outer: e.target.checked })} />
+            Outer
+          </label>
+        </>
+      );
+    case 'outline':
+      return (
+        <>
+          <input type="color" value={effect.color} onChange={(e) => onChange({ ...effect, color: e.target.value })} />
+          <input type="number" min={0} value={effect.thickness} onChange={(e) => onChange({ ...effect, thickness: Number(e.target.value) })} placeholder="thickness" className="rounded border border-gray-300 px-1 py-0.5" />
+        </>
+      );
+    case 'blur':
+      return (
+        <input type="number" min={0} value={effect.amount} onChange={(e) => onChange({ ...effect, amount: Number(e.target.value) })} placeholder="amount" className="rounded border border-gray-300 px-1 py-0.5" />
+      );
+    case 'extrude3d':
+      return (
+        <>
+          <input type="color" value={effect.color} onChange={(e) => onChange({ ...effect, color: e.target.value })} />
+          <input type="number" min={0} value={effect.depth} onChange={(e) => onChange({ ...effect, depth: Number(e.target.value) })} placeholder="depth" className="rounded border border-gray-300 px-1 py-0.5" />
+        </>
+      );
+    case 'custom':
+      return null;
+  }
+}
+
+function FontControls({
+  font,
+  families,
+  onChange,
+}: {
+  font: TextNode['font'];
+  families: string[];
+  onChange: (font: TextNode['font']) => void;
+}) {
+  return (
+    <fieldset className="flex flex-col gap-1">
+      <legend className="font-medium">Font</legend>
+      <select
+        value={font.family}
+        onChange={(e) => onChange({ ...font, family: e.target.value })}
+        className="rounded border border-gray-300 px-1 py-0.5"
+      >
+        {families.map((family) => (
+          <option key={family} value={family}>
+            {family}
+          </option>
+        ))}
+      </select>
+      <label className="flex flex-col gap-1">
+        Weight
+        <input
+          type="number"
+          step={100}
+          min={100}
+          max={900}
+          value={font.weight}
+          onChange={(e) => onChange({ ...font, weight: Number(e.target.value) })}
+          className="rounded border border-gray-300 px-1 py-0.5"
+        />
+      </label>
+      <label className="flex items-center gap-1">
+        <input
+          type="checkbox"
+          checked={font.style === 'italic'}
+          onChange={(e) => onChange({ ...font, style: e.target.checked ? 'italic' : 'normal' })}
+        />
+        Italic
+      </label>
+    </fieldset>
   );
 }
 
@@ -196,6 +356,85 @@ function StrokeControls({ stroke, onChange }: { stroke: Stroke | undefined; onCh
           ))}
         </select>
       </label>
+
+      {(stroke.layers ?? []).map((layer, i) => (
+        <div key={i} className="flex flex-col gap-1 border-t border-gray-200 pt-1">
+          <div className="flex items-center justify-between">
+            <span>Layer {i + 2}</span>
+            <button
+              type="button"
+              onClick={() => onChange({ ...stroke, layers: stroke.layers?.filter((_, j) => j !== i) })}
+              className="text-xs text-gray-500"
+            >
+              Remove
+            </button>
+          </div>
+          <input
+            type="number"
+            min={0}
+            value={layer.width}
+            onChange={(e) =>
+              onChange({
+                ...stroke,
+                layers: stroke.layers?.map((l, j) => (j === i ? { ...l, width: Number(e.target.value) } : l)),
+              })
+            }
+            className="rounded border border-gray-300 px-1 py-0.5"
+          />
+          <input
+            type="color"
+            value={layer.fill.type === 'solid' ? layer.fill.color : '#000000'}
+            onChange={(e) =>
+              onChange({
+                ...stroke,
+                layers: stroke.layers?.map((l, j) => (j === i ? { ...l, fill: { type: 'solid', color: e.target.value } } : l)),
+              })
+            }
+          />
+          <div className="flex gap-1">
+            <input
+              type="number"
+              placeholder="offset x"
+              value={layer.offset?.[0] ?? 0}
+              onChange={(e) =>
+                onChange({
+                  ...stroke,
+                  layers: stroke.layers?.map((l, j) =>
+                    j === i ? { ...l, offset: [Number(e.target.value), l.offset?.[1] ?? 0] } : l,
+                  ),
+                })
+              }
+              className="w-1/2 rounded border border-gray-300 px-1 py-0.5"
+            />
+            <input
+              type="number"
+              placeholder="offset y"
+              value={layer.offset?.[1] ?? 0}
+              onChange={(e) =>
+                onChange({
+                  ...stroke,
+                  layers: stroke.layers?.map((l, j) =>
+                    j === i ? { ...l, offset: [l.offset?.[0] ?? 0, Number(e.target.value)] } : l,
+                  ),
+                })
+              }
+              className="w-1/2 rounded border border-gray-300 px-1 py-0.5"
+            />
+          </div>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() =>
+          onChange({
+            ...stroke,
+            layers: [...(stroke.layers ?? []), { width: stroke.width, fill: { type: 'solid', color: '#000000' }, offset: [0, 0] }],
+          })
+        }
+        className="rounded bg-gray-100 px-2 py-1 text-xs"
+      >
+        + Layer
+      </button>
     </fieldset>
   );
 }

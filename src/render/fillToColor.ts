@@ -1,4 +1,4 @@
-import { FillGradient, type ColorSource } from 'pixi.js';
+import { FillGradient, type ColorSource, type StrokeStyle } from 'pixi.js';
 import type { Fill } from '../schema';
 
 // Approximate-solid-color version, kept for call sites that need a plain
@@ -56,3 +56,14 @@ export function resolveFill(fill: Fill): ColorSource | FillGradient {
       return '#808080';
   }
 }
+
+// StrokeStyle takes a gradient under a separate `fill` key from the plain
+// `color` key used for solids — resolveFill() returns whichever FillInput
+// is correct, this just routes it to the matching StrokeStyle field. Shared
+// by shapeRenderer.ts and textRenderer.ts (both stroke via Pixi's
+// FillStyle/StrokeStyle shape).
+export function strokeColorFields(fill: Fill): Pick<StrokeStyle, 'color' | 'fill'> {
+  const resolved = resolveFill(fill);
+  return resolved instanceof FillGradient ? { fill: resolved } : { color: resolved };
+}
+

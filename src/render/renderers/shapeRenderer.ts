@@ -1,57 +1,59 @@
-import { FillGradient, Graphics, type StrokeStyle } from 'pixi.js';
-import type { Fill, ShapeNode, Stroke } from '../../schema';
+import { Graphics } from 'pixi.js';
+import type { ShapeNode, Stroke } from '../../schema';
 import { applyTransform } from '../applyTransform';
-import { resolveFill } from '../fillToColor';
+import { resolveFill, strokeColorFields } from '../fillToColor';
 
 const STROKE_ALIGNMENT: Record<Stroke['align'], number> = { inside: 1, center: 0.5, outside: 0 };
 
-// StrokeStyle takes a gradient under a separate `fill` key from the plain
-// `color` key used for solids — resolveFill() returns whichever FillInput
-// is correct, this just routes it to the matching StrokeStyle field.
-function strokeColorFields(fill: Fill): Pick<StrokeStyle, 'color' | 'fill'> {
-  const resolved = resolveFill(fill);
-  return resolved instanceof FillGradient ? { fill: resolved } : { color: resolved };
-}
-
-function draw(obj: Graphics, node: ShapeNode): void {
+// Draws the shape's outline path translated by [dx, dy] — factored out so
+// each multi-layer stroke entry can redraw the same path at its own offset
+// before stroking it, then the true (untranslated) path is drawn once more
+// for the fill/base stroke.
+function drawPath(obj: Graphics, node: ShapeNode, [dx, dy]: [number, number]): void {
   const { width, height } = node.size;
-  obj.clear();
-
   switch (node.shape) {
     case 'rect':
-      if (node.cornerRadius) obj.roundRect(0, 0, width, height, node.cornerRadius);
-      else obj.rect(0, 0, width, height);
+      if (node.cornerRadius) obj.roundRect(dx, dy, width, height, node.cornerRadius);
+      else obj.rect(dx, dy, width, height);
       break;
     case 'ellipse':
-      obj.ellipse(width / 2, height / 2, width / 2, height / 2);
+      obj.ellipse(dx + width / 2, dy + height / 2, width / 2, height / 2);
       break;
     case 'polygon':
-      obj.poly(node.points ?? [0, 0, width, 0, width / 2, height], true);
+      obj.poly((node.points ?? [0, 0, width, 0, width / 2, height]).map((v, i) => v + (i % 2 === 0 ? dx : dy)), true);
       break;
     case 'star':
-      obj.star(width / 2, height / 2, 5, Math.min(width, height) / 2);
+      obj.star(dx + width / 2, dy + height / 2, 5, Math.min(width, height) / 2);
       break;
     case 'line':
-      obj.moveTo(0, 0).lineTo(width, height);
+      obj.moveTo(dx, dy).lineTo(dx + width, dy + height);
       break;
     case 'path':
       // ponytail: arbitrary SVG path data isn't parsed in Phase 1 (no
       // toolbar action produces one yet); render the bbox as a stand-in.
-      obj.rect(0, 0, width, height);
+      obj.rect(dx, dy, width, height);
       break;
   }
+}
 
+function draw(obj: Graphics, node: ShapeNode): void {
+  obj.clear();
+
+  const layers = node.stroke?.layers ?? (node.stroke ? [{ width: node.stroke.width, fill: node.stroke.fill }] : []);
+  for (const layer of layers) {
+    drawPath(obj, node, layer.offset ?? [0, 0]);
+    obj.stroke({
+      width: layer.width,
+      alignment: node.stroke ? STROKE_ALIGNMENT[node.stroke.align] : 0.5,
+      ...strokeColorFields(layer.fill),
+    });
+  }
+
+  drawPath(obj, node, [0, 0]);
   if (node.shape === 'line') {
-    obj.stroke({ width: node.stroke?.width ?? 1, ...strokeColorFields(node.stroke?.fill ?? node.fill) });
+    if (layers.length === 0) obj.stroke({ width: 1, ...strokeColorFields(node.fill) });
   } else {
     obj.fill(resolveFill(node.fill));
-    if (node.stroke) {
-      obj.stroke({
-        width: node.stroke.width,
-        alignment: STROKE_ALIGNMENT[node.stroke.align],
-        ...strokeColorFields(node.stroke.fill),
-      });
-    }
   }
 }
 

@@ -5,10 +5,13 @@ import { PageSchema } from './page';
 // URI stored directly in the document (no backend exists yet). Phase 5
 // swaps the resolver to fetch from S3/R2 by the same assetId — this schema
 // shape is expected to change then. See CONTEXT.md "Asset".
-export const AssetRefSchema = z.object({
-  type: z.literal('image'),
-  dataUri: z.string(),
-});
+// 'font' variant added in Phase 3 for uploaded (.ttf/.otf/.woff2) fonts —
+// `family` is the FontFace family name registered via fontService.ts,
+// `document.fonts` tracks which family names are in use by the document.
+export const AssetRefSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('image'), dataUri: z.string() }),
+  z.object({ type: z.literal('font'), family: z.string(), dataUri: z.string() }),
+]);
 export type AssetRef = z.infer<typeof AssetRefSchema>;
 
 export const DocumentMetaSchema = z.object({

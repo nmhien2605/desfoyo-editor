@@ -1,6 +1,6 @@
 import { Matrix, type Container } from 'pixi.js';
 import type { Node, Size, Transform } from '../schema';
-import { buildFilters } from '../effects/dropShadowFilter';
+import { buildFilters } from '../effects/buildFilters';
 
 // Pixi's DisplayObject.pivot is in the object's local, unscaled space, and
 // its transform order (subtract pivot, then scale/rotate, then add

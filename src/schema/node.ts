@@ -21,6 +21,9 @@ export const TextNodeSchema = z.object({
   letterSpacing: z.number(),
   lineHeight: z.number(),
   fill: FillSchema,
+  // Phase 3: multi-layer stroke (Kittl-style layered outlines), rendered as
+  // stacked Text clones in textRenderer.ts. Absent in Phase 1/2 documents.
+  stroke: StrokeSchema.optional(),
   // Warp/curve is a Phase 3 rendering feature; the field is declared now
   // (type-only cost) so the schema doesn't need a breaking change later.
   warp: z

@@ -1,4 +1,4 @@
-import type { Container } from 'pixi.js';
+import { Text, type Container } from 'pixi.js';
 import type { Command } from '../core/commands';
 import { findNodeInTree } from '../core/tree';
 import type { Document, Node, Page } from '../schema';
@@ -35,6 +35,16 @@ function updateDisplayObject(obj: Container, node: Node, doc: Document): void {
       groupRenderer.update(obj as never, node);
       break;
   }
+}
+
+// textRenderer.create() returns a bare Text for a strokeless text node and
+// a Container (of layered Text clones) once it has a stroke — update() can
+// mutate either in place, but can't swap one for the other. Crossing that
+// boundary (stroke added to/removed from a previously-strokeless node)
+// needs the object recreated, same as SceneReconciler already does for
+// AddNode/RemoveNode.
+function needsRecreate(obj: Container, node: Node): boolean {
+  return node.type === 'text' && obj instanceof Text === !!node.stroke;
 }
 
 function findPage(doc: Document, pageId: string): Page | undefined {
@@ -119,6 +129,19 @@ export class SceneReconciler {
         const obj = this.displayObjects.get(cmd.nodeId);
         const location = findNodeInTree(page.children, cmd.nodeId);
         if (!obj || !location) return;
+        if (needsRecreate(obj, location.node)) {
+          const parent = obj.parent;
+          if (!parent) return;
+          const index = parent.getChildIndex(obj);
+          parent.removeChild(obj);
+          obj.destroy();
+          const newObj = createDisplayObject(location.node, doc);
+          newObj.label = location.node.id;
+          this.displayObjects.set(location.node.id, newObj);
+          parent.addChildAt(newObj, index);
+          this.onNodeMounted?.(newObj, location.node);
+          break;
+        }
         updateDisplayObject(obj, location.node, doc);
         break;
       }

@@ -10,6 +10,7 @@ import {
   distributeSelection,
 } from '../core/actions';
 import { fitToScreen } from '../render/interactions/viewportControls';
+import { registerFont } from '../services/fontService';
 import type { ImageNode, ShapeNode, TextNode, Transform } from '../schema';
 
 const DEFAULT_TRANSFORM: Transform = { x: 100, y: 100, scaleX: 1, scaleY: 1, rotation: 0, originX: 0.5, originY: 0.5 };
@@ -86,6 +87,7 @@ export function Toolbar() {
   const isSingleGroup = useEditorStore(() => isSingleGroupSelected(store) !== null);
   const grid = useEditorStore((s) => s.grid);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fontInputRef = useRef<HTMLInputElement>(null);
   const { app } = useCanvasContext();
 
   const handleFitToScreen = () => {
@@ -106,6 +108,13 @@ export function Toolbar() {
     const assetId = nanoid();
     store.getState().addAsset(assetId, dataUri);
     addNode(defaultImageNode(assetId, width, height));
+  };
+
+  const handleFontFile = async (file: File) => {
+    const dataUri = await readAsDataUri(file);
+    const family = file.name.replace(/\.[^.]+$/, '');
+    await registerFont(family, dataUri);
+    store.getState().addFont(nanoid(), family, dataUri);
   };
 
   return (
@@ -140,6 +149,24 @@ export function Toolbar() {
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) void handleImageFile(file);
+          e.target.value = '';
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => fontInputRef.current?.click()}
+        className="rounded bg-gray-100 px-3 py-1"
+      >
+        Add Font
+      </button>
+      <input
+        ref={fontInputRef}
+        type="file"
+        accept=".ttf,.otf,.woff,.woff2"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void handleFontFile(file);
           e.target.value = '';
         }}
       />
