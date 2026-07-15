@@ -59,6 +59,7 @@ function makeDoc(page: Page): Document {
     pages: [page],
     assets: { 'asset-1': { type: 'image', dataUri: 'data:image/svg+xml;base64,PHN2Zy8+' } },
     fonts: [],
+    paths: {},
   };
 }
 

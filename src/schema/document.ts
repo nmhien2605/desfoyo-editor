@@ -21,6 +21,17 @@ export const DocumentMetaSchema = z.object({
 });
 export type DocumentMeta = z.infer<typeof DocumentMetaSchema>;
 
+// Phase 3 Pass C: a single open quadratic bezier (start, control, end) a
+// text node's warp can follow (TextNode.warp.pathId keys into this map).
+// Points are normalized (u,v) in 0..1, scaled to the mesh's actual pixel
+// size at render time — see computeWarpGrid in text/warpGeometry.ts.
+// ponytail: one quadratic segment only, no multi-segment/closed paths;
+// upgrade the tuple shape if a real S-curve need shows up.
+export const PathDataSchema = z.object({
+  points: z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()]),
+});
+export type PathData = z.infer<typeof PathDataSchema>;
+
 export const DocumentSchema = z.object({
   version: z.literal(1),
   id: z.string(),
@@ -28,5 +39,8 @@ export const DocumentSchema = z.object({
   pages: z.array(PageSchema),
   assets: z.record(z.string(), AssetRefSchema),
   fonts: z.array(z.string()),
+  // default({}) rather than required — keeps documents saved before this
+  // field existed loadable without a migration.
+  paths: z.record(z.string(), PathDataSchema).default({}),
 });
 export type Document = z.infer<typeof DocumentSchema>;

@@ -19,4 +19,8 @@ export type Command =
   | { type: 'UpdateTransform'; pageId: string; nodeId: string; patch: Partial<Transform> }
   | { type: 'Reorder'; pageId: string; nodeId: string; to: 'up' | 'down' | 'top' | 'bottom'; parentId?: string | null }
   | { type: 'GroupNodes'; pageId: string; nodeIds: string[]; groupId: string }
-  | { type: 'UngroupNode'; pageId: string; groupId: string };
+  | { type: 'UngroupNode'; pageId: string; groupId: string }
+  // Document-level (paths aren't node props) — carries nodeId anyway, per
+  // the convention above, so SceneReconciler knows which text node's mesh
+  // to refresh (a document.paths change alone doesn't touch any node).
+  | { type: 'UpdatePath'; pageId: string; nodeId: string; pathId: string; points: [number, number, number, number, number, number] };

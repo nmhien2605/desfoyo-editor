@@ -1,8 +1,8 @@
-import { Mesh, Text, type Container } from 'pixi.js';
+import type { Container } from 'pixi.js';
 import type { Command } from '../core/commands';
 import { findNodeInTree } from '../core/tree';
 import type { Document, Node, Page } from '../schema';
-import { textRenderer, wantsMesh } from './renderers/textRenderer';
+import { textRenderer, needsTextRecreate } from './renderers/textRenderer';
 import { shapeRenderer } from './renderers/shapeRenderer';
 import { imageRenderer } from './renderers/imageRenderer';
 import { groupRenderer } from './renderers/groupRenderer';
@@ -10,7 +10,7 @@ import { groupRenderer } from './renderers/groupRenderer';
 function createDisplayObject(node: Node, doc: Document): Container {
   switch (node.type) {
     case 'text':
-      return textRenderer.create(node);
+      return textRenderer.create(node, doc);
     case 'shape':
       return shapeRenderer.create(node);
     case 'image':
@@ -23,7 +23,7 @@ function createDisplayObject(node: Node, doc: Document): Container {
 function updateDisplayObject(obj: Container, node: Node, doc: Document): void {
   switch (node.type) {
     case 'text':
-      textRenderer.update(obj as never, node);
+      textRenderer.update(obj as never, node, doc);
       break;
     case 'shape':
       shapeRenderer.update(obj as never, node);
@@ -37,16 +37,16 @@ function updateDisplayObject(obj: Container, node: Node, doc: Document): void {
   }
 }
 
-// textRenderer.create() returns a bare Text for a strokeless text node, a
-// Container (of layered Text clones) once it has a stroke, or a Mesh once
-// it has an active texture-mesh warp — update() can mutate any of these in
-// place, but can't swap one for another. Crossing those boundaries (stroke
-// or warp added to/removed from a node) needs the object recreated, same as
-// SceneReconciler already does for AddNode/RemoveNode.
+// textRenderer.create() returns a bare Text for a strokeless/unwarped text
+// node, a Container (of layered Text clones) once it has a stroke or
+// extrude3d effect, or a Mesh once it has an active texture-mesh warp —
+// update() can mutate any of these in place, but can't swap one for
+// another. Crossing those boundaries needs the object recreated, same as
+// SceneReconciler already does for AddNode/RemoveNode. See
+// needsTextRecreate in textRenderer.ts for the per-shape logic.
 function needsRecreate(obj: Container, node: Node): boolean {
   if (node.type !== 'text') return false;
-  if (wantsMesh(node)) return !(obj instanceof Mesh);
-  return obj instanceof Text === !!node.stroke;
+  return needsTextRecreate(obj, node);
 }
 
 function findPage(doc: Document, pageId: string): Page | undefined {
@@ -127,7 +127,8 @@ export class SceneReconciler {
         break;
       }
       case 'UpdateProps':
-      case 'UpdateTransform': {
+      case 'UpdateTransform':
+      case 'UpdatePath': {
         const obj = this.displayObjects.get(cmd.nodeId);
         const location = findNodeInTree(page.children, cmd.nodeId);
         if (!obj || !location) return;

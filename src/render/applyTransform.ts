@@ -21,7 +21,11 @@ export function applyTransform(obj: Container, node: Node): void {
   obj.alpha = node.opacity;
   obj.visible = node.visible;
   obj.blendMode = node.blendMode ?? 'normal';
-  obj.filters = buildFilters(node.effects);
+  // Text nodes render extrude3d as real stacked-clone geometry in
+  // textRenderer.ts, not the BevelFilter approximation buildFilters.ts uses
+  // for other node types — strip it here so it isn't applied twice.
+  const effects = node.type === 'text' ? node.effects?.filter((e) => e.type !== 'extrude3d') : node.effects;
+  obj.filters = buildFilters(effects);
 }
 
 function transformToMatrix(t: Transform, size: Size): Matrix {

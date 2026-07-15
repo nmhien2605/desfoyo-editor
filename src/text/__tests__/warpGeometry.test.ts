@@ -69,3 +69,69 @@ describe('computeWarpGrid', () => {
     for (const i of grid.indices) expect(i).toBeLessThan(vertCount);
   });
 });
+
+describe('path warp', () => {
+  const cols = 4;
+  // A straight horizontal line at v=0.5 — degenerates to the same shape as
+  // an undisplaced rect, so exact positions are easy to assert against.
+  const straight = { points: [0, 0.5, 0.5, 0.5, 1, 0.5] as [number, number, number, number, number, number] };
+  // A gentle upward arc (same default the properties panel creates).
+  const arc = { points: [0, 0.5, 0.5, 0, 1, 0.5] as [number, number, number, number, number, number] };
+
+  it('a straight-line path renders as an undisplaced rectangle', () => {
+    const grid = computeWarpGrid('path', 0, WIDTH, HEIGHT, cols, straight);
+    const topLeft = vertexAt(grid, cols, 0, 0);
+    const topRight = vertexAt(grid, cols, 0, cols);
+    const bottomLeft = vertexAt(grid, cols, 1, 0);
+    const bottomRight = vertexAt(grid, cols, 1, cols);
+    expect(topLeft.x).toBeCloseTo(0);
+    expect(topLeft.y).toBeCloseTo(0);
+    expect(topRight.x).toBeCloseTo(WIDTH);
+    expect(topRight.y).toBeCloseTo(0);
+    expect(bottomLeft.y).toBeCloseTo(HEIGHT);
+    expect(bottomRight.x).toBeCloseTo(WIDTH);
+    expect(bottomRight.y).toBeCloseTo(HEIGHT);
+  });
+
+  it('u=0/u=1 columns land on the path\'s start/end points', () => {
+    const grid = computeWarpGrid('path', 0, WIDTH, HEIGHT, cols, arc);
+    // Row 0 (v=0, "top" edge) is offset half a height above the curve —
+    // averaging the top/bottom rows at a column recovers the curve point.
+    const startTop = vertexAt(grid, cols, 0, 0);
+    const startBottom = vertexAt(grid, cols, 1, 0);
+    const endTop = vertexAt(grid, cols, 0, cols);
+    const endBottom = vertexAt(grid, cols, 1, cols);
+    expect((startTop.x + startBottom.x) / 2).toBeCloseTo(arc.points[0] * WIDTH);
+    expect((startTop.y + startBottom.y) / 2).toBeCloseTo(arc.points[1] * HEIGHT);
+    expect((endTop.x + endBottom.x) / 2).toBeCloseTo(arc.points[4] * WIDTH);
+    expect((endTop.y + endBottom.y) / 2).toBeCloseTo(arc.points[5] * HEIGHT);
+  });
+
+  it('the two rows straddle the curve, HEIGHT apart, perpendicular to the tangent', () => {
+    const grid = computeWarpGrid('path', 0, WIDTH, HEIGHT, cols, straight);
+    // Tangent is purely horizontal for a straight line, so the perpendicular
+    // offset is purely vertical — top/bottom rows should be exactly HEIGHT apart in y.
+    for (let c = 0; c <= cols; c++) {
+      const top = vertexAt(grid, cols, 0, c);
+      const bottom = vertexAt(grid, cols, 1, c);
+      expect(bottom.y - top.y).toBeCloseTo(HEIGHT);
+      expect(bottom.x - top.x).toBeCloseTo(0);
+    }
+  });
+
+  it('falls back to a flat rectangle when no path data is given (missing/stale pathId)', () => {
+    const grid = computeWarpGrid('path', 0, WIDTH, HEIGHT, cols);
+    const topLeft = vertexAt(grid, cols, 0, 0);
+    const bottomRight = vertexAt(grid, cols, 1, cols);
+    expect(topLeft).toEqual({ x: 0, y: 0 });
+    expect(bottomRight.x).toBeCloseTo(WIDTH);
+    expect(bottomRight.y).toBeCloseTo(HEIGHT);
+  });
+
+  it('produces a valid triangle-list index buffer', () => {
+    const grid = computeWarpGrid('path', 0, WIDTH, HEIGHT, cols, arc);
+    expect(grid.indices.length % 3).toBe(0);
+    const vertCount = grid.positions.length / 2;
+    for (const i of grid.indices) expect(i).toBeLessThan(vertCount);
+  });
+});

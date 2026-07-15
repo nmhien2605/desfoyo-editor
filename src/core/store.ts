@@ -203,6 +203,10 @@ function mutateDocument(draft: Document, cmd: Command): void {
       location.parent.splice(location.index, 1, ...worldChildren);
       break;
     }
+    case 'UpdatePath': {
+      draft.paths[cmd.pathId] = { points: cmd.points };
+      break;
+    }
   }
 }
 

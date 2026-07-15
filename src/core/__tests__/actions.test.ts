@@ -33,6 +33,7 @@ function makeDocument(nodes: Node[]): Document {
     ],
     assets: {},
     fonts: [],
+    paths: {},
   };
 }
 

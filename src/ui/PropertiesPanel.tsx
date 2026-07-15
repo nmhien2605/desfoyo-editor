@@ -1,16 +1,21 @@
+import { nanoid } from 'nanoid';
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
 import { DEFAULT_FONT_FAMILIES } from '../services/fontService';
 import type { BlendMode, Effect, Fill, Node, Stroke, TextNode } from '../schema';
 
 const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten'];
 const STROKE_ALIGNS: Stroke['align'][] = ['inside', 'center', 'outside'];
-// 'path' is excluded — that warp type needs a referenced path shape and
-// lands in a later pass (see the Phase 3 plan).
-const WARP_TYPES: NonNullable<TextNode['warp']>['type'][] = ['none', 'arc', 'wave', 'bulge', 'flag', 'perspective'];
-// The 5 variants buildFilters.ts actually renders (see src/effects/buildFilters.ts)
-// — 'inner-shadow'/'custom' are valid schema data but have no renderer yet,
-// so offering them here would silently do nothing.
+const WARP_TYPES: NonNullable<TextNode['warp']>['type'][] = ['none', 'arc', 'wave', 'bulge', 'flag', 'perspective', 'path'];
+// The 6 variants buildFilters.ts/textRenderer.ts actually render (see
+// src/effects/buildFilters.ts) — 'inner-shadow'/'custom' are valid schema
+// data but have no renderer yet, so offering them here would silently do
+// nothing.
 const EFFECT_TYPES: Effect['type'][] = ['shadow', 'glow', 'outline', 'blur', 'extrude3d'];
+
+// A gentle upward arc, normalized (u,v) in 0..1 — start/control/end of the
+// default quadratic bezier a text node gets when its warp is first set to
+// 'path'. See schema/document.ts's PathData.
+const DEFAULT_PATH_POINTS: [number, number, number, number, number, number] = [0, 0.5, 0.5, 0, 1, 0.5];
 
 function defaultEffect(type: Effect['type']): Effect {
   switch (type) {
@@ -67,6 +72,20 @@ export function PropertiesPanel() {
     store.getState().dispatch({ type: 'UpdateProps', pageId: activePageId, nodeId: node.id, patch });
   };
 
+  // Mesh warp (arc/wave/.../path) and the extrude3d effect both swap a text
+  // node's rendered Pixi object to a different shape (Mesh vs. a
+  // stacked-clone Container) — see needsTextRecreate in textRenderer.ts.
+  // Rather than build a combined mesh+extrude renderer path for a rare
+  // combo, the two are mutually exclusive in this UI.
+  const hasMeshWarp = node.type === 'text' && !!node.warp && node.warp.type !== 'none';
+  const hasExtrude = node.type === 'text' && !!node.effects?.some((e) => e.type === 'extrude3d');
+
+  const createDefaultPath = (): string => {
+    const pathId = nanoid();
+    store.getState().dispatch({ type: 'UpdatePath', pageId: activePageId, nodeId: node.id, pathId, points: DEFAULT_PATH_POINTS });
+    return pathId;
+  };
+
   return (
     <div className="flex w-64 flex-col gap-3 border-l border-gray-200 p-2 text-sm">
       {node.type === 'text' && (
@@ -80,7 +99,9 @@ export function PropertiesPanel() {
       {node.type === 'text' && (
         <WarpControls
           warp={node.warp}
+          disabled={hasExtrude}
           onChange={(warp) => updateProps({ warp } as Partial<Node>)}
+          onCreatePath={createDefaultPath}
           onGestureStart={() => store.getState().beginGesture('warp-intensity')}
           onGestureEnd={() => store.getState().endGesture()}
         />
@@ -124,13 +145,25 @@ export function PropertiesPanel() {
         />
       )}
 
-      <EffectsControls effects={node.effects} onChange={(effects) => updateProps({ effects })} />
+      <EffectsControls effects={node.effects} disableExtrude={hasMeshWarp} onChange={(effects) => updateProps({ effects })} />
     </div>
   );
 }
 
-function EffectsControls({ effects, onChange }: { effects: Effect[] | undefined; onChange: (effects: Effect[]) => void }) {
+function EffectsControls({
+  effects,
+  disableExtrude,
+  onChange,
+}: {
+  effects: Effect[] | undefined;
+  disableExtrude: boolean;
+  onChange: (effects: Effect[]) => void;
+}) {
   const list = effects ?? [];
+  // extrude3d swaps the text node's rendered object to a stacked-clone
+  // Container, same as mesh warp swaps it to a Mesh — the two are blocked
+  // from combining (see hasMeshWarp/hasExtrude in PropertiesPanel).
+  const addableTypes = disableExtrude ? EFFECT_TYPES.filter((t) => t !== 'extrude3d') : EFFECT_TYPES;
 
   return (
     <fieldset className="flex flex-col gap-1">
@@ -148,13 +181,14 @@ function EffectsControls({ effects, onChange }: { effects: Effect[] | undefined;
       ))}
       <select
         value=""
+        title={disableExtrude ? 'extrude3d is disabled while a mesh warp is active' : undefined}
         onChange={(e) => {
           if (e.target.value) onChange([...list, defaultEffect(e.target.value as Effect['type'])]);
         }}
         className="rounded border border-gray-300 px-1 py-0.5"
       >
         <option value="">+ Add Effect</option>
-        {EFFECT_TYPES.map((type) => (
+        {addableTypes.map((type) => (
           <option key={type} value={type}>
             {type}
           </option>
@@ -210,12 +244,16 @@ function EffectParams({ effect, onChange }: { effect: Effect; onChange: (effect:
 
 function WarpControls({
   warp,
+  disabled,
   onChange,
+  onCreatePath,
   onGestureStart,
   onGestureEnd,
 }: {
   warp: TextNode['warp'];
+  disabled: boolean;
   onChange: (warp: TextNode['warp']) => void;
+  onCreatePath: () => string;
   onGestureStart: () => void;
   onGestureEnd: () => void;
 }) {
@@ -223,7 +261,16 @@ function WarpControls({
   const intensity = warp?.intensity ?? 0;
 
   const setType = (nextType: NonNullable<TextNode['warp']>['type']) => {
-    onChange(nextType === 'none' ? undefined : { type: nextType, intensity: warp?.intensity ?? 0.3 });
+    if (nextType === 'none') {
+      onChange(undefined);
+    } else if (nextType === 'path') {
+      // The path curve itself defines the bend for this warp type, so
+      // intensity is unused (hidden below) — a fresh path is created on
+      // first selection, reused on subsequent switches back to 'path'.
+      onChange({ type: 'path', intensity: 0, pathId: warp?.pathId ?? onCreatePath() });
+    } else {
+      onChange({ type: nextType, intensity: warp?.intensity ?? 0.3 });
+    }
   };
 
   return (
@@ -231,6 +278,8 @@ function WarpControls({
       <legend className="font-medium">Warp</legend>
       <select
         value={type}
+        disabled={disabled}
+        title={disabled ? 'Warp is disabled while the extrude3d effect is active' : undefined}
         onChange={(e) => setType(e.target.value as NonNullable<TextNode['warp']>['type'])}
         className="rounded border border-gray-300 px-1 py-0.5"
       >
@@ -240,7 +289,7 @@ function WarpControls({
           </option>
         ))}
       </select>
-      {type !== 'none' && (
+      {type !== 'none' && type !== 'path' && (
         <label className="flex flex-col gap-1">
           Intensity
           <input

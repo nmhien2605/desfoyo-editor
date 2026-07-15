@@ -11,6 +11,7 @@ function baseDoc(partial: Pick<Document, 'id' | 'pages' | 'assets'>): Document {
     version: 1,
     meta: { title: partial.id, createdAt: Date.now(), updatedAt: Date.now() },
     fonts: ['Inter', 'Roboto', 'Playfair Display'],
+    paths: {},
     ...partial,
   };
 }

@@ -7,7 +7,7 @@ import { angleBetween, computeRotation } from '../render/interactions/rotate';
 import { computeSelectionBounds, applyGroupRotate } from '../render/interactions/groupTransformMath';
 import type { Rect } from '../render/interactions/marquee';
 import type { SnapGuide } from '../render/interactions/snapping';
-import type { Node, Transform } from '../schema';
+import type { Node, TextNode, Transform } from '../schema';
 
 const HANDLES: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
@@ -166,8 +166,70 @@ export function SelectionOverlay() {
         className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border border-blue-500 bg-white"
         style={{ left: rotateHandlePos.x, top: rotateHandlePos.y }}
       />
+      {node.type === 'text' && node.warp?.type === 'path' && (
+        <TextPathHandles node={node} activePageId={activePageId} viewport={viewport} />
+      )}
       {extras}
     </div>
+  );
+}
+
+// 3 draggable dots (start/control/end of the quadratic bezier) for a text
+// node's 'path' warp — the whole path-authoring UX for v1 (no separate pen
+// tool). Points are stored normalized (0..1, see schema/document.ts's
+// PathData) and rendered via worldPoint() the same way resize-handle
+// corners are, since node.size defines the same local 0..1-scaled space.
+function TextPathHandles({ node, activePageId, viewport }: { node: TextNode; activePageId: string; viewport: Viewport }) {
+  const store = useEditorStoreApi();
+  const pathId = node.warp?.pathId;
+  const points = useEditorStore((s) => (pathId ? s.document.paths[pathId]?.points : undefined));
+  if (!pathId || !points) return null;
+
+  const startDrag = (i: number) => (downEvent: ReactPointerEvent) => {
+    downEvent.stopPropagation();
+    const startWorld = viewport.toWorld({ x: downEvent.clientX, y: downEvent.clientY });
+    const startPoints = points;
+    store.getState().beginGesture(`path:${pathId}:${i}`);
+
+    const onMove = (moveEvent: PointerEvent) => {
+      const currentWorld = viewport.toWorld({ x: moveEvent.clientX, y: moveEvent.clientY });
+      const worldDelta = { x: currentWorld.x - startWorld.x, y: currentWorld.y - startWorld.y };
+      // Same world-delta -> node-local-delta projection computeResize uses:
+      // un-rotate, then un-scale. Points are normalized 0..1, so also
+      // divide by node.size to turn the local pixel delta into a uv delta.
+      const local = rotateVector(worldDelta, -node.transform.rotation);
+      const scaleX = node.transform.scaleX || 1;
+      const scaleY = node.transform.scaleY || 1;
+      const duv = { x: local.x / scaleX / node.size.width, y: local.y / scaleY / node.size.height };
+      const next = [...startPoints] as typeof startPoints;
+      next[i * 2] = startPoints[i * 2] + duv.x;
+      next[i * 2 + 1] = startPoints[i * 2 + 1] + duv.y;
+      store.getState().dispatch({ type: 'UpdatePath', pageId: activePageId, nodeId: node.id, pathId, points: next });
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      store.getState().endGesture();
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  return (
+    <>
+      {[0, 1, 2].map((i) => {
+        const local = { x: points[i * 2] * node.size.width, y: points[i * 2 + 1] * node.size.height };
+        const pos = viewport.toScreen(worldPoint(node, local));
+        return (
+          <div
+            key={i}
+            onPointerDown={startDrag(i)}
+            className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-500 bg-white"
+            style={{ left: pos.x, top: pos.y }}
+          />
+        );
+      })}
+    </>
   );
 }
 
