@@ -3,7 +3,7 @@ import { useEditorStore, useEditorStoreApi } from './EditorContext';
 import { DEFAULT_FONT_FAMILIES } from '../services/fontService';
 import { customShaders } from '../effects/shaders/customShaders';
 import { PresetGallery } from './PresetGallery';
-import type { BlendMode, Effect, Fill, Node, Stroke, TextNode } from '../schema';
+import type { BlendMode, Effect, Fill, ImageNode, Node, Stroke, TextNode } from '../schema';
 
 const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten'];
 const STROKE_ALIGNS: Stroke['align'][] = ['inside', 'center', 'outside'];
@@ -147,6 +147,10 @@ export function PropertiesPanel() {
           stroke={node.stroke}
           onChange={(stroke) => updateProps({ stroke } as Partial<Node>)}
         />
+      )}
+
+      {node.type === 'image' && (
+        <ImageControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />
       )}
 
       <EffectsControls effects={node.effects} disableExtrude={hasMeshWarp} onChange={(effects) => updateProps({ effects })} />
@@ -332,6 +336,76 @@ function WarpControls({
             onChange={(e) => onChange({ type, intensity: Number(e.target.value) })}
           />
         </label>
+      )}
+    </fieldset>
+  );
+}
+
+// Crop itself is edited via SelectionOverlay.tsx's drag handles (double-
+// click the image on canvas), not here — this section is filters + mask,
+// the two ImageNode props with no on-canvas editing surface. Filters are a
+// flat brightness/contrast/saturation/blur knob object (see
+// imageRenderer.ts's buildImageFilters), not the Effect[] union
+// EffectsControls below edits — deliberately different shapes.
+function ImageControls({ node, onChange }: { node: ImageNode; onChange: (patch: Partial<ImageNode>) => void }) {
+  const filters = node.filters ?? {};
+  const setFilter = (key: keyof NonNullable<ImageNode['filters']>, value: number) => {
+    onChange({ filters: { ...filters, [key]: value } });
+  };
+
+  return (
+    <fieldset className="flex flex-col gap-1">
+      <legend className="font-medium">Image</legend>
+      <label className="flex flex-col gap-1">
+        Brightness
+        <input type="range" min={0} max={2} step={0.01} value={filters.brightness ?? 1} onChange={(e) => setFilter('brightness', Number(e.target.value))} />
+      </label>
+      <label className="flex flex-col gap-1">
+        Contrast
+        <input type="range" min={0} max={2} step={0.01} value={filters.contrast ?? 1} onChange={(e) => setFilter('contrast', Number(e.target.value))} />
+      </label>
+      <label className="flex flex-col gap-1">
+        Saturation
+        <input type="range" min={0} max={2} step={0.01} value={filters.saturation ?? 1} onChange={(e) => setFilter('saturation', Number(e.target.value))} />
+      </label>
+      <label className="flex flex-col gap-1">
+        Blur
+        <input type="range" min={0} max={20} step={0.5} value={filters.blur ?? 0} onChange={(e) => setFilter('blur', Number(e.target.value))} />
+      </label>
+
+      {node.mask ? (
+        <div className="flex flex-col gap-1 border-t border-gray-200 pt-1">
+          <div className="flex items-center justify-between">
+            <span>Mask</span>
+            <button type="button" onClick={() => onChange({ mask: undefined })} className="text-xs text-gray-500">
+              Remove
+            </button>
+          </div>
+          <select
+            value={node.mask.type}
+            onChange={(e) => onChange({ mask: { ...node.mask!, type: e.target.value as 'shape' | 'text' } })}
+            className="rounded border border-gray-300 px-1 py-0.5"
+          >
+            <option value="shape">Shape</option>
+            <option value="text">Text</option>
+          </select>
+          {/* No node-picker widget exists yet — paste the id of an existing shape/text node on this page (visible via LayersPanel). */}
+          <input
+            type="text"
+            placeholder="node id"
+            value={node.mask.ref}
+            onChange={(e) => onChange({ mask: { ...node.mask!, ref: e.target.value } })}
+            className="rounded border border-gray-300 px-1 py-0.5"
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onChange({ mask: { type: 'shape', ref: '' } })}
+          className="rounded bg-gray-100 px-2 py-1"
+        >
+          Add Mask
+        </button>
       )}
     </fieldset>
   );

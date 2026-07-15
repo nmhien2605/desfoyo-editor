@@ -1,4 +1,4 @@
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import { useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useEditorStore, useEditorStoreApi, useCanvasContext } from './EditorContext';
 import { createViewport, type Point, type Viewport } from '../render/viewport';
@@ -7,7 +7,7 @@ import { angleBetween, computeRotation } from '../render/interactions/rotate';
 import { computeSelectionBounds, applyGroupRotate } from '../render/interactions/groupTransformMath';
 import type { Rect } from '../render/interactions/marquee';
 import type { SnapGuide } from '../render/interactions/snapping';
-import type { Node, TextNode, Transform } from '../schema';
+import type { ImageNode, Node, TextNode, Transform } from '../schema';
 
 const HANDLES: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
@@ -28,7 +28,6 @@ function worldPoint(node: Node, local: Point): Point {
 }
 
 export function SelectionOverlay() {
-  const store = useEditorStoreApi();
   const { canvas } = useCanvasContext();
   const activePageId = useEditorStore((s) => s.activePageId);
   const camera = useEditorStore((s) => s.camera);
@@ -66,6 +65,33 @@ export function SelectionOverlay() {
 
   const node = selectedNodes[0];
   if (node.locked) return <div className="pointer-events-none absolute inset-0">{extras}</div>;
+  return (
+    <SingleSelectionOverlay node={node} activePageId={activePageId} camera={camera} viewport={viewport} extras={extras} />
+  );
+}
+
+// Split out from SelectionOverlay so the crop-mode toggle (double-click an
+// image node's bounding box) can be local component state keyed to the
+// selected node's id, without lifting ephemeral "am I cropping" state into
+// the store the way Camera/Grid/Snapping are (crop mode is UI-only, never
+// undoable, and only ever relevant while exactly one image node is
+// selected).
+function SingleSelectionOverlay({
+  node,
+  activePageId,
+  camera,
+  viewport,
+  extras,
+}: {
+  node: Node;
+  activePageId: string;
+  camera: { zoom: number; panX: number; panY: number };
+  viewport: Viewport;
+  extras: ReactNode;
+}) {
+  const store = useEditorStoreApi();
+  const [croppingNodeId, setCroppingNodeId] = useState<string | null>(null);
+  const isCropping = node.type === 'image' && croppingNodeId === node.id;
   const originX = node.transform.originX ?? 0;
   const originY = node.transform.originY ?? 0;
   // Un-rotated top-left corner in world space; CSS `transform: rotate()`
@@ -140,7 +166,8 @@ export function SelectionOverlay() {
   return (
     <div className="pointer-events-none absolute inset-0">
       <div
-        className="absolute border-2 border-blue-500"
+        onDoubleClick={() => node.type === 'image' && setCroppingNodeId(isCropping ? null : node.id)}
+        className={`absolute border-2 border-blue-500 ${node.type === 'image' ? 'pointer-events-auto' : ''}`}
         style={{
           left: topLeftScreen.x,
           top: topLeftScreen.y,
@@ -150,24 +177,30 @@ export function SelectionOverlay() {
           transform: `rotate(${rotationDeg}deg)`,
         }}
       />
-      {HANDLES.map((handle) => {
-        const pos = viewport.toScreen(worldPoint(node, localCorner(handle, node.size.width, node.size.height)));
-        return (
-          <div
-            key={handle}
-            onPointerDown={startResize(handle)}
-            className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-blue-500 bg-white"
-            style={{ left: pos.x, top: pos.y, cursor: `${handle}-resize` }}
-          />
-        );
-      })}
-      <div
-        onPointerDown={startRotate}
-        className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border border-blue-500 bg-white"
-        style={{ left: rotateHandlePos.x, top: rotateHandlePos.y }}
-      />
+      {!isCropping &&
+        HANDLES.map((handle) => {
+          const pos = viewport.toScreen(worldPoint(node, localCorner(handle, node.size.width, node.size.height)));
+          return (
+            <div
+              key={handle}
+              onPointerDown={startResize(handle)}
+              className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-blue-500 bg-white"
+              style={{ left: pos.x, top: pos.y, cursor: `${handle}-resize` }}
+            />
+          );
+        })}
+      {!isCropping && (
+        <div
+          onPointerDown={startRotate}
+          className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border border-blue-500 bg-white"
+          style={{ left: rotateHandlePos.x, top: rotateHandlePos.y }}
+        />
+      )}
       {node.type === 'text' && node.warp?.type === 'path' && (
         <TextPathHandles node={node} activePageId={activePageId} viewport={viewport} />
+      )}
+      {isCropping && node.type === 'image' && (
+        <ImageCropHandles node={node} activePageId={activePageId} viewport={viewport} />
       )}
       {extras}
     </div>
@@ -226,6 +259,92 @@ function TextPathHandles({ node, activePageId, viewport }: { node: TextNode; act
             onPointerDown={startDrag(i)}
             className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-500 bg-white"
             style={{ left: pos.x, top: pos.y }}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+const CROP_HANDLES: Array<'nw' | 'ne' | 'se' | 'sw'> = ['nw', 'ne', 'se', 'sw'];
+const DEFAULT_CROP = { x: 0, y: 0, width: 1, height: 1 };
+
+// node.crop is normalized (0..1 fractions of the image's own display box,
+// same convention warp path points use for node.size) — see
+// imageRenderer.ts's applyCrop for how that maps onto the actual texture's
+// pixel frame at render time.
+export function updateCropHandle(
+  crop: { x: number; y: number; width: number; height: number },
+  handle: 'nw' | 'ne' | 'se' | 'sw',
+  duv: Point,
+): { x: number; y: number; width: number; height: number } {
+  let { x, y, width, height } = crop;
+  if (handle.includes('w')) {
+    x += duv.x;
+    width -= duv.x;
+  } else {
+    width += duv.x;
+  }
+  if (handle.includes('n')) {
+    y += duv.y;
+    height -= duv.y;
+  } else {
+    height += duv.y;
+  }
+  x = Math.max(0, Math.min(1, x));
+  y = Math.max(0, Math.min(1, y));
+  width = Math.max(0.01, Math.min(1 - x, width));
+  height = Math.max(0.01, Math.min(1 - y, height));
+  return { x, y, width, height };
+}
+
+// 4 corner handles for freeform crop, entered via double-clicking an image
+// node's bounding box (see isCropping in SingleSelectionOverlay). Reuses
+// the exact toWorld/toScreen + rotateVector un-rotate/un-scale drag math
+// TextPathHandles already uses for its normalized-uv dots.
+function ImageCropHandles({ node, activePageId, viewport }: { node: ImageNode; activePageId: string; viewport: Viewport }) {
+  const store = useEditorStoreApi();
+  const crop = node.crop ?? DEFAULT_CROP;
+
+  const startDrag = (handle: 'nw' | 'ne' | 'se' | 'sw') => (downEvent: ReactPointerEvent) => {
+    downEvent.stopPropagation();
+    const startWorld = viewport.toWorld({ x: downEvent.clientX, y: downEvent.clientY });
+    const startCrop = crop;
+    store.getState().beginGesture(`crop:${node.id}:${handle}`);
+
+    const onMove = (moveEvent: PointerEvent) => {
+      const currentWorld = viewport.toWorld({ x: moveEvent.clientX, y: moveEvent.clientY });
+      const worldDelta = { x: currentWorld.x - startWorld.x, y: currentWorld.y - startWorld.y };
+      const local = rotateVector(worldDelta, -node.transform.rotation);
+      const scaleX = node.transform.scaleX || 1;
+      const scaleY = node.transform.scaleY || 1;
+      const duv = { x: local.x / scaleX / node.size.width, y: local.y / scaleY / node.size.height };
+      const nextCrop = updateCropHandle(startCrop, handle, duv);
+      store.getState().dispatch({ type: 'UpdateProps', pageId: activePageId, nodeId: node.id, patch: { crop: nextCrop } });
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      store.getState().endGesture();
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  return (
+    <>
+      {CROP_HANDLES.map((handle) => {
+        const local = {
+          x: (handle.includes('w') ? crop.x : crop.x + crop.width) * node.size.width,
+          y: (handle.includes('n') ? crop.y : crop.y + crop.height) * node.size.height,
+        };
+        const pos = viewport.toScreen(worldPoint(node, local));
+        return (
+          <div
+            key={handle}
+            onPointerDown={startDrag(handle)}
+            className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-emerald-500 bg-white"
+            style={{ left: pos.x, top: pos.y, cursor: `${handle}-resize` }}
           />
         );
       })}

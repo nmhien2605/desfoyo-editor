@@ -8,8 +8,10 @@ const STROKE_ALIGNMENT: Record<Stroke['align'], number> = { inside: 1, center: 0
 // Draws the shape's outline path translated by [dx, dy] — factored out so
 // each multi-layer stroke entry can redraw the same path at its own offset
 // before stroking it, then the true (untranslated) path is drawn once more
-// for the fill/base stroke.
-function drawPath(obj: Graphics, node: ShapeNode, [dx, dy]: [number, number]): void {
+// for the fill/base stroke. Exported so imageRenderer.ts can reuse the same
+// silhouette for shape-type image masks (Phase 4 Pass B) without
+// duplicating the per-shape-type geometry.
+export function drawPath(obj: Graphics, node: ShapeNode, [dx, dy]: [number, number]): void {
   const { width, height } = node.size;
   switch (node.shape) {
     case 'rect':

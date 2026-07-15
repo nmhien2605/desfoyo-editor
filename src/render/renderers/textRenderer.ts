@@ -30,7 +30,9 @@ function baseStyle(node: TextNode) {
   };
 }
 
-function fillStyle(node: TextNode) {
+// Exported so imageRenderer.ts can build a plain mask Text from a
+// text-type mask ref (Phase 4 Pass B) without duplicating style mapping.
+export function fillStyle(node: TextNode) {
   return { ...baseStyle(node), fill: resolveFill(node.fill) };
 }
 
