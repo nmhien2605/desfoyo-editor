@@ -4,6 +4,9 @@ import type { BlendMode, Effect, Fill, Node, Stroke, TextNode } from '../schema'
 
 const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten'];
 const STROKE_ALIGNS: Stroke['align'][] = ['inside', 'center', 'outside'];
+// 'path' is excluded — that warp type needs a referenced path shape and
+// lands in a later pass (see the Phase 3 plan).
+const WARP_TYPES: NonNullable<TextNode['warp']>['type'][] = ['none', 'arc', 'wave', 'bulge', 'flag', 'perspective'];
 // The 5 variants buildFilters.ts actually renders (see src/effects/buildFilters.ts)
 // — 'inner-shadow'/'custom' are valid schema data but have no renderer yet,
 // so offering them here would silently do nothing.
@@ -71,6 +74,15 @@ export function PropertiesPanel() {
           font={node.font}
           families={[...DEFAULT_FONT_FAMILIES, ...documentFonts.filter((f) => !DEFAULT_FONT_FAMILIES.includes(f))]}
           onChange={(font) => updateProps({ font } as Partial<Node>)}
+        />
+      )}
+
+      {node.type === 'text' && (
+        <WarpControls
+          warp={node.warp}
+          onChange={(warp) => updateProps({ warp } as Partial<Node>)}
+          onGestureStart={() => store.getState().beginGesture('warp-intensity')}
+          onGestureEnd={() => store.getState().endGesture()}
         />
       )}
 
@@ -194,6 +206,57 @@ function EffectParams({ effect, onChange }: { effect: Effect; onChange: (effect:
     case 'custom':
       return null;
   }
+}
+
+function WarpControls({
+  warp,
+  onChange,
+  onGestureStart,
+  onGestureEnd,
+}: {
+  warp: TextNode['warp'];
+  onChange: (warp: TextNode['warp']) => void;
+  onGestureStart: () => void;
+  onGestureEnd: () => void;
+}) {
+  const type = warp?.type ?? 'none';
+  const intensity = warp?.intensity ?? 0;
+
+  const setType = (nextType: NonNullable<TextNode['warp']>['type']) => {
+    onChange(nextType === 'none' ? undefined : { type: nextType, intensity: warp?.intensity ?? 0.3 });
+  };
+
+  return (
+    <fieldset className="flex flex-col gap-1">
+      <legend className="font-medium">Warp</legend>
+      <select
+        value={type}
+        onChange={(e) => setType(e.target.value as NonNullable<TextNode['warp']>['type'])}
+        className="rounded border border-gray-300 px-1 py-0.5"
+      >
+        {WARP_TYPES.map((t) => (
+          <option key={t} value={t}>
+            {t}
+          </option>
+        ))}
+      </select>
+      {type !== 'none' && (
+        <label className="flex flex-col gap-1">
+          Intensity
+          <input
+            type="range"
+            min={-1}
+            max={1}
+            step={0.01}
+            value={intensity}
+            onPointerDown={onGestureStart}
+            onPointerUp={onGestureEnd}
+            onChange={(e) => onChange({ type, intensity: Number(e.target.value) })}
+          />
+        </label>
+      )}
+    </fieldset>
+  );
 }
 
 function FontControls({

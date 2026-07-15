@@ -1,8 +1,8 @@
-import { Text, type Container } from 'pixi.js';
+import { Mesh, Text, type Container } from 'pixi.js';
 import type { Command } from '../core/commands';
 import { findNodeInTree } from '../core/tree';
 import type { Document, Node, Page } from '../schema';
-import { textRenderer } from './renderers/textRenderer';
+import { textRenderer, wantsMesh } from './renderers/textRenderer';
 import { shapeRenderer } from './renderers/shapeRenderer';
 import { imageRenderer } from './renderers/imageRenderer';
 import { groupRenderer } from './renderers/groupRenderer';
@@ -37,14 +37,16 @@ function updateDisplayObject(obj: Container, node: Node, doc: Document): void {
   }
 }
 
-// textRenderer.create() returns a bare Text for a strokeless text node and
-// a Container (of layered Text clones) once it has a stroke — update() can
-// mutate either in place, but can't swap one for the other. Crossing that
-// boundary (stroke added to/removed from a previously-strokeless node)
-// needs the object recreated, same as SceneReconciler already does for
-// AddNode/RemoveNode.
+// textRenderer.create() returns a bare Text for a strokeless text node, a
+// Container (of layered Text clones) once it has a stroke, or a Mesh once
+// it has an active texture-mesh warp — update() can mutate any of these in
+// place, but can't swap one for another. Crossing those boundaries (stroke
+// or warp added to/removed from a node) needs the object recreated, same as
+// SceneReconciler already does for AddNode/RemoveNode.
 function needsRecreate(obj: Container, node: Node): boolean {
-  return node.type === 'text' && obj instanceof Text === !!node.stroke;
+  if (node.type !== 'text') return false;
+  if (wantsMesh(node)) return !(obj instanceof Mesh);
+  return obj instanceof Text === !!node.stroke;
 }
 
 function findPage(doc: Document, pageId: string): Page | undefined {

@@ -4,6 +4,7 @@ import { SceneReconciler } from '../render/SceneReconciler';
 import { attachDrag } from '../render/interactions/drag';
 import { attachViewportControls, attachPan } from '../render/interactions/viewportControls';
 import { attachMarquee } from '../render/interactions/marquee';
+import { setRenderer } from '../render/rendererContext';
 import { fillToColor } from '../render/fillToColor';
 import { useEditorStoreApi } from './EditorContext';
 import type { GridSettings } from '../core/store';
@@ -60,6 +61,7 @@ export function CanvasHost({ onReady }: CanvasHostProps) {
         return;
       }
 
+      setRenderer(app.renderer);
       hostRef.current?.appendChild(app.canvas);
       app.stage.addChild(pageContainer);
       app.stage.eventMode = 'static';
@@ -125,6 +127,7 @@ export function CanvasHost({ onReady }: CanvasHostProps) {
       detachPan?.();
       reconciler?.destroy();
       if (app.renderer) app.destroy(true);
+      setRenderer(undefined);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mounts the Pixi app exactly once
   }, []);
