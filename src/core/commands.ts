@@ -1,4 +1,4 @@
-import type { Node } from '../schema';
+import type { Node, Page } from '../schema';
 import type { Transform } from '../schema';
 
 // Every document mutation goes through one of these. No direct model
@@ -23,4 +23,20 @@ export type Command =
   // Document-level (paths aren't node props) — carries nodeId anyway, per
   // the convention above, so SceneReconciler knows which text node's mesh
   // to refresh (a document.paths change alone doesn't touch any node).
-  | { type: 'UpdatePath'; pageId: string; nodeId: string; pathId: string; points: [number, number, number, number, number, number] };
+  | { type: 'UpdatePath'; pageId: string; nodeId: string; pathId: string; points: [number, number, number, number, number, number] }
+  // Page-level (Phase 4 Pass A) — flat, no parentId concept at this level.
+  // None of these need a SceneReconciler.apply() case: CanvasHost.tsx
+  // remounts the whole scene whenever activePageId changes (see
+  // remountPage there), which is the only visual consequence any of these
+  // can have — adding/reordering/duplicating a page the user isn't looking
+  // at, or removing a page other than the active one, needs no Pixi update.
+  | { type: 'AddPage'; page: Page; index?: number }
+  | { type: 'RemovePage'; pageId: string }
+  | { type: 'ReorderPage'; pageId: string; to: 'up' | 'down' }
+  | { type: 'DuplicatePage'; pageId: string; newPageId: string };
+
+export type PageLevelCommand = Extract<Command, { type: 'AddPage' | 'RemovePage' | 'ReorderPage' | 'DuplicatePage' }>;
+
+export function isPageLevelCommand(cmd: Command): cmd is PageLevelCommand {
+  return cmd.type === 'AddPage' || cmd.type === 'RemovePage' || cmd.type === 'ReorderPage' || cmd.type === 'DuplicatePage';
+}

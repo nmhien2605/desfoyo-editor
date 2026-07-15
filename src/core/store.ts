@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { applyPatches, enablePatches, produceWithPatches, type Patch } from 'immer';
-import type { Command } from './commands';
-import { requireNodeInPage, findNodeInTree } from './tree';
+import { isPageLevelCommand, type Command, type PageLevelCommand } from './commands';
+import { requireNodeInPage, findNodeInTree, deepCloneNode } from './tree';
 import type { Document, GroupNode, Node, Page, Transform } from '../schema';
 import { composeTransform, decomposeTransform } from '../render/applyTransform';
 import { computeSelectionBounds } from '../render/interactions/groupTransformMath';
@@ -118,7 +118,48 @@ function reorderIndex(children: Node[], index: number, to: 'up' | 'down' | 'top'
   }
 }
 
+function deepClonePage(page: Page, newId: string): Page {
+  return { ...page, id: newId, children: page.children.map(deepCloneNode) };
+}
+
+// Page-level commands (Phase 4 Pass A) are handled first, and separately
+// from the page-scoped switch below, since they don't have a `pageId` to
+// look a single page up by — they operate on `draft.pages` itself.
+function mutatePages(draft: Document, cmd: PageLevelCommand): void {
+  switch (cmd.type) {
+    case 'AddPage': {
+      const index = cmd.index ?? draft.pages.length;
+      draft.pages.splice(index, 0, cmd.page);
+      break;
+    }
+    case 'RemovePage': {
+      if (draft.pages.length <= 1) break; // never remove the last page
+      const index = draft.pages.findIndex((p) => p.id === cmd.pageId);
+      if (index !== -1) draft.pages.splice(index, 1);
+      break;
+    }
+    case 'ReorderPage': {
+      const index = draft.pages.findIndex((p) => p.id === cmd.pageId);
+      if (index === -1) break;
+      const to = cmd.to === 'up' ? Math.min(index + 1, draft.pages.length - 1) : Math.max(index - 1, 0);
+      const [page] = draft.pages.splice(index, 1);
+      draft.pages.splice(to, 0, page);
+      break;
+    }
+    case 'DuplicatePage': {
+      const index = draft.pages.findIndex((p) => p.id === cmd.pageId);
+      if (index !== -1) draft.pages.splice(index + 1, 0, deepClonePage(draft.pages[index], cmd.newPageId));
+      break;
+    }
+  }
+}
+
 function mutateDocument(draft: Document, cmd: Command): void {
+  if (isPageLevelCommand(cmd)) {
+    mutatePages(draft, cmd);
+    return;
+  }
+
   const page = draft.pages[findPageIndex(draft, cmd.pageId)];
 
   switch (cmd.type) {
@@ -234,13 +275,23 @@ export function createEditorStore(initialDocument: Document) {
         if (cmd.type === 'RemoveNode') selectedNodeIds.delete(cmd.nodeId);
         if (cmd.type === 'UngroupNode') selectedNodeIds.delete(cmd.groupId);
 
+        // If the active page no longer exists (RemovePage removed it, or a
+        // no-op left it in place — either way this check is cheap and
+        // correct), fall back to the first remaining page. Checked against
+        // nextDocument generally, not just on RemovePage, so any future
+        // page-removing command gets this for free.
+        const activePageId = nextDocument.pages.some((p) => p.id === s.activePageId)
+          ? s.activePageId
+          : nextDocument.pages[0].id;
+
         if (s.activeGestureId) {
-          return { document: nextDocument, lastCommand: cmd, selectedNodeIds };
+          return { document: nextDocument, lastCommand: cmd, selectedNodeIds, activePageId };
         }
         return {
           document: nextDocument,
           lastCommand: cmd,
           selectedNodeIds,
+          activePageId,
           past: pushHistory(s.past, { patches, inversePatches }),
           future: [],
         };

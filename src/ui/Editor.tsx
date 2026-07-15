@@ -7,6 +7,7 @@ import { CanvasHost } from './CanvasHost';
 import { SelectionOverlay } from './SelectionOverlay';
 import { Rulers } from './Rulers';
 import { Toolbar } from './Toolbar';
+import { PageTabs } from './PageTabs';
 import { LayersPanel } from './LayersPanel';
 import { PropertiesPanel } from './PropertiesPanel';
 import { loadDefaultFonts } from '../services/fontService';
@@ -81,6 +82,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
       <CanvasProvider value={canvasValue}>
         <div className={props.className}>
           <Toolbar />
+          <PageTabs />
           <div className="flex">
             <div className="relative">
               <CanvasHost

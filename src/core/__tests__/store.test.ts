@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createEditorStore } from '../store';
 import { computeSelectionBounds, applyGroupRotate } from '../../render/interactions/groupTransformMath';
-import type { Document, Node, ShapeNode } from '../../schema';
+import type { Document, Node, Page, ShapeNode } from '../../schema';
 
 function shapeNode(id: string, x = 0, y = 0, rotation = 0): ShapeNode {
   return {
@@ -38,6 +38,58 @@ function makeDocument(nodes: Node[]): Document {
 }
 
 const PAGE_ID = 'page-1';
+
+function extraPage(id: string, nodes: Node[] = []): Page {
+  return { id, name: id, size: { width: 400, height: 400 }, background: { type: 'color', value: '#eeeeee' }, children: nodes };
+}
+
+describe('multi-page', () => {
+  it('AddPage grows document.pages and the new page is addressable', () => {
+    const store = createEditorStore(makeDocument([]));
+    store.getState().dispatch({ type: 'AddPage', page: extraPage('page-2') });
+    expect(store.getState().document.pages).toHaveLength(2);
+    expect(store.getState().document.pages[1].id).toBe('page-2');
+  });
+
+  it('RemovePage on the last remaining page no-ops', () => {
+    const store = createEditorStore(makeDocument([]));
+    store.getState().dispatch({ type: 'RemovePage', pageId: PAGE_ID });
+    expect(store.getState().document.pages).toHaveLength(1);
+    expect(store.getState().document.pages[0].id).toBe(PAGE_ID);
+  });
+
+  it('RemovePage on the active page reassigns activePageId to a remaining page', () => {
+    const store = createEditorStore(makeDocument([]));
+    store.getState().dispatch({ type: 'AddPage', page: extraPage('page-2') });
+    store.getState().setActivePage(PAGE_ID);
+    store.getState().dispatch({ type: 'RemovePage', pageId: PAGE_ID });
+    expect(store.getState().document.pages).toHaveLength(1);
+    expect(store.getState().activePageId).toBe('page-2');
+  });
+
+  it('DuplicatePage produces a page with a fresh id and independently-editable (cloned) children', () => {
+    const store = createEditorStore(makeDocument([]));
+    store.getState().dispatch({ type: 'AddPage', page: extraPage('page-2', [shapeNode('n1', 0, 0)]) });
+    store.getState().dispatch({ type: 'DuplicatePage', pageId: 'page-2', newPageId: 'page-3' });
+
+    const pages = store.getState().document.pages;
+    expect(pages).toHaveLength(3);
+    const original = pages.find((p) => p.id === 'page-2')!;
+    const clone = pages.find((p) => p.id === 'page-3')!;
+    expect(clone.children[0].id).not.toBe(original.children[0].id);
+
+    store.getState().dispatch({ type: 'UpdateTransform', pageId: 'page-3', nodeId: clone.children[0].id, patch: { x: 999 } });
+    const originalAfter = store.getState().document.pages.find((p) => p.id === 'page-2')!;
+    expect(originalAfter.children[0].transform.x).toBe(0);
+  });
+
+  it('ReorderPage moves a page within document.pages', () => {
+    const store = createEditorStore(makeDocument([]));
+    store.getState().dispatch({ type: 'AddPage', page: extraPage('page-2') });
+    store.getState().dispatch({ type: 'ReorderPage', pageId: PAGE_ID, to: 'up' });
+    expect(store.getState().document.pages.map((p) => p.id)).toEqual(['page-2', PAGE_ID]);
+  });
+});
 
 describe('history: 20 operations then undo all', () => {
   it('returns to exactly the original document (DoD)', () => {

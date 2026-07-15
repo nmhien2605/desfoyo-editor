@@ -8,7 +8,7 @@ import { setRenderer } from '../render/rendererContext';
 import { fillToColor } from '../render/fillToColor';
 import { useEditorStoreApi } from './EditorContext';
 import type { GridSettings } from '../core/store';
-import type { PageBackground, Size } from '../schema';
+import type { Document, Page, PageBackground, Size } from '../schema';
 
 function backgroundColor(bg: PageBackground) {
   return bg.type === 'color' ? bg.value : fillToColor(bg.value);
@@ -93,21 +93,44 @@ export function CanvasHost({ onReady }: CanvasHostProps) {
       });
       reconciler.mount(page, document);
 
+      // Shared by both "load a whole new document" and "switch active
+      // page" below — both need the scene rebuilt against a different
+      // Page, and (unlike a same-size document reload) a page switch can
+      // also change canvas size/background, which the renderer doesn't
+      // pick up on its own.
+      const remountPage = (newPage: Page, doc: Document) => {
+        reconciler?.destroy();
+        pageContainer.removeChildren();
+        if (app.renderer.width !== newPage.size.width || app.renderer.height !== newPage.size.height) {
+          app.renderer.resize(newPage.size.width, newPage.size.height);
+        }
+        app.renderer.background.color = backgroundColor(newPage.background);
+        pageContainer.addChild(gridGraphics);
+        drawGrid(gridGraphics, newPage.size, store.getState().grid);
+        reconciler = new SceneReconciler(pageContainer, (obj, node) => {
+          attachDrag(obj, node, store, app.stage, pageContainer);
+        });
+        reconciler.mount(newPage, doc);
+      };
+
       unsubscribe = store.subscribe((state, prevState) => {
         if (state.document !== prevState.document && state.lastCommand === null) {
           // Wholesale replacement (EditorHandle.loadDocument), not a
           // command-driven change — rebuild the scene from scratch rather
           // than trying to targeted-diff into an unrelated document.
-          reconciler?.destroy();
-          pageContainer.removeChildren();
           const newPage =
             state.document.pages.find((p) => p.id === state.activePageId) ?? state.document.pages[0];
-          pageContainer.addChild(gridGraphics);
-          drawGrid(gridGraphics, newPage.size, state.grid);
-          reconciler = new SceneReconciler(pageContainer, (obj, node) => {
-            attachDrag(obj, node, store, app.stage, pageContainer);
-          });
-          reconciler.mount(newPage, state.document);
+          remountPage(newPage, state.document);
+          return;
+        }
+        if (state.activePageId !== prevState.activePageId) {
+          // Switching pages (or RemovePage reassigning activePageId away
+          // from a page that no longer exists) changes what should be on
+          // screen without necessarily touching `document`/`lastCommand`
+          // in a way the branches below react to — remount explicitly.
+          const newPage =
+            state.document.pages.find((p) => p.id === state.activePageId) ?? state.document.pages[0];
+          remountPage(newPage, state.document);
           return;
         }
         if (state.lastCommand && state.lastCommand !== prevState.lastCommand) {

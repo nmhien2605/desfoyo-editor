@@ -1,5 +1,5 @@
 import type { Container } from 'pixi.js';
-import type { Command } from '../core/commands';
+import { isPageLevelCommand, type Command } from '../core/commands';
 import { findNodeInTree } from '../core/tree';
 import type { Document, Node, Page } from '../schema';
 import { textRenderer, needsTextRecreate } from './renderers/textRenderer';
@@ -102,6 +102,12 @@ export class SceneReconciler {
   }
 
   apply(cmd: Command, doc: Document): void {
+    // Page-level commands (AddPage/RemovePage/ReorderPage/DuplicatePage)
+    // never need a targeted Pixi update here — CanvasHost.tsx remounts the
+    // whole scene whenever activePageId changes, which is the only case
+    // any of these can have a visual effect for the page currently shown.
+    if (isPageLevelCommand(cmd)) return;
+
     const page = findPage(doc, cmd.pageId);
     if (!page) return;
 
