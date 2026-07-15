@@ -1,16 +1,18 @@
 import { nanoid } from 'nanoid';
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
 import { DEFAULT_FONT_FAMILIES } from '../services/fontService';
+import { customShaders } from '../effects/shaders/customShaders';
+import { PresetGallery } from './PresetGallery';
 import type { BlendMode, Effect, Fill, Node, Stroke, TextNode } from '../schema';
 
 const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten'];
 const STROKE_ALIGNS: Stroke['align'][] = ['inside', 'center', 'outside'];
 const WARP_TYPES: NonNullable<TextNode['warp']>['type'][] = ['none', 'arc', 'wave', 'bulge', 'flag', 'perspective', 'path'];
-// The 6 variants buildFilters.ts/textRenderer.ts actually render (see
-// src/effects/buildFilters.ts) — 'inner-shadow'/'custom' are valid schema
-// data but have no renderer yet, so offering them here would silently do
-// nothing.
-const EFFECT_TYPES: Effect['type'][] = ['shadow', 'glow', 'outline', 'blur', 'extrude3d'];
+// All 7 variants buildFilters.ts/textRenderer.ts now render (see
+// src/effects/buildFilters.ts) — Phase 3 Pass D adds 'inner-shadow' and
+// 'custom' (a GLSL filter and a named-shader-registry lookup, respectively).
+const EFFECT_TYPES: Effect['type'][] = ['shadow', 'inner-shadow', 'glow', 'outline', 'blur', 'extrude3d', 'custom'];
+const CUSTOM_SHADER_IDS = Object.keys(customShaders);
 
 // A gentle upward arc, normalized (u,v) in 0..1 — start/control/end of the
 // default quadratic bezier a text node gets when its warp is first set to
@@ -31,7 +33,7 @@ function defaultEffect(type: Effect['type']): Effect {
     case 'extrude3d':
       return { type: 'extrude3d', depth: 4, angle: Math.PI / 4, color: '#000000' };
     case 'custom':
-      return { type: 'custom', shaderId: '', uniforms: {} };
+      return { type: 'custom', shaderId: CUSTOM_SHADER_IDS[0] ?? '', uniforms: { strength: 2 } };
   }
 }
 
@@ -88,6 +90,8 @@ export function PropertiesPanel() {
 
   return (
     <div className="flex w-64 flex-col gap-3 border-l border-gray-200 p-2 text-sm">
+      {node.type === 'text' && <PresetGallery onApply={(patch) => updateProps(patch as Partial<Node>)} />}
+
       {node.type === 'text' && (
         <FontControls
           font={node.font}
@@ -238,7 +242,32 @@ function EffectParams({ effect, onChange }: { effect: Effect; onChange: (effect:
         </>
       );
     case 'custom':
-      return null;
+      return (
+        <>
+          <select
+            value={effect.shaderId}
+            onChange={(e) => onChange({ ...effect, shaderId: e.target.value })}
+            className="rounded border border-gray-300 px-1 py-0.5"
+          >
+            {CUSTOM_SHADER_IDS.map((id) => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+          {/* Flat key/value uniform editor — no per-shader bespoke UI, uniforms are whatever the shader's registry entry declares. */}
+          {Object.entries(effect.uniforms).map(([key, value]) => (
+            <input
+              key={key}
+              type="number"
+              value={Array.isArray(value) ? value[0] : value}
+              onChange={(e) => onChange({ ...effect, uniforms: { ...effect.uniforms, [key]: Number(e.target.value) } })}
+              placeholder={key}
+              className="rounded border border-gray-300 px-1 py-0.5"
+            />
+          ))}
+        </>
+      );
   }
 }
 

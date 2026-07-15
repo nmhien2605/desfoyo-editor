@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { BlurFilter } from 'pixi.js';
+import { BlurFilter, Filter } from 'pixi.js';
 import { BevelFilter, DropShadowFilter, GlowFilter, OutlineFilter } from 'pixi-filters';
 import { buildFilters } from '../buildFilters';
 import type { Effect } from '../../schema';
@@ -46,11 +46,20 @@ describe('buildFilters', () => {
     expect((filter as BevelFilter).rotation).toBeCloseTo(90);
   });
 
-  it('produces no filter for still-inert inner-shadow and custom', () => {
-    const effects: Effect[] = [
-      { type: 'inner-shadow', color: '#000000', blur: 1, offset: [0, 0], alpha: 1 },
-      { type: 'custom', shaderId: 'foo', uniforms: {} },
-    ];
+  it('builds a custom Filter for inner-shadow', () => {
+    const effects: Effect[] = [{ type: 'inner-shadow', color: '#000000', blur: 1, offset: [2, 2], alpha: 0.8 }];
+    const [filter] = buildFilters(effects);
+    expect(filter).toBeInstanceOf(Filter);
+  });
+
+  it('builds a custom Filter for a known custom shaderId', () => {
+    const effects: Effect[] = [{ type: 'custom', shaderId: 'chromatic-aberration', uniforms: { strength: 2 } }];
+    const [filter] = buildFilters(effects);
+    expect(filter).toBeInstanceOf(Filter);
+  });
+
+  it('produces no filter for an unknown custom shaderId', () => {
+    const effects: Effect[] = [{ type: 'custom', shaderId: 'does-not-exist', uniforms: {} }];
     expect(buildFilters(effects)).toEqual([]);
   });
 });
