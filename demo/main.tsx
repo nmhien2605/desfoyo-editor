@@ -38,6 +38,22 @@ function App() {
         >
           Export PNG
         </button>
+        <button
+          type="button"
+          className="rounded bg-gray-100 px-3 py-1 text-sm"
+          onClick={async () => {
+            const blob = await editorRef.current?.export('svg');
+            if (!blob) return;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'desfoyo-export.svg';
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+        >
+          Export SVG
+        </button>
       </div>
       <Editor ref={editorRef} key={sampleName} document={samples[sampleName]} />
     </div>

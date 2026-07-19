@@ -8,9 +8,13 @@ import { PageSchema } from './page';
 // 'font' variant added in Phase 3 for uploaded (.ttf/.otf/.woff2) fonts —
 // `family` is the FontFace family name registered via fontService.ts,
 // `document.fonts` tracks which family names are in use by the document.
+// 'svg' variant added in Phase 4 Pass E for uploaded SVG icons/artwork —
+// `dataUri` is the raw SVG markup (an uploaded-file data URI, same as
+// 'image'), decoded back to text at render time by svgRenderer.ts.
 export const AssetRefSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('image'), dataUri: z.string() }),
   z.object({ type: z.literal('font'), family: z.string(), dataUri: z.string() }),
+  z.object({ type: z.literal('svg'), dataUri: z.string() }),
 ]);
 export type AssetRef = z.infer<typeof AssetRefSchema>;
 

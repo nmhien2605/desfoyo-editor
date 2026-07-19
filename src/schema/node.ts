@@ -3,9 +3,8 @@ import { BaseNodeShape, type BaseNode } from './base';
 import { FillSchema, StrokeSchema } from './fill-stroke';
 
 // Phase 2 scope: 'text' | 'shape' | 'image' | 'group' are valid node types.
-// 'svg' arrives in Phase 4 (see CONTEXT.md "Node" and plan/04-data-model.md)
-// — until then, Zod rejects documents containing it rather than silently
-// accepting an out-of-phase node.
+// 'svg' arrived in Phase 4 Pass E (see CONTEXT.md "Node" and
+// plan/04-data-model.md) — Zod previously rejected it as out-of-phase.
 
 export const TextNodeSchema = z.object({
   ...BaseNodeShape,
@@ -66,6 +65,21 @@ export const ImageNodeSchema = z.object({
 });
 export type ImageNode = z.infer<typeof ImageNodeSchema>;
 
+// SvgNode (Phase 4 Pass E): assetId references the raw SVG source (an
+// AssetRef of type 'svg'); overrides recolors specific elements by their
+// SVG `id` attribute. v1 only actually applies solid-color overrides (see
+// svgRenderer.ts's applyOverrides) — gradient overrides are declared here
+// to match plan/04-data-model.md's Record<string, Fill> shape but are
+// silently inert for now, same convention buildFilters.ts's unknown
+// 'custom' shaderId already uses.
+export const SvgNodeSchema = z.object({
+  ...BaseNodeShape,
+  type: z.literal('svg'),
+  assetId: z.string(),
+  overrides: z.record(z.string(), FillSchema).optional(),
+});
+export type SvgNode = z.infer<typeof SvgNodeSchema>;
+
 // GroupNode per plan/04-data-model.md: exactly BaseNode + children, no other
 // fields. z.lazy() is required because NodeSchema is now self-referential
 // (a group's children can themselves include groups).
@@ -88,6 +102,7 @@ export const NodeSchema: z.ZodType<Node> = z.discriminatedUnion('type', [
   TextNodeSchema,
   ShapeNodeSchema,
   ImageNodeSchema,
+  SvgNodeSchema,
   GroupNodeSchema,
 ]);
-export type Node = TextNode | ShapeNode | ImageNode | GroupNode;
+export type Node = TextNode | ShapeNode | ImageNode | SvgNode | GroupNode;

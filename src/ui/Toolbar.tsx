@@ -11,7 +11,8 @@ import {
 } from '../core/actions';
 import { fitToScreen } from '../render/interactions/viewportControls';
 import { registerFont } from '../services/fontService';
-import type { ImageNode, ShapeNode, TextNode, Transform } from '../schema';
+import { decodeSvgText } from '../render/renderers/svgRenderer';
+import type { ImageNode, ShapeNode, SvgNode, TextNode, Transform } from '../schema';
 
 const DEFAULT_TRANSFORM: Transform = { x: 100, y: 100, scaleX: 1, scaleY: 1, rotation: 0, originX: 0.5, originY: 0.5 };
 
@@ -47,7 +48,7 @@ function defaultShapeNode(): ShapeNode {
   };
 }
 
-function defaultImageNode(assetId: string, width: number, height: number): ImageNode {
+export function defaultImageNode(assetId: string, width: number, height: number): ImageNode {
   return {
     id: nanoid(),
     transform: { ...DEFAULT_TRANSFORM },
@@ -69,13 +70,44 @@ function readAsDataUri(file: File): Promise<string> {
   });
 }
 
-function loadImageSize(dataUri: string): Promise<{ width: number; height: number }> {
+export function loadImageSize(dataUri: string): Promise<{ width: number; height: number }> {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
     img.onerror = () => resolve({ width: 200, height: 200 });
     img.src = dataUri;
   });
+}
+
+export function defaultSvgNode(assetId: string, width: number, height: number): SvgNode {
+  return {
+    id: nanoid(),
+    transform: { ...DEFAULT_TRANSFORM },
+    size: { width, height },
+    opacity: 1,
+    visible: true,
+    locked: false,
+    type: 'svg',
+    assetId,
+  };
+}
+
+// Prefers viewBox (width/height attrs are often omitted or in non-pixel
+// units like "100%") — falls back to width/height attrs, then a fixed
+// default, same "reasonable fallback, never throw" convention
+// loadImageSize uses for a failed image load.
+export function svgNaturalSize(svgText: string): { width: number; height: number } {
+  const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+  const root = doc.documentElement;
+  const viewBox = root.getAttribute('viewBox');
+  if (viewBox) {
+    const parts = viewBox.trim().split(/[\s,]+/).map(Number);
+    if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) return { width: parts[2], height: parts[3] };
+  }
+  const width = parseFloat(root.getAttribute('width') ?? '');
+  const height = parseFloat(root.getAttribute('height') ?? '');
+  if (width > 0 && height > 0) return { width, height };
+  return { width: 200, height: 200 };
 }
 
 export function Toolbar() {
@@ -88,6 +120,7 @@ export function Toolbar() {
   const grid = useEditorStore((s) => s.grid);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fontInputRef = useRef<HTMLInputElement>(null);
+  const svgInputRef = useRef<HTMLInputElement>(null);
   const { app } = useCanvasContext();
 
   const handleFitToScreen = () => {
@@ -97,7 +130,7 @@ export function Toolbar() {
     fitToScreen(store, { width: app.screen.width, height: app.screen.height }, page.size);
   };
 
-  const addNode = (node: TextNode | ShapeNode | ImageNode) => {
+  const addNode = (node: TextNode | ShapeNode | ImageNode | SvgNode) => {
     store.getState().dispatch({ type: 'AddNode', pageId: activePageId, node });
     store.getState().select(node.id);
   };
@@ -115,6 +148,14 @@ export function Toolbar() {
     const family = file.name.replace(/\.[^.]+$/, '');
     await registerFont(family, dataUri);
     store.getState().addFont(nanoid(), family, dataUri);
+  };
+
+  const handleSvgFile = async (file: File) => {
+    const dataUri = await readAsDataUri(file);
+    const { width, height } = svgNaturalSize(await decodeSvgText(dataUri));
+    const assetId = nanoid();
+    store.getState().addSvgAsset(assetId, dataUri);
+    addNode(defaultSvgNode(assetId, width, height));
   };
 
   return (
@@ -167,6 +208,24 @@ export function Toolbar() {
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) void handleFontFile(file);
+          e.target.value = '';
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => svgInputRef.current?.click()}
+        className="rounded bg-gray-100 px-3 py-1"
+      >
+        Add SVG
+      </button>
+      <input
+        ref={svgInputRef}
+        type="file"
+        accept=".svg,image/svg+xml"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void handleSvgFile(file);
           e.target.value = '';
         }}
       />

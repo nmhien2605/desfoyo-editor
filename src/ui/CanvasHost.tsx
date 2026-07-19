@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type MutableRefObject } from 'react';
 import { Application, Container, Graphics } from 'pixi.js';
 import { SceneReconciler } from '../render/SceneReconciler';
 import { attachDrag } from '../render/interactions/drag';
@@ -28,10 +28,16 @@ function drawGrid(graphics: Graphics, pageSize: Size, grid: GridSettings): void 
 
 export interface CanvasHostProps {
   onReady?: (app: Application, pageContainer: Container) => void;
+  // Kept in sync with the *current* SceneReconciler across page switches
+  // and document reloads (both call remountPage, which creates a new
+  // instance) — a one-shot onReady callback can't track that, since it
+  // only fires once at initial mount. Editor.tsx reads reconcilerRef.current
+  // at export time (exportSvg needs the live per-node display objects).
+  reconcilerRef?: MutableRefObject<SceneReconciler | null>;
 }
 
 // The only component allowed to touch PIXI.Application directly.
-export function CanvasHost({ onReady }: CanvasHostProps) {
+export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const store = useEditorStoreApi();
 
@@ -92,6 +98,7 @@ export function CanvasHost({ onReady }: CanvasHostProps) {
         attachDrag(obj, node, store, app.stage, pageContainer);
       });
       reconciler.mount(page, document);
+      if (reconcilerRef) reconcilerRef.current = reconciler;
 
       // Shared by both "load a whole new document" and "switch active
       // page" below — both need the scene rebuilt against a different
@@ -111,6 +118,7 @@ export function CanvasHost({ onReady }: CanvasHostProps) {
           attachDrag(obj, node, store, app.stage, pageContainer);
         });
         reconciler.mount(newPage, doc);
+        if (reconcilerRef) reconcilerRef.current = reconciler;
       };
 
       unsubscribe = store.subscribe((state, prevState) => {
@@ -149,6 +157,7 @@ export function CanvasHost({ onReady }: CanvasHostProps) {
       detachViewportControls?.();
       detachPan?.();
       reconciler?.destroy();
+      if (reconcilerRef) reconcilerRef.current = null;
       if (app.renderer) app.destroy(true);
       setRenderer(undefined);
     };

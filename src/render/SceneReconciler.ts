@@ -5,6 +5,7 @@ import type { Document, Node, Page } from '../schema';
 import { textRenderer, needsTextRecreate } from './renderers/textRenderer';
 import { shapeRenderer } from './renderers/shapeRenderer';
 import { imageRenderer } from './renderers/imageRenderer';
+import { svgRenderer } from './renderers/svgRenderer';
 import { groupRenderer } from './renderers/groupRenderer';
 
 function createDisplayObject(node: Node, doc: Document): Container {
@@ -15,6 +16,8 @@ function createDisplayObject(node: Node, doc: Document): Container {
       return shapeRenderer.create(node);
     case 'image':
       return imageRenderer.create(node, doc);
+    case 'svg':
+      return svgRenderer.create(node, doc);
     case 'group':
       return groupRenderer.create(node);
   }
@@ -30,6 +33,9 @@ function updateDisplayObject(obj: Container, node: Node, doc: Document): void {
       break;
     case 'image':
       imageRenderer.update(obj as never, node, doc);
+      break;
+    case 'svg':
+      svgRenderer.update(obj as never, node, doc);
       break;
     case 'group':
       groupRenderer.update(obj as never, node);

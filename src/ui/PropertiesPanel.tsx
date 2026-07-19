@@ -1,9 +1,11 @@
+import { useEffect, useState } from 'react';
 import { nanoid } from 'nanoid';
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
 import { DEFAULT_FONT_FAMILIES } from '../services/fontService';
 import { customShaders } from '../effects/shaders/customShaders';
 import { PresetGallery } from './PresetGallery';
-import type { BlendMode, Effect, Fill, ImageNode, Node, Stroke, TextNode } from '../schema';
+import { decodeSvgText, listFillableIds } from '../render/renderers/svgRenderer';
+import type { BlendMode, Effect, Fill, ImageNode, Node, Stroke, SvgNode, TextNode } from '../schema';
 
 const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten'];
 const STROKE_ALIGNS: Stroke['align'][] = ['inside', 'center', 'outside'];
@@ -151,6 +153,10 @@ export function PropertiesPanel() {
 
       {node.type === 'image' && (
         <ImageControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />
+      )}
+
+      {node.type === 'svg' && (
+        <SvgControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />
       )}
 
       <EffectsControls effects={node.effects} disableExtrude={hasMeshWarp} onChange={(effects) => updateProps({ effects })} />
@@ -407,6 +413,52 @@ function ImageControls({ node, onChange }: { node: ImageNode; onChange: (patch: 
           Add Mask
         </button>
       )}
+    </fieldset>
+  );
+}
+
+// Recolor individual elements of an imported SVG by their `id` attribute
+// (SvgNode.overrides — v1 solid-color only, see svgRenderer.ts's
+// applyOverrides). Fillable ids are discovered by decoding+parsing the
+// asset's SVG text client-side — async (decodeSvgText fetches the data
+// URI), so this loads once per assetId via useEffect rather than
+// synchronously like every other properties-panel control.
+function SvgControls({ node, onChange }: { node: SvgNode; onChange: (patch: Partial<SvgNode>) => void }) {
+  const dataUri = useEditorStore((s) => {
+    const asset = s.document.assets[node.assetId];
+    return asset?.type === 'svg' ? asset.dataUri : undefined;
+  });
+  const [fillableIds, setFillableIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!dataUri) return;
+    let cancelled = false;
+    void decodeSvgText(dataUri).then((text) => {
+      if (!cancelled) setFillableIds(listFillableIds(text));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [dataUri]);
+
+  const setOverride = (id: string, color: string) => {
+    onChange({ overrides: { ...node.overrides, [id]: { type: 'solid', color } } });
+  };
+
+  return (
+    <fieldset className="flex flex-col gap-1">
+      <legend className="font-medium">Recolor</legend>
+      {fillableIds.length === 0 && <span className="text-xs text-gray-400">No labeled (id) elements found</span>}
+      {fillableIds.map((id) => {
+        const override = node.overrides?.[id];
+        const color = override?.type === 'solid' ? override.color : '#000000';
+        return (
+          <label key={id} className="flex items-center justify-between gap-1">
+            <span className="truncate text-xs" title={id}>{id}</span>
+            <input type="color" value={color} onChange={(e) => setOverride(id, e.target.value)} />
+          </label>
+        );
+      })}
     </fieldset>
   );
 }

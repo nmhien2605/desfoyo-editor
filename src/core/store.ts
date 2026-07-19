@@ -39,6 +39,8 @@ export interface EditorStore {
   // Non-undoable like addAsset — font loading isn't a document mutation
   // worth undo history. Also appends `family` to document.fonts if new.
   addFont: (assetId: string, family: string, dataUri: string) => void;
+  // Non-undoable like addAsset — Phase 4 Pass E's SVG upload flow.
+  addSvgAsset: (assetId: string, dataUri: string) => void;
 
   // History — patch-based via Immer, not command apply/invert (the store
   // already runs every mutation through Immer, so this reuses that instead
@@ -308,6 +310,10 @@ export function createEditorStore(initialDocument: Document) {
           assets: { ...s.document.assets, [assetId]: { type: 'font', family, dataUri } },
           fonts: s.document.fonts.includes(family) ? s.document.fonts : [...s.document.fonts, family],
         },
+      })),
+    addSvgAsset: (assetId, dataUri) =>
+      set((s) => ({
+        document: { ...s.document, assets: { ...s.document.assets, [assetId]: { type: 'svg', dataUri } } },
       })),
 
     past: [],

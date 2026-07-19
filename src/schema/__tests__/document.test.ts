@@ -104,7 +104,7 @@ describe('DocumentSchema', () => {
     expect(() => DocumentSchema.parse(doc)).not.toThrow();
   });
 
-  it('NodeSchema rejects svg nodes until Phase 4', () => {
+  it('NodeSchema accepts svg nodes (Phase 4 Pass E)', () => {
     const svgNode = {
       id: 'node_3',
       type: 'svg',
@@ -114,8 +114,9 @@ describe('DocumentSchema', () => {
       visible: true,
       locked: false,
       assetId: 'asset_1',
+      overrides: { 'path-1': { type: 'solid', color: '#ff0000' } },
     };
 
-    expect(() => NodeSchema.parse(svgNode)).toThrow();
+    expect(() => NodeSchema.parse(svgNode)).not.toThrow();
   });
 });
