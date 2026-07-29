@@ -10,8 +10,6 @@ function baseDoc(partial: Pick<Document, 'id' | 'pages' | 'assets'>): Document {
   return {
     version: 1,
     meta: { title: partial.id, createdAt: Date.now(), updatedAt: Date.now() },
-    fonts: ['Inter', 'Roboto', 'Playfair Display'],
-    paths: {},
     ...partial,
   };
 }
@@ -49,21 +47,6 @@ export const basicShapesSample: Document = baseDoc({
           shape: 'ellipse',
           fill: { type: 'solid', color: '#ef4444' },
         },
-        {
-          id: 'text-1',
-          type: 'text',
-          transform: { x: 400, y: 420, scaleX: 1, scaleY: 1, rotation: 0, originX: 0.5, originY: 0.5 },
-          size: { width: 400, height: 60 },
-          opacity: 1,
-          visible: true,
-          locked: false,
-          text: 'Desfoyo Editor',
-          font: { family: 'Playfair Display', weight: 700, style: 'normal', size: 40 },
-          align: 'center',
-          letterSpacing: 0,
-          lineHeight: 1.2,
-          fill: { type: 'solid', color: '#111111' },
-        },
       ],
     },
   ],
@@ -79,22 +62,6 @@ export const shadowEffectSample: Document = baseDoc({
       size: { width: 800, height: 600 },
       background: { type: 'color', value: '#111827' },
       children: [
-        {
-          id: 'text-shadow',
-          type: 'text',
-          transform: { x: 400, y: 180, scaleX: 1, scaleY: 1, rotation: 0, originX: 0.5, originY: 0.5 },
-          size: { width: 500, height: 80 },
-          opacity: 1,
-          visible: true,
-          locked: false,
-          text: 'Drop Shadow Demo',
-          font: { family: 'Inter', weight: 700, style: 'normal', size: 48 },
-          align: 'center',
-          letterSpacing: 0,
-          lineHeight: 1.2,
-          fill: { type: 'solid', color: '#ffffff' },
-          effects: [{ type: 'shadow', color: '#f59e0b', blur: 8, offset: [6, 6], alpha: 0.8 }],
-        },
         {
           id: 'shape-shadow',
           type: 'shape',

@@ -1,18 +1,6 @@
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { join, dirname } from 'path';
-import * as opentype from 'opentype.js';
 import { describe, expect, it } from 'vitest';
-import { serializeNode, type VectorTextMap } from '../svgSerializer';
-import { layoutText } from '../../text/glyphOutline';
-import type { Document, GroupNode, ImageNode, Node, ShapeNode, TextNode } from '../../schema';
-
-// Same OFL Roboto-Black.ttf fixture as text/__tests__/glyphOutline.test.ts —
-// a real opentype.Font is needed to produce real opentype.Path glyphs (with
-// a working toPathData()), which a hand-built literal TextLayout couldn't.
-const here = dirname(fileURLToPath(import.meta.url));
-const fontBuffer = readFileSync(join(here, '../../text/__tests__/fixtures/Roboto-Black.ttf'));
-const font = opentype.parse(fontBuffer.buffer.slice(fontBuffer.byteOffset, fontBuffer.byteOffset + fontBuffer.byteLength));
+import { serializeNode } from '../svgSerializer';
+import type { Document, GroupNode, ImageNode, Node, ShapeNode } from '../../schema';
 
 const doc: Document = {
   version: 1,
@@ -20,8 +8,6 @@ const doc: Document = {
   meta: { title: 'Untitled', createdAt: 0, updatedAt: 0 },
   pages: [],
   assets: { 'asset-1': { type: 'image', dataUri: 'data:image/png;base64,AAAA' } },
-  fonts: [],
-  paths: {},
 };
 
 const baseTransform = { x: 10, y: 20, scaleX: 1, scaleY: 1, rotation: 0 };
@@ -83,101 +69,6 @@ describe('serializeNode', () => {
     };
     const out = serializeNode(node, doc, []);
     expect(out).toContain('href="data:image/png;base64,AAAA"');
-  });
-
-  it('rasterizes a text node via the provided map, and omits it when missing', () => {
-    const node: TextNode = {
-      id: 'text-1',
-      type: 'text',
-      transform: { ...baseTransform },
-      size: { width: 200, height: 40 },
-      ...baseFields,
-      text: 'Hello',
-      font: { family: 'Inter', weight: 400, style: 'normal', size: 24 },
-      align: 'left',
-      letterSpacing: 0,
-      lineHeight: 1.2,
-      fill: { type: 'solid', color: '#000000' },
-    };
-    expect(serializeNode(node, doc, [])).toBe('');
-    const out = serializeNode(node, doc, [], { 'text-1': 'data:image/png;base64,BBBB' });
-    expect(out).toContain('href="data:image/png;base64,BBBB"');
-  });
-
-  it('serializes a vectorized text node as <path>, not <image>, when present in the vector map', () => {
-    const node: TextNode = {
-      id: 'text-2',
-      type: 'text',
-      transform: { ...baseTransform },
-      size: { width: 200, height: 40 },
-      ...baseFields,
-      text: 'Hi',
-      font: { family: 'Roboto', weight: 900, style: 'normal', size: 24 },
-      align: 'left',
-      letterSpacing: 0,
-      lineHeight: 1.2,
-      fill: { type: 'solid', color: '#000000' },
-    };
-    const layout = layoutText(node, font);
-    expect(layout).toBeDefined();
-    const vectorText: VectorTextMap = { 'text-2': layout! };
-
-    const out = serializeNode(node, doc, [], undefined, vectorText);
-    expect(out).toContain('<path');
-    expect(out).not.toContain('<image');
-    expect(out).toContain('fill="#000000"');
-  });
-
-  it('falls back to raster for a text node absent from the vector map, even when one is provided', () => {
-    const node: TextNode = {
-      id: 'text-3',
-      type: 'text',
-      transform: { ...baseTransform },
-      size: { width: 200, height: 40 },
-      ...baseFields,
-      text: 'Hello',
-      font: { family: 'Inter', weight: 400, style: 'normal', size: 24 },
-      align: 'left',
-      letterSpacing: 0,
-      lineHeight: 1.2,
-      fill: { type: 'solid', color: '#000000' },
-    };
-    const out = serializeNode(node, doc, [], { 'text-3': 'data:image/png;base64,CCCC' }, {});
-    expect(out).toContain('href="data:image/png;base64,CCCC"');
-    expect(out).not.toContain('<path');
-  });
-
-  it('emits one <path> per stroke layer plus the fill path, stroke layers first', () => {
-    const node: TextNode = {
-      id: 'text-4',
-      type: 'text',
-      transform: { ...baseTransform },
-      size: { width: 200, height: 40 },
-      ...baseFields,
-      text: 'Hi',
-      font: { family: 'Roboto', weight: 900, style: 'normal', size: 24 },
-      align: 'left',
-      letterSpacing: 0,
-      lineHeight: 1.2,
-      fill: { type: 'solid', color: '#000000' },
-      stroke: {
-        fill: { type: 'solid', color: '#ff0000' },
-        width: 2,
-        align: 'outside',
-        layers: [
-          { width: 4, fill: { type: 'solid', color: '#ff0000' }, offset: [1, 1] },
-          { width: 2, fill: { type: 'solid', color: '#00ff00' } },
-        ],
-      },
-    };
-    const layout = layoutText(node, font);
-    expect(layout).toBeDefined();
-
-    const out = serializeNode(node, doc, [], undefined, { 'text-4': layout! });
-    const pathCount = (out.match(/<path/g) ?? []).length;
-    expect(pathCount).toBe(3); // 2 stroke layers + 1 fill path
-    expect(out).toContain('translate(1 1)');
-    expect(out.indexOf('stroke="#ff0000"')).toBeLessThan(out.indexOf('fill="#000000"'));
   });
 
   it('wraps group children recursively, applying its own transform to the <g>', () => {

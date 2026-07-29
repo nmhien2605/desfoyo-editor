@@ -59,10 +59,6 @@ export function buildFilters(effects: Effect[] | undefined): Filter[] {
         filters.push(new BlurFilter({ strength: effect.amount }));
         break;
       case 'extrude3d':
-        // Text nodes bypass this — applyTransform.ts strips extrude3d
-        // before calling here and textRenderer.ts renders it as real
-        // stacked-clone geometry instead. Shapes (and any other node type)
-        // still get this 2D bevel approximation.
         filters.push(
           new BevelFilter({
             thickness: effect.depth,

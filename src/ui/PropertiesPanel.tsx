@@ -1,25 +1,16 @@
 import { useEffect, useState } from 'react';
-import { nanoid } from 'nanoid';
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
-import { DEFAULT_FONT_FAMILIES } from '../services/fontService';
 import { customShaders } from '../effects/shaders/customShaders';
-import { PresetGallery } from './PresetGallery';
 import { decodeSvgText, listFillableIds } from '../render/renderers/svgRenderer';
-import type { BlendMode, Effect, Fill, ImageNode, Node, Stroke, SvgNode, TextNode } from '../schema';
+import type { BlendMode, Effect, Fill, ImageNode, Node, Stroke, SvgNode } from '../schema';
 
 const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten'];
 const STROKE_ALIGNS: Stroke['align'][] = ['inside', 'center', 'outside'];
-const WARP_TYPES: NonNullable<TextNode['warp']>['type'][] = ['none', 'arc', 'wave', 'bulge', 'flag', 'perspective', 'path'];
-// All 7 variants buildFilters.ts/textRenderer.ts now render (see
-// src/effects/buildFilters.ts) — Phase 3 Pass D adds 'inner-shadow' and
-// 'custom' (a GLSL filter and a named-shader-registry lookup, respectively).
+// All 7 variants buildFilters.ts now renders (see src/effects/buildFilters.ts)
+// — Phase 3 Pass D adds 'inner-shadow' and 'custom' (a GLSL filter and a
+// named-shader-registry lookup, respectively).
 const EFFECT_TYPES: Effect['type'][] = ['shadow', 'inner-shadow', 'glow', 'outline', 'blur', 'extrude3d', 'custom'];
 const CUSTOM_SHADER_IDS = Object.keys(customShaders);
-
-// A gentle upward arc, normalized (u,v) in 0..1 — start/control/end of the
-// default quadratic bezier a text node gets when its warp is first set to
-// 'path'. See schema/document.ts's PathData.
-const DEFAULT_PATH_POINTS: [number, number, number, number, number, number] = [0, 0.5, 0.5, 0, 1, 0.5];
 
 function defaultEffect(type: Effect['type']): Effect {
   switch (type) {
@@ -40,7 +31,7 @@ function defaultEffect(type: Effect['type']): Effect {
 }
 
 function hasFill(node: Node): node is Node & { fill: Fill } {
-  return node.type === 'text' || node.type === 'shape';
+  return node.type === 'shape';
 }
 
 function stopColor(fill: Fill, index: number): string {
@@ -68,51 +59,14 @@ export function PropertiesPanel() {
     const [id] = s.selectedNodeIds;
     return s.document.pages.find((p) => p.id === s.activePageId)?.children.find((n) => n.id === id) ?? null;
   });
-  const documentFonts = useEditorStore((s) => s.document.fonts);
-
   if (selectedNodeIds.size !== 1 || !node) return <div className="w-64 border-l border-gray-200 p-2 text-sm text-gray-400">No selection</div>;
 
   const updateProps = (patch: Partial<Node>) => {
     store.getState().dispatch({ type: 'UpdateProps', pageId: activePageId, nodeId: node.id, patch });
   };
 
-  // Mesh warp (arc/wave/.../path) and the extrude3d effect both swap a text
-  // node's rendered Pixi object to a different shape (Mesh vs. a
-  // stacked-clone Container) — see needsTextRecreate in textRenderer.ts.
-  // Rather than build a combined mesh+extrude renderer path for a rare
-  // combo, the two are mutually exclusive in this UI.
-  const hasMeshWarp = node.type === 'text' && !!node.warp && node.warp.type !== 'none';
-  const hasExtrude = node.type === 'text' && !!node.effects?.some((e) => e.type === 'extrude3d');
-
-  const createDefaultPath = (): string => {
-    const pathId = nanoid();
-    store.getState().dispatch({ type: 'UpdatePath', pageId: activePageId, nodeId: node.id, pathId, points: DEFAULT_PATH_POINTS });
-    return pathId;
-  };
-
   return (
     <div className="flex w-64 flex-col gap-3 border-l border-gray-200 p-2 text-sm">
-      {node.type === 'text' && <PresetGallery onApply={(patch) => updateProps(patch as Partial<Node>)} />}
-
-      {node.type === 'text' && (
-        <FontControls
-          font={node.font}
-          families={[...DEFAULT_FONT_FAMILIES, ...documentFonts.filter((f) => !DEFAULT_FONT_FAMILIES.includes(f))]}
-          onChange={(font) => updateProps({ font } as Partial<Node>)}
-        />
-      )}
-
-      {node.type === 'text' && (
-        <WarpControls
-          warp={node.warp}
-          disabled={hasExtrude}
-          onChange={(warp) => updateProps({ warp } as Partial<Node>)}
-          onCreatePath={createDefaultPath}
-          onGestureStart={() => store.getState().beginGesture('warp-intensity')}
-          onGestureEnd={() => store.getState().endGesture()}
-        />
-      )}
-
       {hasFill(node) && <FillControls fill={node.fill} onChange={(fill) => updateProps({ fill })} />}
 
       <label className="flex flex-col gap-1">
@@ -144,7 +98,7 @@ export function PropertiesPanel() {
         </select>
       </label>
 
-      {(node.type === 'shape' || node.type === 'text') && (
+      {node.type === 'shape' && (
         <StrokeControls
           stroke={node.stroke}
           onChange={(stroke) => updateProps({ stroke } as Partial<Node>)}
@@ -159,25 +113,19 @@ export function PropertiesPanel() {
         <SvgControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />
       )}
 
-      <EffectsControls effects={node.effects} disableExtrude={hasMeshWarp} onChange={(effects) => updateProps({ effects })} />
+      <EffectsControls effects={node.effects} onChange={(effects) => updateProps({ effects })} />
     </div>
   );
 }
 
 function EffectsControls({
   effects,
-  disableExtrude,
   onChange,
 }: {
   effects: Effect[] | undefined;
-  disableExtrude: boolean;
   onChange: (effects: Effect[]) => void;
 }) {
   const list = effects ?? [];
-  // extrude3d swaps the text node's rendered object to a stacked-clone
-  // Container, same as mesh warp swaps it to a Mesh — the two are blocked
-  // from combining (see hasMeshWarp/hasExtrude in PropertiesPanel).
-  const addableTypes = disableExtrude ? EFFECT_TYPES.filter((t) => t !== 'extrude3d') : EFFECT_TYPES;
 
   return (
     <fieldset className="flex flex-col gap-1">
@@ -195,14 +143,13 @@ function EffectsControls({
       ))}
       <select
         value=""
-        title={disableExtrude ? 'extrude3d is disabled while a mesh warp is active' : undefined}
         onChange={(e) => {
           if (e.target.value) onChange([...list, defaultEffect(e.target.value as Effect['type'])]);
         }}
         className="rounded border border-gray-300 px-1 py-0.5"
       >
         <option value="">+ Add Effect</option>
-        {addableTypes.map((type) => (
+        {EFFECT_TYPES.map((type) => (
           <option key={type} value={type}>
             {type}
           </option>
@@ -281,72 +228,6 @@ function EffectParams({ effect, onChange }: { effect: Effect; onChange: (effect:
   }
 }
 
-function WarpControls({
-  warp,
-  disabled,
-  onChange,
-  onCreatePath,
-  onGestureStart,
-  onGestureEnd,
-}: {
-  warp: TextNode['warp'];
-  disabled: boolean;
-  onChange: (warp: TextNode['warp']) => void;
-  onCreatePath: () => string;
-  onGestureStart: () => void;
-  onGestureEnd: () => void;
-}) {
-  const type = warp?.type ?? 'none';
-  const intensity = warp?.intensity ?? 0;
-
-  const setType = (nextType: NonNullable<TextNode['warp']>['type']) => {
-    if (nextType === 'none') {
-      onChange(undefined);
-    } else if (nextType === 'path') {
-      // The path curve itself defines the bend for this warp type, so
-      // intensity is unused (hidden below) — a fresh path is created on
-      // first selection, reused on subsequent switches back to 'path'.
-      onChange({ type: 'path', intensity: 0, pathId: warp?.pathId ?? onCreatePath() });
-    } else {
-      onChange({ type: nextType, intensity: warp?.intensity ?? 0.3 });
-    }
-  };
-
-  return (
-    <fieldset className="flex flex-col gap-1">
-      <legend className="font-medium">Warp</legend>
-      <select
-        value={type}
-        disabled={disabled}
-        title={disabled ? 'Warp is disabled while the extrude3d effect is active' : undefined}
-        onChange={(e) => setType(e.target.value as NonNullable<TextNode['warp']>['type'])}
-        className="rounded border border-gray-300 px-1 py-0.5"
-      >
-        {WARP_TYPES.map((t) => (
-          <option key={t} value={t}>
-            {t}
-          </option>
-        ))}
-      </select>
-      {type !== 'none' && type !== 'path' && (
-        <label className="flex flex-col gap-1">
-          Intensity
-          <input
-            type="range"
-            min={-1}
-            max={1}
-            step={0.01}
-            value={intensity}
-            onPointerDown={onGestureStart}
-            onPointerUp={onGestureEnd}
-            onChange={(e) => onChange({ type, intensity: Number(e.target.value) })}
-          />
-        </label>
-      )}
-    </fieldset>
-  );
-}
-
 // Crop itself is edited via SelectionOverlay.tsx's drag handles (double-
 // click the image on canvas), not here — this section is filters + mask,
 // the two ImageNode props with no on-canvas editing surface. Filters are a
@@ -387,15 +268,7 @@ function ImageControls({ node, onChange }: { node: ImageNode; onChange: (patch: 
               Remove
             </button>
           </div>
-          <select
-            value={node.mask.type}
-            onChange={(e) => onChange({ mask: { ...node.mask!, type: e.target.value as 'shape' | 'text' } })}
-            className="rounded border border-gray-300 px-1 py-0.5"
-          >
-            <option value="shape">Shape</option>
-            <option value="text">Text</option>
-          </select>
-          {/* No node-picker widget exists yet — paste the id of an existing shape/text node on this page (visible via LayersPanel). */}
+          {/* No node-picker widget exists yet — paste the id of an existing shape node on this page (visible via LayersPanel). */}
           <input
             type="text"
             placeholder="node id"
@@ -459,53 +332,6 @@ function SvgControls({ node, onChange }: { node: SvgNode; onChange: (patch: Part
           </label>
         );
       })}
-    </fieldset>
-  );
-}
-
-function FontControls({
-  font,
-  families,
-  onChange,
-}: {
-  font: TextNode['font'];
-  families: string[];
-  onChange: (font: TextNode['font']) => void;
-}) {
-  return (
-    <fieldset className="flex flex-col gap-1">
-      <legend className="font-medium">Font</legend>
-      <select
-        value={font.family}
-        onChange={(e) => onChange({ ...font, family: e.target.value })}
-        className="rounded border border-gray-300 px-1 py-0.5"
-      >
-        {families.map((family) => (
-          <option key={family} value={family}>
-            {family}
-          </option>
-        ))}
-      </select>
-      <label className="flex flex-col gap-1">
-        Weight
-        <input
-          type="number"
-          step={100}
-          min={100}
-          max={900}
-          value={font.weight}
-          onChange={(e) => onChange({ ...font, weight: Number(e.target.value) })}
-          className="rounded border border-gray-300 px-1 py-0.5"
-        />
-      </label>
-      <label className="flex items-center gap-1">
-        <input
-          type="checkbox"
-          checked={font.style === 'italic'}
-          onChange={(e) => onChange({ ...font, style: e.target.checked ? 'italic' : 'normal' })}
-        />
-        Italic
-      </label>
     </fieldset>
   );
 }

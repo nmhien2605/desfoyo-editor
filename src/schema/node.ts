@@ -2,38 +2,9 @@ import { z } from 'zod';
 import { BaseNodeShape, type BaseNode } from './base';
 import { FillSchema, StrokeSchema } from './fill-stroke';
 
-// Phase 2 scope: 'text' | 'shape' | 'image' | 'group' are valid node types.
+// 'shape' | 'image' | 'group' are valid node types.
 // 'svg' arrived in Phase 4 Pass E (see CONTEXT.md "Node" and
 // plan/04-data-model.md) — Zod previously rejected it as out-of-phase.
-
-export const TextNodeSchema = z.object({
-  ...BaseNodeShape,
-  type: z.literal('text'),
-  text: z.string(),
-  font: z.object({
-    family: z.string(),
-    weight: z.number(),
-    style: z.enum(['normal', 'italic']),
-    size: z.number(),
-  }),
-  align: z.enum(['left', 'center', 'right', 'justify']),
-  letterSpacing: z.number(),
-  lineHeight: z.number(),
-  fill: FillSchema,
-  // Phase 3: multi-layer stroke (Kittl-style layered outlines), rendered as
-  // stacked Text clones in textRenderer.ts. Absent in Phase 1/2 documents.
-  stroke: StrokeSchema.optional(),
-  // Warp/curve is a Phase 3 rendering feature; the field is declared now
-  // (type-only cost) so the schema doesn't need a breaking change later.
-  warp: z
-    .object({
-      type: z.enum(['none', 'arc', 'wave', 'bulge', 'flag', 'perspective', 'path']),
-      intensity: z.number(),
-      pathId: z.string().optional(),
-    })
-    .optional(),
-});
-export type TextNode = z.infer<typeof TextNodeSchema>;
 
 export const ShapeNodeSchema = z.object({
   ...BaseNodeShape,
@@ -53,7 +24,7 @@ export const ImageNodeSchema = z.object({
   crop: z
     .object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() })
     .optional(),
-  mask: z.object({ type: z.enum(['shape', 'text']), ref: z.string() }).optional(),
+  mask: z.object({ type: z.literal('shape'), ref: z.string() }).optional(),
   filters: z
     .object({
       brightness: z.number().optional(),
@@ -99,10 +70,9 @@ export const GroupNodeSchema = z.object({
 });
 
 export const NodeSchema: z.ZodType<Node> = z.discriminatedUnion('type', [
-  TextNodeSchema,
   ShapeNodeSchema,
   ImageNodeSchema,
   SvgNodeSchema,
   GroupNodeSchema,
 ]);
-export type Node = TextNode | ShapeNode | ImageNode | SvgNode | GroupNode;
+export type Node = ShapeNode | ImageNode | SvgNode | GroupNode;

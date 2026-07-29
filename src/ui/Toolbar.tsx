@@ -10,29 +10,10 @@ import {
   distributeSelection,
 } from '../core/actions';
 import { fitToScreen } from '../render/interactions/viewportControls';
-import { registerFont } from '../services/fontService';
 import { decodeSvgText } from '../render/renderers/svgRenderer';
-import type { ImageNode, ShapeNode, SvgNode, TextNode, Transform } from '../schema';
+import type { ImageNode, ShapeNode, SvgNode, Transform } from '../schema';
 
 const DEFAULT_TRANSFORM: Transform = { x: 100, y: 100, scaleX: 1, scaleY: 1, rotation: 0, originX: 0.5, originY: 0.5 };
-
-function defaultTextNode(): TextNode {
-  return {
-    id: nanoid(),
-    transform: { ...DEFAULT_TRANSFORM },
-    size: { width: 200, height: 40 },
-    opacity: 1,
-    visible: true,
-    locked: false,
-    type: 'text',
-    text: 'Text',
-    font: { family: 'Inter', weight: 400, style: 'normal', size: 24 },
-    align: 'left',
-    letterSpacing: 0,
-    lineHeight: 1.2,
-    fill: { type: 'solid', color: '#111111' },
-  };
-}
 
 function defaultShapeNode(): ShapeNode {
   return {
@@ -119,7 +100,6 @@ export function Toolbar() {
   const isSingleGroup = useEditorStore(() => isSingleGroupSelected(store) !== null);
   const grid = useEditorStore((s) => s.grid);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const fontInputRef = useRef<HTMLInputElement>(null);
   const svgInputRef = useRef<HTMLInputElement>(null);
   const { app } = useCanvasContext();
 
@@ -130,7 +110,7 @@ export function Toolbar() {
     fitToScreen(store, { width: app.screen.width, height: app.screen.height }, page.size);
   };
 
-  const addNode = (node: TextNode | ShapeNode | ImageNode | SvgNode) => {
+  const addNode = (node: ShapeNode | ImageNode | SvgNode) => {
     store.getState().dispatch({ type: 'AddNode', pageId: activePageId, node });
     store.getState().select(node.id);
   };
@@ -141,13 +121,6 @@ export function Toolbar() {
     const assetId = nanoid();
     store.getState().addAsset(assetId, dataUri);
     addNode(defaultImageNode(assetId, width, height));
-  };
-
-  const handleFontFile = async (file: File) => {
-    const dataUri = await readAsDataUri(file);
-    const family = file.name.replace(/\.[^.]+$/, '');
-    await registerFont(family, dataUri);
-    store.getState().addFont(nanoid(), family, dataUri);
   };
 
   const handleSvgFile = async (file: File) => {
@@ -169,9 +142,6 @@ export function Toolbar() {
       <button type="button" onClick={handleFitToScreen} className="rounded bg-gray-100 px-3 py-1">
         Fit to Screen
       </button>
-      <button type="button" onClick={() => addNode(defaultTextNode())} className="rounded bg-gray-100 px-3 py-1">
-        Add Text
-      </button>
       <button type="button" onClick={() => addNode(defaultShapeNode())} className="rounded bg-gray-100 px-3 py-1">
         Add Shape
       </button>
@@ -190,24 +160,6 @@ export function Toolbar() {
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) void handleImageFile(file);
-          e.target.value = '';
-        }}
-      />
-      <button
-        type="button"
-        onClick={() => fontInputRef.current?.click()}
-        className="rounded bg-gray-100 px-3 py-1"
-      >
-        Add Font
-      </button>
-      <input
-        ref={fontInputRef}
-        type="file"
-        accept=".ttf,.otf,.woff,.woff2"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) void handleFontFile(file);
           e.target.value = '';
         }}
       />

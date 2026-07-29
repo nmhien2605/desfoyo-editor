@@ -1,28 +1,14 @@
-import type { Document, Fill, GroupNode, Node, ShapeNode, TextNode } from '../schema';
-import type { TextLayout } from '../text/glyphOutline';
+import type { Document, Fill, GroupNode, Node, ShapeNode } from '../schema';
 import { resolveAsset } from './assetResolver';
-
-// nodeId -> precomputed glyph-outline layout, built by exportService.ts's
-// computeVectorTextMap (Phase 3 opentype gate, Pass B) for text nodes whose
-// font could be parsed, whose script is supported, and whose wrap matches
-// PIXI.TextMetrics closely enough to trust (see plan/phases/phase-3-glyph-
-// outline-opentype.md §Pass B). Nodes absent from this map still rasterize
-// via RasterizedMap below, same as before Pass B existed.
-export type VectorTextMap = Record<string, TextLayout>;
 
 // nodeId -> data:image/png;base64,... , built by the caller (exportService
 // .ts's exportSvg) via Pixi's live-render extract, since this module is
-// pure and has no access to the running renderer. Used for two node types:
-// - 'text': the raster fallback for any text node NOT in VectorTextMap
-//   above — WOFF2 font, unparseable font, unsupported script, or a wrap
-//   mismatch against PIXI.TextMetrics (see plan doc §Pass B). Before Pass B,
-//   every text node rasterized; now only the ones that couldn't vectorize do.
-// - 'svg': re-embedding the original markup as a scaled nested <svg> would
-//   need re-parsing its viewBox and reconciling it with node.size — instead
-//   this reuses the exact same rasterize-via-extract path as 'text', a
-//   ponytail-scoped simplification (imported SVGs stay vector *on canvas*,
-//   just not in a re-exported SVG). Revisit with true nested-<svg>
-//   embedding if a real need for re-exportable vector icons shows up.
+// pure and has no access to the running renderer. Used for 'svg' nodes:
+// re-embedding the original markup as a scaled nested <svg> would need
+// re-parsing its viewBox and reconciling it with node.size — instead this
+// rasterizes via extract, a ponytail-scoped simplification (imported SVGs
+// stay vector *on canvas*, just not in a re-exported SVG). Revisit with true
+// nested-<svg> embedding if a real need for re-exportable vector icons shows up.
 export type RasterizedMap = Record<string, string>;
 
 let gradientCounter = 0;
@@ -54,17 +40,6 @@ function fillAttr(fill: Fill, defs: string[]): string {
     defs.push(`<radialGradient id="${id}">${stops}</radialGradient>`);
   }
   return `fill="url(#${id})"`;
-}
-
-// Same fill resolution as fillAttr (solid/gradient/texture, sharing its
-// gradient-id/defs plumbing), just rewritten onto the `stroke`/`stroke-
-// opacity` attributes instead of `fill`/`fill-opacity` — used for stroke-
-// layer <path> elements (fill="none" stroke="..."), which need color, not
-// a fill.
-function strokeFillAttr(fill: Fill, defs: string[]): string {
-  return fillAttr(fill, defs)
-    .replace(/^fill=/, 'stroke=')
-    .replace(/ fill-opacity=/, ' stroke-opacity=');
 }
 
 // Alternating outer/inner vertices — matches the general "star" convention;
@@ -135,50 +110,9 @@ function groupAttrs(node: Node): string {
   return ` transform="${transformAttr(node)}"${opacity}${blend}`;
 }
 
-// Concatenates every glyph's own path data into one `d` string — glyphs are
-// already placed at absolute node-local coordinates by layoutText (see
-// text/glyphOutline.ts's GlyphPlacement contract), so no further offset math
-// is needed here beyond the node's own transform (applied by the caller's
-// wrapping <g>).
-function textPathData(layout: TextLayout): string {
-  return layout.lines
-    .flatMap((line) => line.glyphs)
-    .map((g) => g.path.toPathData(2))
-    .join(' ');
-}
-
-// Stroke layers render first (behind), the true fill last (on top) — same
-// order textRenderer.ts's updateLayeredText stacks its clone Containers in,
-// just as SVG document order instead of Pixi child order. Layer offsets
-// (Stroke.layers[].offset) are a local translate composed after the node's
-// own transform, mirroring how updateLayeredText positions each stroke
-// clone via `child.position.set(dx, dy)` inside the already-transformed
-// parent Container.
-function emitTextPath(node: TextNode, layout: TextLayout, defs: string[]): string {
-  const d = textPathData(layout);
-  const layers = node.stroke?.layers ?? (node.stroke ? [{ width: node.stroke.width, fill: node.stroke.fill, offset: undefined as [number, number] | undefined }] : []);
-
-  const strokePaths = layers
-    .map((layer) => {
-      const [dx, dy] = layer.offset ?? [0, 0];
-      const transform = dx !== 0 || dy !== 0 ? ` transform="translate(${dx} ${dy})"` : '';
-      return `<path${transform} d="${d}" fill="none" ${strokeFillAttr(layer.fill, defs)} stroke-width="${layer.width}"/>`;
-    })
-    .join('');
-
-  return `${strokePaths}<path d="${d}" ${fillAttr(node.fill, defs)}/>`;
-}
-
-export function serializeNode(node: Node, doc: Document, defs: string[], rasterized?: RasterizedMap, vectorText?: VectorTextMap): string {
+export function serializeNode(node: Node, doc: Document, defs: string[], rasterized?: RasterizedMap): string {
   if (!node.visible) return '';
 
-  if (node.type === 'text') {
-    const layout = vectorText?.[node.id];
-    if (layout) return `<g${groupAttrs(node)}>${emitTextPath(node, layout, defs)}</g>`;
-    const href = rasterized?.[node.id];
-    if (!href) return '';
-    return `<image${groupAttrs(node)} width="${node.size.width}" height="${node.size.height}" href="${href}"/>`;
-  }
   if (node.type === 'svg') {
     const href = rasterized?.[node.id];
     if (!href) return '';
@@ -192,7 +126,7 @@ export function serializeNode(node: Node, doc: Document, defs: string[], rasteri
   }
   if (node.type === 'group') {
     const group = node as GroupNode;
-    const children = group.children.map((c) => serializeNode(c, doc, defs, rasterized, vectorText)).join('');
+    const children = group.children.map((c) => serializeNode(c, doc, defs, rasterized)).join('');
     return `<g${groupAttrs(node)}>${children}</g>`;
   }
   return `<g${groupAttrs(node)}>${shapeElement(node, defs)}</g>`;

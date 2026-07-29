@@ -4,7 +4,6 @@ import type { Node } from '../schema';
 
 function labelFor(node: Node): string {
   if (node.name) return node.name;
-  if (node.type === 'text') return node.text || 'Text';
   return `${node.type[0].toUpperCase()}${node.type.slice(1)}`;
 }
 

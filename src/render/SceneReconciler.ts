@@ -2,7 +2,6 @@ import type { Container } from 'pixi.js';
 import { isPageLevelCommand, type Command } from '../core/commands';
 import { findNodeInTree } from '../core/tree';
 import type { Document, Node, Page } from '../schema';
-import { textRenderer, needsTextRecreate } from './renderers/textRenderer';
 import { shapeRenderer } from './renderers/shapeRenderer';
 import { imageRenderer } from './renderers/imageRenderer';
 import { svgRenderer } from './renderers/svgRenderer';
@@ -10,8 +9,6 @@ import { groupRenderer } from './renderers/groupRenderer';
 
 function createDisplayObject(node: Node, doc: Document): Container {
   switch (node.type) {
-    case 'text':
-      return textRenderer.create(node, doc);
     case 'shape':
       return shapeRenderer.create(node);
     case 'image':
@@ -25,9 +22,6 @@ function createDisplayObject(node: Node, doc: Document): Container {
 
 function updateDisplayObject(obj: Container, node: Node, doc: Document): void {
   switch (node.type) {
-    case 'text':
-      textRenderer.update(obj as never, node, doc);
-      break;
     case 'shape':
       shapeRenderer.update(obj as never, node);
       break;
@@ -41,18 +35,6 @@ function updateDisplayObject(obj: Container, node: Node, doc: Document): void {
       groupRenderer.update(obj as never, node);
       break;
   }
-}
-
-// textRenderer.create() returns a bare Text for a strokeless/unwarped text
-// node, a Container (of layered Text clones) once it has a stroke or
-// extrude3d effect, or a Mesh once it has an active texture-mesh warp —
-// update() can mutate any of these in place, but can't swap one for
-// another. Crossing those boundaries needs the object recreated, same as
-// SceneReconciler already does for AddNode/RemoveNode. See
-// needsTextRecreate in textRenderer.ts for the per-shape logic.
-function needsRecreate(obj: Container, node: Node): boolean {
-  if (node.type !== 'text') return false;
-  return needsTextRecreate(obj, node);
 }
 
 function findPage(doc: Document, pageId: string): Page | undefined {
@@ -139,24 +121,10 @@ export class SceneReconciler {
         break;
       }
       case 'UpdateProps':
-      case 'UpdateTransform':
-      case 'UpdatePath': {
+      case 'UpdateTransform': {
         const obj = this.displayObjects.get(cmd.nodeId);
         const location = findNodeInTree(page.children, cmd.nodeId);
         if (!obj || !location) return;
-        if (needsRecreate(obj, location.node)) {
-          const parent = obj.parent;
-          if (!parent) return;
-          const index = parent.getChildIndex(obj);
-          parent.removeChild(obj);
-          obj.destroy();
-          const newObj = createDisplayObject(location.node, doc);
-          newObj.label = location.node.id;
-          this.displayObjects.set(location.node.id, newObj);
-          parent.addChildAt(newObj, index);
-          this.onNodeMounted?.(newObj, location.node);
-          break;
-        }
         updateDisplayObject(obj, location.node, doc);
         break;
       }

@@ -7,7 +7,7 @@ import { angleBetween, computeRotation } from '../render/interactions/rotate';
 import { computeSelectionBounds, applyGroupRotate } from '../render/interactions/groupTransformMath';
 import type { Rect } from '../render/interactions/marquee';
 import type { SnapGuide } from '../render/interactions/snapping';
-import type { ImageNode, Node, TextNode, Transform } from '../schema';
+import type { ImageNode, Node, Transform } from '../schema';
 
 const HANDLES: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
@@ -90,6 +90,7 @@ function SingleSelectionOverlay({
   extras: ReactNode;
 }) {
   const store = useEditorStoreApi();
+  const { canvas } = useCanvasContext();
   const [croppingNodeId, setCroppingNodeId] = useState<string | null>(null);
   const isCropping = node.type === 'image' && croppingNodeId === node.id;
   const originX = node.transform.originX ?? 0;
@@ -167,6 +168,35 @@ function SingleSelectionOverlay({
     <div className="pointer-events-none absolute inset-0">
       <div
         onDoubleClick={() => node.type === 'image' && setCroppingNodeId(isCropping ? null : node.id)}
+        // Only image nodes get `pointer-events-auto` here (for the
+        // double-click-to-crop toggle above), which makes this DOM div
+        // itself the native pointerdown target instead of the canvas below
+        // it — canvas and this overlay are DOM siblings (see CanvasHost.tsx/
+        // Editor.tsx), not nested, so the click never reaches the Pixi
+        // Sprite underneath, and attachDrag's `obj.on('pointerdown', ...)`
+        // (src/render/interactions/drag.ts) never fires: image nodes looked
+        // undraggable. Pixi's own pointermove/pointerup listeners are bound
+        // at `document`/`window` in the capture phase (see EventSystem's
+        // `init()`), so once a pointerdown actually reaches the canvas they
+        // keep tracking the drag regardless of what's on top — only the
+        // initial pointerdown needs manually forwarding to the canvas
+        // element so Pixi's own hit-test and attachDrag take over from there.
+        onPointerDown={(e) => {
+          if (node.type !== 'image' || !canvas) return;
+          canvas.dispatchEvent(
+            new PointerEvent('pointerdown', {
+              bubbles: true,
+              cancelable: true,
+              clientX: e.clientX,
+              clientY: e.clientY,
+              pointerId: e.pointerId,
+              pointerType: e.pointerType,
+              button: e.button,
+              buttons: e.buttons,
+              isPrimary: e.isPrimary,
+            }),
+          );
+        }}
         className={`absolute border-2 border-blue-500 ${node.type === 'image' ? 'pointer-events-auto' : ''}`}
         style={{
           left: topLeftScreen.x,
@@ -196,73 +226,11 @@ function SingleSelectionOverlay({
           style={{ left: rotateHandlePos.x, top: rotateHandlePos.y }}
         />
       )}
-      {node.type === 'text' && node.warp?.type === 'path' && (
-        <TextPathHandles node={node} activePageId={activePageId} viewport={viewport} />
-      )}
       {isCropping && node.type === 'image' && (
         <ImageCropHandles node={node} activePageId={activePageId} viewport={viewport} />
       )}
       {extras}
     </div>
-  );
-}
-
-// 3 draggable dots (start/control/end of the quadratic bezier) for a text
-// node's 'path' warp — the whole path-authoring UX for v1 (no separate pen
-// tool). Points are stored normalized (0..1, see schema/document.ts's
-// PathData) and rendered via worldPoint() the same way resize-handle
-// corners are, since node.size defines the same local 0..1-scaled space.
-function TextPathHandles({ node, activePageId, viewport }: { node: TextNode; activePageId: string; viewport: Viewport }) {
-  const store = useEditorStoreApi();
-  const pathId = node.warp?.pathId;
-  const points = useEditorStore((s) => (pathId ? s.document.paths[pathId]?.points : undefined));
-  if (!pathId || !points) return null;
-
-  const startDrag = (i: number) => (downEvent: ReactPointerEvent) => {
-    downEvent.stopPropagation();
-    const startWorld = viewport.toWorld({ x: downEvent.clientX, y: downEvent.clientY });
-    const startPoints = points;
-    store.getState().beginGesture(`path:${pathId}:${i}`);
-
-    const onMove = (moveEvent: PointerEvent) => {
-      const currentWorld = viewport.toWorld({ x: moveEvent.clientX, y: moveEvent.clientY });
-      const worldDelta = { x: currentWorld.x - startWorld.x, y: currentWorld.y - startWorld.y };
-      // Same world-delta -> node-local-delta projection computeResize uses:
-      // un-rotate, then un-scale. Points are normalized 0..1, so also
-      // divide by node.size to turn the local pixel delta into a uv delta.
-      const local = rotateVector(worldDelta, -node.transform.rotation);
-      const scaleX = node.transform.scaleX || 1;
-      const scaleY = node.transform.scaleY || 1;
-      const duv = { x: local.x / scaleX / node.size.width, y: local.y / scaleY / node.size.height };
-      const next = [...startPoints] as typeof startPoints;
-      next[i * 2] = startPoints[i * 2] + duv.x;
-      next[i * 2 + 1] = startPoints[i * 2 + 1] + duv.y;
-      store.getState().dispatch({ type: 'UpdatePath', pageId: activePageId, nodeId: node.id, pathId, points: next });
-    };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      store.getState().endGesture();
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  };
-
-  return (
-    <>
-      {[0, 1, 2].map((i) => {
-        const local = { x: points[i * 2] * node.size.width, y: points[i * 2 + 1] * node.size.height };
-        const pos = viewport.toScreen(worldPoint(node, local));
-        return (
-          <div
-            key={i}
-            onPointerDown={startDrag(i)}
-            className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-500 bg-white"
-            style={{ left: pos.x, top: pos.y }}
-          />
-        );
-      })}
-    </>
   );
 }
 
@@ -299,9 +267,9 @@ export function updateCropHandle(
 }
 
 // 4 corner handles for freeform crop, entered via double-clicking an image
-// node's bounding box (see isCropping in SingleSelectionOverlay). Reuses
-// the exact toWorld/toScreen + rotateVector un-rotate/un-scale drag math
-// TextPathHandles already uses for its normalized-uv dots.
+// node's bounding box (see isCropping in SingleSelectionOverlay). Reuses the
+// same toWorld/toScreen + rotateVector un-rotate/un-scale drag math the
+// resize handles above use, projected onto normalized 0..1 crop coordinates.
 function ImageCropHandles({ node, activePageId, viewport }: { node: ImageNode; activePageId: string; viewport: Viewport }) {
   const store = useEditorStoreApi();
   const crop = node.crop ?? DEFAULT_CROP;

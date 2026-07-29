@@ -15,7 +15,6 @@ import { defaultImageNode, defaultSvgNode, loadImageSize, svgNaturalSize } from 
 import { decodeSvgText } from '../render/renderers/svgRenderer';
 import { createViewport } from '../render/viewport';
 import type { SceneReconciler } from '../render/SceneReconciler';
-import { loadDefaultFonts } from '../services/fontService';
 import { exportPng, exportSvg } from '../services/exportService';
 import { attachShortcuts } from '../services/shortcuts';
 
@@ -42,11 +41,6 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   const canvasValueRef = useRef<CanvasContextValue>({ app: null, pageContainer: null, canvas: null });
   const [canvasValue, setCanvasValue] = useState<CanvasContextValue>(canvasValueRef.current);
   const reconcilerRef = useRef<SceneReconciler | null>(null);
-  const [fontsReady, setFontsReady] = useState(false);
-
-  useEffect(() => {
-    void loadDefaultFonts().then(() => setFontsReady(true));
-  }, []);
 
   useEffect(() => attachShortcuts(store), [store]);
 
@@ -113,8 +107,6 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     store.getState().dispatch({ type: 'AddNode', pageId: store.getState().activePageId, node });
     store.getState().select(node.id);
   };
-
-  if (!fontsReady) return null;
 
   return (
     <EditorStoreProvider value={store}>

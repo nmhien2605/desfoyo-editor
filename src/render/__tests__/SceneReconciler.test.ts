@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { Container, Text, Graphics, Sprite } from 'pixi.js';
+import { Container, Graphics, Sprite } from 'pixi.js';
 import { SceneReconciler } from '../SceneReconciler';
 import type { Document, Page } from '../../schema';
 
@@ -12,18 +12,14 @@ function makePage(): Page {
     background: { type: 'color', value: '#ffffff' },
     children: [
       {
-        id: 'text-1',
-        type: 'text',
+        id: 'shape-0',
+        type: 'shape',
         transform: { x: 10, y: 10, scaleX: 1, scaleY: 1, rotation: 0 },
         size: { width: 100, height: 30 },
         opacity: 1,
         visible: true,
         locked: false,
-        text: 'Hello',
-        font: { family: 'Inter', weight: 400, style: 'normal', size: 16 },
-        align: 'left',
-        letterSpacing: 0,
-        lineHeight: 1.2,
+        shape: 'rect',
         fill: { type: 'solid', color: '#000000' },
       },
       {
@@ -58,8 +54,6 @@ function makeDoc(page: Page): Document {
     meta: { title: 'Test', createdAt: 0, updatedAt: 0 },
     pages: [page],
     assets: { 'asset-1': { type: 'image', dataUri: 'data:image/svg+xml;base64,PHN2Zy8+' } },
-    fonts: [],
-    paths: {},
   };
 }
 
@@ -71,9 +65,16 @@ describe('SceneReconciler', () => {
     reconciler.mount(page, makeDoc(page));
 
     expect(layer.children).toHaveLength(3);
-    expect(reconciler.getDisplayObject('text-1')).toBeInstanceOf(Text);
+    expect(reconciler.getDisplayObject('shape-0')).toBeInstanceOf(Graphics);
     expect(reconciler.getDisplayObject('shape-1')).toBeInstanceOf(Graphics);
-    expect(reconciler.getDisplayObject('image-1')).toBeInstanceOf(Sprite);
+    // Image nodes render as a wrapper Container (holding a Sprite child)
+    // rather than a bare Sprite — see imageRenderer.ts's applySizeAndCrop
+    // for why the split is needed (node.crop positions/scales the inner
+    // Sprite, while the wrapper carries the node's own transform).
+    const imageObj = reconciler.getDisplayObject('image-1');
+    expect(imageObj).toBeInstanceOf(Container);
+    expect(imageObj).not.toBeInstanceOf(Graphics);
+    expect((imageObj as Container).children[0]).toBeInstanceOf(Sprite);
   });
 
   it('AddNode adds one object without touching existing ones', () => {
@@ -83,7 +84,7 @@ describe('SceneReconciler', () => {
     let doc = makeDoc(page);
     reconciler.mount(page, doc);
 
-    const existingText = reconciler.getDisplayObject('text-1');
+    const existingShape0 = reconciler.getDisplayObject('shape-0');
     const existingShape = reconciler.getDisplayObject('shape-1');
 
     const newNode: Page['children'][number] = {
@@ -104,7 +105,7 @@ describe('SceneReconciler', () => {
 
     expect(layer.children).toHaveLength(4);
     expect(reconciler.getDisplayObject('shape-2')).toBeInstanceOf(Graphics);
-    expect(reconciler.getDisplayObject('text-1')).toBe(existingText);
+    expect(reconciler.getDisplayObject('shape-0')).toBe(existingShape0);
     expect(reconciler.getDisplayObject('shape-1')).toBe(existingShape);
   });
 
@@ -156,17 +157,17 @@ describe('SceneReconciler', () => {
     const doc = makeDoc(page);
     reconciler.mount(page, doc);
 
-    const obj = reconciler.getDisplayObject('text-1')!;
+    const obj = reconciler.getDisplayObject('shape-0')!;
     expect(layer.getChildIndex(obj)).toBe(0);
 
     const [node] = page.children.splice(0, 1);
     page.children.splice(1, 0, node);
     const newDoc = { ...doc, pages: [page] };
 
-    reconciler.apply({ type: 'Reorder', pageId: 'page-1', nodeId: 'text-1', to: 'up' }, newDoc);
+    reconciler.apply({ type: 'Reorder', pageId: 'page-1', nodeId: 'shape-0', to: 'up' }, newDoc);
 
     expect(layer.getChildIndex(obj)).toBe(1);
-    expect(reconciler.getDisplayObject('text-1')).toBe(obj);
+    expect(reconciler.getDisplayObject('shape-0')).toBe(obj);
   });
 
   it('mounts a nested group recursively, into its own Container, not the page layer', () => {

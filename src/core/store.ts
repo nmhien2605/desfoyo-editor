@@ -36,9 +36,6 @@ export interface EditorStore {
   lastCommand: Command | null;
   dispatch: (cmd: Command) => void;
   addAsset: (assetId: string, dataUri: string) => void;
-  // Non-undoable like addAsset — font loading isn't a document mutation
-  // worth undo history. Also appends `family` to document.fonts if new.
-  addFont: (assetId: string, family: string, dataUri: string) => void;
   // Non-undoable like addAsset — Phase 4 Pass E's SVG upload flow.
   addSvgAsset: (assetId: string, dataUri: string) => void;
 
@@ -246,10 +243,6 @@ function mutateDocument(draft: Document, cmd: Command): void {
       location.parent.splice(location.index, 1, ...worldChildren);
       break;
     }
-    case 'UpdatePath': {
-      draft.paths[cmd.pathId] = { points: cmd.points };
-      break;
-    }
   }
 }
 
@@ -302,14 +295,6 @@ export function createEditorStore(initialDocument: Document) {
     addAsset: (assetId, dataUri) =>
       set((s) => ({
         document: { ...s.document, assets: { ...s.document.assets, [assetId]: { type: 'image', dataUri } } },
-      })),
-    addFont: (assetId, family, dataUri) =>
-      set((s) => ({
-        document: {
-          ...s.document,
-          assets: { ...s.document.assets, [assetId]: { type: 'font', family, dataUri } },
-          fonts: s.document.fonts.includes(family) ? s.document.fonts : [...s.document.fonts, family],
-        },
       })),
     addSvgAsset: (assetId, dataUri) =>
       set((s) => ({
