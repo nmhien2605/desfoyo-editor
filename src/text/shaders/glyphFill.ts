@@ -49,16 +49,24 @@ uniform float uGradientAngle;
 
 vec4 sampleGradient(float t) {
   t = clamp(t, 0.0, 1.0);
-  if (uStopCount < 1.5) return uStopColors[0];
-  for (int i = 0; i < ${MAX_GRADIENT_STOPS} - 1; i++) {
-    if (float(i) + 1.0 >= uStopCount) break;
-    if (t <= uStopOffsets[i + 1] || float(i) + 2.0 >= uStopCount) {
-      float span = max(uStopOffsets[i + 1] - uStopOffsets[i], 0.0001);
-      float localT = clamp((t - uStopOffsets[i]) / span, 0.0, 1.0);
-      return mix(uStopColors[i], uStopColors[i + 1], localT);
+  // uStopColors[0] is a compile-time-constant index (legal in GLSL ES 1.00).
+  // result starts here so the "count < 2" and "loop never matched" cases
+  // (which the old code handled via uStopColors[int(uStopCount) - 1], a
+  // runtime-indexed lookup outside any loop) fall out for free without ever
+  // indexing the array by anything but a constant or the loop's own "i".
+  vec4 result = uStopColors[0];
+  if (uStopCount >= 1.5) {
+    for (int i = 0; i < ${MAX_GRADIENT_STOPS} - 1; i++) {
+      if (float(i) + 1.0 >= uStopCount) break;
+      if (t <= uStopOffsets[i + 1] || float(i) + 2.0 >= uStopCount) {
+        float span = max(uStopOffsets[i + 1] - uStopOffsets[i], 0.0001);
+        float localT = clamp((t - uStopOffsets[i]) / span, 0.0, 1.0);
+        result = mix(uStopColors[i], uStopColors[i + 1], localT);
+        break;
+      }
     }
   }
-  return uStopColors[int(uStopCount) - 1];
+  return result;
 }
 
 void main(void) {
