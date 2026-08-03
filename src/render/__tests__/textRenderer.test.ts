@@ -76,4 +76,15 @@ describe('textRenderer', () => {
     // Style should still reflect the latest node, not revert to the stale node1 snapshot
     expect(obj.style.wordWrapWidth).toBe(400);
   });
+
+  it('update() does not rebuild the TextStyle when only transform/opacity changed', () => {
+    const node = makeTextNode();
+    const obj = textRenderer.create(node);
+    const styleBefore = obj.style;
+
+    const moved = { ...node, transform: { ...node.transform, x: 999, y: 999 }, opacity: 0.5 };
+    textRenderer.update(obj, moved);
+
+    expect(obj.style).toBe(styleBefore);
+  });
 });

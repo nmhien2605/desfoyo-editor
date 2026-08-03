@@ -24,25 +24,27 @@ export const DEFAULT_FONT_FAMILY = GOOGLE_FONTS[0].family;
 
 const loaded = new Set<string>();
 
-// Loads a Google Font via its public CSS2 endpoint (the same one <link>
-// tags use — no API key needed) + the FontFace API. No-ops outside a
-// browser that has FontFace/document.fonts (jsdom in tests has neither) —
-// text still renders with the browser's fallback font in that case, same
-// "never throw, just degrade" convention loadImageSize/svgNaturalSize
-// (Toolbar.tsx) already use.
+// Loads a Google Font by injecting a <link rel="stylesheet"> to its public
+// CSS2 endpoint (the same one Google's own embed snippet uses — no API key
+// needed), then waiting on document.fonts.load. The browser's own CSS
+// engine resolves which of the response's several per-script @font-face
+// subsets (cyrillic, greek, vietnamese, latin, ...) applies to which
+// codepoints via each block's unicode-range — a manual fetch+regex+FontFace
+// build (the previous approach) can only ever grab one subset's URL, and it
+// isn't necessarily the Latin one. No-ops outside a browser that has
+// document.fonts (jsdom in tests has none) — text still renders with the
+// browser's fallback font in that case, same "never throw, just degrade"
+// convention loadImageSize/svgNaturalSize (Toolbar.tsx) already use.
 export async function loadGoogleFont(family: string, weight = 400): Promise<void> {
   const key = `${family}:${weight}`;
   if (loaded.has(key)) return;
-  if (typeof FontFace === 'undefined' || typeof document === 'undefined' || !document.fonts) return;
-
-  const cssUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@${weight}&display=swap`;
-  const cssResponse = await fetch(cssUrl);
-  const css = await cssResponse.text();
-  const match = css.match(/url\((https:\/\/[^)]+)\)/);
-  if (!match) return;
-
-  const fontFace = new FontFace(family, `url(${match[1]})`, { weight: String(weight) });
-  await fontFace.load();
-  document.fonts.add(fontFace);
+  if (typeof document === 'undefined' || !document.fonts) return;
   loaded.add(key);
+
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@${weight}&display=swap`;
+  document.head.appendChild(link);
+
+  await document.fonts.load(`${weight} 16px "${family}"`);
 }

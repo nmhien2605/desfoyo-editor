@@ -14,6 +14,14 @@ function fontKey(node: TextNode): string {
   return `${node.font.family}:${node.font.weight ?? 400}:${node.font.italic ? 'italic' : 'normal'}`;
 }
 
+// Everything buildStyle actually reads — used to skip rebuilding (and thus
+// re-rasterizing) the TextStyle on updates that only touch transform/opacity
+// (dragging, resizing, an opacity slider), which fire continuously and
+// don't change how the text should look.
+function styleSignature(node: TextNode): string {
+  return JSON.stringify([node.font, node.align, node.fill, node.size.width]);
+}
+
 // node.size is the text box's wrap width/height, not an auto-fit-to-content
 // box — wordWrap always on, matching how a resizable text box behaves in
 // Canva/Kittl-style editors. Height isn't clipped (Pixi doesn't do this for
@@ -63,7 +71,10 @@ export const textRenderer = {
   },
   update(obj: Text, node: TextNode): void {
     obj.text = node.content;
-    obj.style = buildStyle(node);
+    const prevNode = latestNode.get(obj);
+    if (!prevNode || styleSignature(prevNode) !== styleSignature(node)) {
+      obj.style = buildStyle(node);
+    }
     loadFontIfNeeded(obj, node);
     applyTransform(obj, node);
   },

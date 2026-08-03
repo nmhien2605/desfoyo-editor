@@ -130,6 +130,15 @@ export function serializeNode(node: Node, doc: Document, defs: string[], rasteri
     return `<g${groupAttrs(node)}>${children}</g>`;
   }
   if (node.type === 'text') {
+    // Same rasterize-via-extract approach as 'svg' above (no live renderer
+    // in this pure module), but unlike 'svg' nodes — whose source markup
+    // has a viewBox this file could reconcile against node.size — a
+    // PIXI.Text object's rendered bounds are content-driven (font metrics,
+    // wrapped line count), not normalized to node.size the way
+    // svgRenderer.ts explicitly rescales imported SVGs. The rasterized
+    // image is stretched into node.size regardless, which can distort
+    // the glyphs for text whose actual rendered size doesn't match its box.
+    // Known simplification, ponytail-scoped out; revisit in the export slice.
     const href = rasterized?.[node.id];
     if (!href) return '';
     return `<image${groupAttrs(node)} width="${node.size.width}" height="${node.size.height}" href="${href}"/>`;

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GOOGLE_FONTS, DEFAULT_FONT_FAMILY, loadGoogleFont } from '../googleFonts';
 
 describe('GOOGLE_FONTS', () => {
@@ -17,7 +17,42 @@ describe('GOOGLE_FONTS', () => {
 });
 
 describe('loadGoogleFont', () => {
-  it('resolves without throwing and without a network call when FontFace is unavailable (jsdom has none)', async () => {
+  afterEach(() => {
+    // @ts-expect-error - test-only stub cleanup
+    delete document.fonts;
+    document.head.querySelectorAll('link[rel="stylesheet"]').forEach((el) => el.remove());
+  });
+
+  it('resolves without throwing and without a network call when document.fonts is unavailable (jsdom has none)', async () => {
     await expect(loadGoogleFont('Roboto', 400)).resolves.toBeUndefined();
+  });
+
+  it('calls document.fonts.load with the requested family/weight and appends a stylesheet <link>', async () => {
+    const load = vi.fn().mockResolvedValue(undefined);
+    // @ts-expect-error - jsdom doesn't implement document.fonts; stub it for this test
+    document.fonts = { load };
+
+    await loadGoogleFont('Merriweather', 700);
+
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(load.mock.calls[0][0]).toContain('Merriweather');
+    expect(load.mock.calls[0][0]).toContain('700');
+
+    const links = document.head.querySelectorAll('link[rel="stylesheet"]');
+    expect(links.length).toBe(1);
+    expect(links[0].getAttribute('href')).toContain('Merriweather');
+  });
+
+  it('only appends one <link> when called twice with the same family/weight (dedup via loaded set)', async () => {
+    const load = vi.fn().mockResolvedValue(undefined);
+    // @ts-expect-error - jsdom doesn't implement document.fonts; stub it for this test
+    document.fonts = { load };
+
+    await loadGoogleFont('Inter', 500);
+    await loadGoogleFont('Inter', 500);
+
+    expect(load).toHaveBeenCalledTimes(1);
+    const links = document.head.querySelectorAll('link[href*="Inter"]');
+    expect(links.length).toBe(1);
   });
 });

@@ -356,7 +356,12 @@ function TextControls({ node, onChange }: { node: TextNode; onChange: (patch: Pa
         Font
         <select
           value={node.font.family}
-          onChange={(e) => onChange({ font: { ...node.font, family: e.target.value } })}
+          onChange={(e) => {
+            const newFamily = e.target.value;
+            const newEntry = GOOGLE_FONTS.find((f) => f.family === newFamily) ?? GOOGLE_FONTS[0];
+            const weight = newEntry.weights.includes(node.font.weight ?? 400) ? node.font.weight : newEntry.weights[0];
+            onChange({ font: { ...node.font, family: newFamily, weight } });
+          }}
           className="rounded border border-gray-300 px-1 py-0.5"
         >
           {GOOGLE_FONTS.map((f) => (
