@@ -84,10 +84,26 @@ function warpSignature(node: TextNode): string {
   return JSON.stringify([node.content, node.font, node.fill, node.warp, node.size.width, node.size.height]);
 }
 
-async function rebuildWarpMesh(obj: GlyphMesh, node: TextNode): Promise<void> {
+// The fill's own alpha (solidFillTintAlpha's `alpha`), separate from
+// node.opacity. applyTransform unconditionally sets obj.alpha = node.opacity
+// on every update() call, so the fill alpha can't be folded into obj.alpha
+// directly (rebuildWarpMesh only re-runs when warpSignature changes, but
+// applyTransform runs on every update — it would wipe out the fill's
+// contribution on the next drag/resize/opacity-only update). Storing it here
+// and re-multiplying it into obj.alpha after every applyTransform call (see
+// update() below) keeps both contributions composed correctly regardless of
+// which one changed.
+const meshFillAlpha = new WeakMap<GlyphMesh, number>();
+
+async function rebuildWarpMesh(obj: GlyphMesh, node: TextNode, sig: string): Promise<void> {
   if (!node.warp) return;
   const font = await getFontForWarp(node.font.family, node.font.weight ?? 400, node.content);
   if (!font || obj.destroyed) return; // never-throw degrade — see googleFontFiles.ts's own convention
+  // Stale-write guard: if a later update (different warpSignature) started
+  // and finished before this one, meshSignature.get(obj) will have moved on
+  // — discard this now-stale result instead of overwriting the newer one.
+  // Same pattern as loadFontIfNeeded's latestNode guard above.
+  if (meshSignature.get(obj) !== sig) return;
   const placements = layoutGlyphs(font, node.content, node.font.size, node.size.width, {
     letterSpacing: node.font.letterSpacing,
     lineHeight: node.font.lineHeight,
@@ -98,7 +114,8 @@ async function rebuildWarpMesh(obj: GlyphMesh, node: TextNode): Promise<void> {
   obj.shader = buildGlyphFillShader(node.fill);
   const { tint, alpha } = solidFillTintAlpha(node.fill);
   obj.tint = tint;
-  obj.alpha = alpha * (obj.alpha || 1); // node opacity is applied separately by applyTransform; this only carries the fill's own alpha into the mesh's base tint-alpha channel the shader's uColor multiplies against
+  meshFillAlpha.set(obj, alpha);
+  obj.alpha = node.opacity * alpha;
 }
 
 export const textRenderer = {
@@ -118,9 +135,15 @@ export const textRenderer = {
       const sig = warpSignature(node);
       if (prevSig !== sig) {
         meshSignature.set(obj, sig);
-        void rebuildWarpMesh(obj, node);
+        void rebuildWarpMesh(obj, node, sig);
       }
       applyTransform(obj, node);
+      // applyTransform just set obj.alpha = node.opacity, unconditionally
+      // overwriting whatever rebuildWarpMesh last set — re-fold in the
+      // fill's own alpha (see meshFillAlpha comment above) on every update,
+      // not just on rebuilds, so a drag/resize/opacity-only update can't
+      // silently drop it.
+      obj.alpha *= meshFillAlpha.get(obj) ?? 1;
       return;
     }
     obj.text = node.content;
