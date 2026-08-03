@@ -8,6 +8,7 @@ import { loadGoogleFont } from '../../fonts/googleFonts';
 // text stroke is the decorations slice's job (see
 // docs/superpowers/specs/2026-08-03-text-effects-design.md).
 const loadedFontKey = new WeakMap<Text, string>();
+const latestNode = new WeakMap<Text, TextNode>();
 
 function fontKey(node: TextNode): string {
   return `${node.font.family}:${node.font.weight ?? 400}:${node.font.italic ? 'italic' : 'normal'}`;
@@ -39,12 +40,13 @@ function buildStyle(node: TextNode): TextStyle {
 // blocking — same convention imageRenderer.ts's loadTexture uses for
 // async asset loading.
 function loadFontIfNeeded(obj: Text, node: TextNode): void {
+  latestNode.set(obj, node);
   const key = fontKey(node);
   if (loadedFontKey.get(obj) === key) return;
   loadedFontKey.set(obj, key);
   loadGoogleFont(node.font.family, node.font.weight ?? 400)
     .then(() => {
-      if (!obj.destroyed) obj.style = buildStyle(node);
+      if (!obj.destroyed) obj.style = buildStyle(latestNode.get(obj) ?? node);
     })
     .catch(() => {
       // A font that fails to load shouldn't crash the editor — text stays

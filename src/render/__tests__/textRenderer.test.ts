@@ -58,4 +58,22 @@ describe('textRenderer', () => {
     const node = makeTextNode({ font: { family: 'Nonexistent Font', size: 32 } });
     expect(() => textRenderer.create(node)).not.toThrow();
   });
+
+  it('update() with same font but different size does not revert style after async font load', async () => {
+    const node1 = makeTextNode({ size: { width: 200, height: 60 } });
+    const obj = textRenderer.create(node1);
+    expect(obj.style.wordWrapWidth).toBe(200);
+
+    const node2 = { ...node1, size: { width: 400, height: 60 } };
+    textRenderer.update(obj, node2);
+    expect(obj.style.wordWrapWidth).toBe(400);
+
+    // Wait for any pending font-load promises to settle
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Style should still reflect the latest node, not revert to the stale node1 snapshot
+    expect(obj.style.wordWrapWidth).toBe(400);
+  });
 });
