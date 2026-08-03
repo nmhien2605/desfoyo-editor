@@ -198,7 +198,7 @@ export const imageRenderer = {
     // type can have) — combined here with ImageNode.filters' separate flat
     // brightness/contrast/saturation/blur knobs instead of one clobbering
     // the other.
-    wrapper.filters = [...buildFilters(node.effects), ...buildImageFilters(node.filters)];
+    wrapper.filters = [...buildFilters(node.effects, node), ...buildImageFilters(node.filters)];
     applySizeAndCrop(sprite, node);
   },
 };

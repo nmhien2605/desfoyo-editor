@@ -21,7 +21,7 @@ export function applyTransform(obj: Container, node: Node): void {
   obj.alpha = node.opacity;
   obj.visible = node.visible;
   obj.blendMode = node.blendMode ?? 'normal';
-  obj.filters = buildFilters(node.effects);
+  obj.filters = buildFilters(node.effects, node);
 }
 
 function transformToMatrix(t: Transform, size: Size): Matrix {
