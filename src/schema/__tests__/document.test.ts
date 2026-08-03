@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DocumentSchema } from '../document';
 import { NodeSchema } from '../node';
+import { EffectSchema } from '../effect';
 
 function validDocument() {
   return {
@@ -138,5 +139,21 @@ describe('DocumentSchema', () => {
     };
 
     expect(() => NodeSchema.parse(textNode)).toThrow();
+  });
+
+  it('EffectSchema accepts the 3 new shadow-family effects (slice 2)', () => {
+    const effects = [
+      { type: 'block-shadow', color: '#000000', offset: [4, 4], alpha: 0.8 },
+      { type: 'line-shadow', color: '#000000', offset: [6, 6], thickness: 1, alpha: 0.9 },
+      { type: '3d-shadow', color: '#000000', angle: Math.PI / 4, depth: 10, alpha: 1 },
+    ];
+    for (const effect of effects) {
+      expect(() => EffectSchema.parse(effect)).not.toThrow();
+    }
+  });
+
+  it('EffectSchema rejects a block-shadow missing required alpha', () => {
+    const effect = { type: 'block-shadow', color: '#000000', offset: [4, 4] };
+    expect(() => EffectSchema.parse(effect)).toThrow();
   });
 });
