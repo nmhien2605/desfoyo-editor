@@ -1,4 +1,4 @@
-import { useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useEditorStore, useEditorStoreApi, useCanvasContext } from './EditorContext';
 import { createViewport, type Point, type Viewport } from '../render/viewport';
@@ -242,6 +242,8 @@ function SingleSelectionOverlay({
           activePageId={activePageId}
           topLeftScreen={topLeftScreen}
           rotationDeg={rotationDeg}
+          originX={originX}
+          originY={originY}
           zoom={camera.zoom}
           onDone={() => setEditingNodeId(null)}
         />
@@ -348,6 +350,8 @@ function TextEditOverlay({
   activePageId,
   topLeftScreen,
   rotationDeg,
+  originX,
+  originY,
   zoom,
   onDone,
 }: {
@@ -355,13 +359,22 @@ function TextEditOverlay({
   activePageId: string;
   topLeftScreen: Point;
   rotationDeg: number;
+  originX: number;
+  originY: number;
   zoom: number;
   onDone: () => void;
 }) {
   const store = useEditorStoreApi();
   const [value, setValue] = useState(node.content);
+  // Escape unmounts this textarea via onDone -> setEditingNodeId(null) in the
+  // same render pass; removing a focused DOM node commonly fires a native
+  // blur as a side effect, which would otherwise re-run commit() with the
+  // uncommitted value and dispatch despite Escape being pressed. This flag
+  // makes Escape's "cancel without dispatch" win that race.
+  const cancellingRef = useRef(false);
 
   const commit = () => {
+    if (cancellingRef.current) return;
     if (value !== node.content) {
       store.getState().dispatch({ type: 'UpdateProps', pageId: activePageId, nodeId: node.id, patch: { content: value } });
     }
@@ -377,6 +390,7 @@ function TextEditOverlay({
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.preventDefault();
+          cancellingRef.current = true;
           onDone();
         }
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -391,7 +405,7 @@ function TextEditOverlay({
         width: node.size.width * zoom,
         height: node.size.height * zoom,
         fontSize: node.font.size * zoom,
-        transformOrigin: '0 0',
+        transformOrigin: `${originX * 100}% ${originY * 100}%`,
         transform: `rotate(${rotationDeg}deg)`,
       }}
     />
