@@ -1,4 +1,5 @@
 import * as opentype from 'opentype.js';
+import { decompress } from './wawoff2Browser';
 
 export interface UnicodeRange {
   start: number;
@@ -74,9 +75,15 @@ export async function getFontForWarp(family: string, weight: number, text: strin
 
       const fontRes = await fetch(block.url);
       const compressed = new Uint8Array(await fontRes.arrayBuffer());
-      const wawoff2 = await import('wawoff2');
-      const decompressed = await wawoff2.decompress(compressed);
-      return opentype.parse(decompressed.buffer);
+      const decompressed = await decompress(compressed);
+      // decompressed is a view into a larger heap buffer (Emscripten heap) —
+      // slice to just its own bytes before handing to opentype.js, which
+      // reads directly off the ArrayBuffer rather than the view's bounds.
+      const ttfBuffer = decompressed.buffer.slice(
+        decompressed.byteOffset,
+        decompressed.byteOffset + decompressed.byteLength,
+      );
+      return opentype.parse(ttfBuffer);
     } catch {
       // Network failure, decompression failure, or a malformed font: warp
       // falls back to un-warped rendering (see warpMesh.ts) rather than

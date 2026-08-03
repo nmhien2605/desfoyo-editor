@@ -8,9 +8,6 @@ export default defineConfig(({ command }) => {
     return {
       root: resolve(__dirname, 'demo'),
       plugins: [react()],
-      optimizeDeps: {
-        exclude: ['wawoff2'],
-      },
     };
   }
 
