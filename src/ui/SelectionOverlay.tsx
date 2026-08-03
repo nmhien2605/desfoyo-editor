@@ -7,7 +7,7 @@ import { angleBetween, computeRotation } from '../render/interactions/rotate';
 import { computeSelectionBounds, applyGroupRotate } from '../render/interactions/groupTransformMath';
 import type { Rect } from '../render/interactions/marquee';
 import type { SnapGuide } from '../render/interactions/snapping';
-import type { ImageNode, Node, TextNode, Transform } from '../schema';
+import type { ImageNode, Node, TextNode, Transform, Warp } from '../schema';
 
 const HANDLES: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
@@ -95,6 +95,8 @@ function SingleSelectionOverlay({
   const isCropping = node.type === 'image' && croppingNodeId === node.id;
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const isEditingText = node.type === 'text' && editingNodeId === node.id;
+  const [warpEditingNodeId, setWarpEditingNodeId] = useState<string | null>(null);
+  const isEditingWarp = node.type === 'text' && !!node.warp && warpEditingNodeId === node.id;
   const originX = node.transform.originX ?? 0;
   const originY = node.transform.originY ?? 0;
   // Un-rotated top-left corner in world space; CSS `transform: rotate()`
@@ -214,7 +216,17 @@ function SingleSelectionOverlay({
           transform: `rotate(${rotationDeg}deg)`,
         }}
       />
-      {!isCropping && !isEditingText &&
+      {node.type === 'text' && node.warp && !isCropping && !isEditingText && (
+        <button
+          type="button"
+          onClick={() => setWarpEditingNodeId(isEditingWarp ? null : node.id)}
+          className="pointer-events-auto absolute rounded bg-white px-1 text-xs shadow"
+          style={{ left: topLeftScreen.x, top: topLeftScreen.y - 20 }}
+        >
+          {isEditingWarp ? 'Done' : 'Edit warp'}
+        </button>
+      )}
+      {!isCropping && !isEditingText && !isEditingWarp &&
         HANDLES.map((handle) => {
           const pos = viewport.toScreen(worldPoint(node, localCorner(handle, node.size.width, node.size.height)));
           return (
@@ -226,7 +238,7 @@ function SingleSelectionOverlay({
             />
           );
         })}
-      {!isCropping && !isEditingText && (
+      {!isCropping && !isEditingText && !isEditingWarp && (
         <div
           onPointerDown={startRotate}
           className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border border-blue-500 bg-white"
@@ -235,6 +247,9 @@ function SingleSelectionOverlay({
       )}
       {isCropping && node.type === 'image' && (
         <ImageCropHandles node={node} activePageId={activePageId} viewport={viewport} />
+      )}
+      {isEditingWarp && node.type === 'text' && node.warp && (
+        <WarpHandles node={node} activePageId={activePageId} viewport={viewport} />
       )}
       {isEditingText && node.type === 'text' && (
         <TextEditOverlay
@@ -337,6 +352,133 @@ function ImageCropHandles({ node, activePageId, viewport }: { node: ImageNode; a
       })}
     </>
   );
+}
+
+// On-canvas warp editing, entered via the "Edit warp" toggle button (see
+// isEditingWarp in SingleSelectionOverlay) rather than double-click, since
+// double-click on a text node is already claimed by text-edit mode.
+// custom-mesh gets a full grid of draggable points (one per gridSize
+// cell); the 7 formula-based styles get a single quick-adjust handle at
+// the node's center, mapping vertical drag to the style's primary
+// "intensity" field and horizontal drag to its secondary field where one
+// exists (see applyHandleDrag below) — the PropertiesPanel sliders remain
+// the precise control for both; this handle is a coarse, discoverable
+// on-canvas affordance, same spirit as ImageCropHandles' 4 corners being
+// "good enough" for quick crop adjustment.
+function WarpHandles({ node, activePageId, viewport }: { node: TextNode; activePageId: string; viewport: Viewport }) {
+  const store = useEditorStoreApi();
+  const warp = node.warp!;
+
+  if (warp.type === 'custom-mesh') {
+    const [cols, rows] = warp.gridSize;
+    const startDrag = (pointIndex: number) => (downEvent: ReactPointerEvent) => {
+      downEvent.stopPropagation();
+      const startWorld = viewport.toWorld({ x: downEvent.clientX, y: downEvent.clientY });
+      store.getState().beginGesture(`warp-point:${node.id}:${pointIndex}`);
+      const onMove = (moveEvent: PointerEvent) => {
+        const currentWorld = viewport.toWorld({ x: moveEvent.clientX, y: moveEvent.clientY });
+        const worldDelta = { x: currentWorld.x - startWorld.x, y: currentWorld.y - startWorld.y };
+        const local = rotateVector(worldDelta, -node.transform.rotation);
+        const points = [...warp.points];
+        points[pointIndex * 2] = local.x;
+        points[pointIndex * 2 + 1] = local.y;
+        store.getState().dispatch({
+          type: 'UpdateProps',
+          pageId: activePageId,
+          nodeId: node.id,
+          patch: { warp: { ...warp, points } },
+        });
+      };
+      const onUp = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        store.getState().endGesture();
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    };
+
+    return (
+      <>
+        {Array.from({ length: rows }, (_, row) =>
+          Array.from({ length: cols }, (_, col) => {
+            const idx = row * cols + col;
+            const gridLocal = {
+              x: (col / (cols - 1 || 1)) * node.size.width + warp.points[idx * 2],
+              y: (row / (rows - 1 || 1)) * node.size.height + warp.points[idx * 2 + 1],
+            };
+            const pos = viewport.toScreen(worldPoint(node, gridLocal));
+            return (
+              <div
+                key={idx}
+                onPointerDown={startDrag(idx)}
+                className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-purple-500 bg-white"
+                style={{ left: pos.x, top: pos.y, cursor: 'move' }}
+              />
+            );
+          }),
+        )}
+      </>
+    );
+  }
+
+  const handleLocal = { x: node.size.width / 2, y: node.size.height / 2 };
+  const pos = viewport.toScreen(worldPoint(node, handleLocal));
+
+  const startDrag = (downEvent: ReactPointerEvent) => {
+    downEvent.stopPropagation();
+    const startWorld = viewport.toWorld({ x: downEvent.clientX, y: downEvent.clientY });
+    store.getState().beginGesture(`warp-handle:${node.id}`);
+    const onMove = (moveEvent: PointerEvent) => {
+      const currentWorld = viewport.toWorld({ x: moveEvent.clientX, y: moveEvent.clientY });
+      const worldDelta = { x: currentWorld.x - startWorld.x, y: currentWorld.y - startWorld.y };
+      const local = rotateVector(worldDelta, -node.transform.rotation);
+      const dv = -local.y / (node.size.height || 1);
+      const dh = local.x / (node.size.width || 1);
+      const nextWarp = applyHandleDrag(warp, dv, dh);
+      store.getState().dispatch({ type: 'UpdateProps', pageId: activePageId, nodeId: node.id, patch: { warp: nextWarp } });
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      store.getState().endGesture();
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  return (
+    <div
+      onPointerDown={startDrag}
+      className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-purple-500 bg-white"
+      style={{ left: pos.x, top: pos.y, cursor: 'move' }}
+    />
+  );
+}
+
+function applyHandleDrag(warp: Warp, dv: number, dh: number): Warp {
+  switch (warp.type) {
+    case 'arch':
+      return { ...warp, curve: clamp(warp.curve + dv, -1, 1) };
+    case 'wave':
+      return { ...warp, amplitude: clamp(warp.amplitude + dv, -1, 1), frequency: Math.max(0, warp.frequency + dh) };
+    case 'rise':
+      return { ...warp, amount: clamp(warp.amount + dv, -1, 1) };
+    case 'flag':
+      return { ...warp, amplitude: clamp(warp.amplitude + dv, -1, 1), frequency: Math.max(0, warp.frequency + dh) };
+    case 'circle':
+      return { ...warp, curve: clamp(warp.curve + dv, -1, 1) };
+    case 'distort':
+      return { ...warp, amountX: warp.amountX + dh * 20, amountY: warp.amountY + dv * 20 };
+    case 'angle':
+      return { ...warp, angle: warp.angle + dh };
+    case 'custom-mesh':
+      return warp; // handled by the grid-handle branch above, never reaches here
+  }
+}
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
 }
 
 // Inline text editing: an absolutely-positioned <textarea> over the node's
