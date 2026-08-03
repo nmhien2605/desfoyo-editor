@@ -242,10 +242,15 @@ function WarpControls({ node, onChange }: { node: TextNode; onChange: (patch: Pa
 }
 
 function WarpParams({ warp, onChange }: { warp: Warp; onChange: (warp: Warp) => void }) {
-  const num = (label: string, value: number, set: (v: number) => void, step = 0.01) => (
+  // min/max are per-field, not a single hardcoded ±1 — defaultWarp() above
+  // produces values outside ±1 for some fields (frequency: 2, distort's
+  // amountX/amountY: 10), and a slider whose range can't represent its own
+  // default clamps the displayed value on first render and snaps the stored
+  // value down to the range the moment it's touched (finding 4).
+  const num = (label: string, value: number, set: (v: number) => void, step = 0.01, min = -1, max = 1) => (
     <label className="flex flex-col gap-1" key={label}>
       {label}
-      <input type="range" min={-1} max={1} step={step} value={value} onChange={(e) => set(Number(e.target.value))} />
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => set(Number(e.target.value))} />
     </label>
   );
   switch (warp.type) {
@@ -255,7 +260,7 @@ function WarpParams({ warp, onChange }: { warp: Warp; onChange: (warp: Warp) => 
       return (
         <>
           {num('Amplitude', warp.amplitude, (v) => onChange({ ...warp, amplitude: v }))}
-          {num('Frequency', warp.frequency, (v) => onChange({ ...warp, frequency: v }), 0.1)}
+          {num('Frequency', warp.frequency, (v) => onChange({ ...warp, frequency: v }), 0.1, 0, 10)}
         </>
       );
     case 'rise':
@@ -264,7 +269,7 @@ function WarpParams({ warp, onChange }: { warp: Warp; onChange: (warp: Warp) => 
       return (
         <>
           {num('Amplitude', warp.amplitude, (v) => onChange({ ...warp, amplitude: v }))}
-          {num('Frequency', warp.frequency, (v) => onChange({ ...warp, frequency: v }), 0.1)}
+          {num('Frequency', warp.frequency, (v) => onChange({ ...warp, frequency: v }), 0.1, 0, 10)}
         </>
       );
     case 'circle':
@@ -272,8 +277,8 @@ function WarpParams({ warp, onChange }: { warp: Warp; onChange: (warp: Warp) => 
     case 'distort':
       return (
         <>
-          {num('Amount X', warp.amountX, (v) => onChange({ ...warp, amountX: v }), 1)}
-          {num('Amount Y', warp.amountY, (v) => onChange({ ...warp, amountY: v }), 1)}
+          {num('Amount X', warp.amountX, (v) => onChange({ ...warp, amountX: v }), 1, -50, 50)}
+          {num('Amount Y', warp.amountY, (v) => onChange({ ...warp, amountY: v }), 1, -50, 50)}
         </>
       );
     case 'angle':

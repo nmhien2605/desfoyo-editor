@@ -380,8 +380,12 @@ function WarpHandles({ node, activePageId, viewport }: { node: TextNode; activeP
         const worldDelta = { x: currentWorld.x - startWorld.x, y: currentWorld.y - startWorld.y };
         const local = rotateVector(worldDelta, -node.transform.rotation);
         const points = [...warp.points];
-        points[pointIndex * 2] = local.x;
-        points[pointIndex * 2 + 1] = local.y;
+        // Add the drag delta to the point's existing offset (captured at
+        // drag-start via `warp`), not assign it as an absolute value —
+        // otherwise a second drag on the same point discards whatever
+        // offset the first drag left behind (finding 5).
+        points[pointIndex * 2] = warp.points[pointIndex * 2] + local.x;
+        points[pointIndex * 2 + 1] = warp.points[pointIndex * 2 + 1] + local.y;
         store.getState().dispatch({
           type: 'UpdateProps',
           pageId: activePageId,
