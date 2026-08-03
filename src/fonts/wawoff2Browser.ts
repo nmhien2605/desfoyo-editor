@@ -12,7 +12,12 @@
 // executes it as a CJS/ESM module) and eval it ourselves, capturing the
 // internal `Module` object directly via a `return Module` appended to the
 // function body — same scope as the glue's own top-level `var Module`.
-import decompressBindingSrc from 'wawoff2/build/decompress_binding.js?raw';
+//
+// Imported dynamically (inside loadModule below), not statically at the top
+// of this file: this ~322KB base64-inlined WASM blob would otherwise end up
+// in the app's main/entry chunk for every user, even ones who never render
+// warped text (see final review finding 7). Only fetched once a warp render
+// actually calls decompress().
 
 interface EmscriptenModule {
   onRuntimeInitialized?: () => void;
@@ -24,47 +29,50 @@ let modulePromise: Promise<EmscriptenModule> | null = null;
 
 function loadModule(): Promise<EmscriptenModule> {
   if (!modulePromise) {
-    modulePromise = new Promise((resolve, reject) => {
-      let resolved = false;
-      const timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          reject(new Error('WASM module instantiation timeout (10s) — possible fetch/CORS failure'));
-        }
-      }, 10000);
+    modulePromise = (async () => {
+      const { default: decompressBindingSrc } = await import('wawoff2/build/decompress_binding.js?raw');
+      return new Promise<EmscriptenModule>((resolve, reject) => {
+        let resolved = false;
+        const timeout = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            reject(new Error('WASM module instantiation timeout (10s) — possible fetch/CORS failure'));
+          }
+        }, 10000);
 
-      try {
-        // See file-level comment: this is how we recover the Module reference
-        // the glue file never exports.
-        const factory = new Function(`${decompressBindingSrc}\nreturn Module;`) as () => EmscriptenModule;
-        const mod = factory();
+        try {
+          // See file-level comment: this is how we recover the Module reference
+          // the glue file never exports.
+          const factory = new Function(`${decompressBindingSrc}\nreturn Module;`) as () => EmscriptenModule;
+          const mod = factory();
 
-        // Wire onAbort to catch async instantiation failures (e.g., fetch 404, CORS block).
-        // Emscripten calls Module["onAbort"] if async WASM instantiation fails; without
-        // this, the promise never settles and decompress() hangs forever.
-        mod.onAbort = (reason: string) => {
+          // Wire onAbort to catch async instantiation failures (e.g., fetch 404, CORS block).
+          // Emscripten calls Module["onAbort"] if async WASM instantiation fails; without
+          // this, the promise never settles and decompress() hangs forever.
+          mod.onAbort = (reason: string) => {
+            if (!resolved) {
+              resolved = true;
+              clearTimeout(timeout);
+              reject(new Error(`WASM module aborted: ${reason}`));
+            }
+          };
+
+          mod.onRuntimeInitialized = () => {
+            if (!resolved) {
+              resolved = true;
+              clearTimeout(timeout);
+              resolve(mod);
+            }
+          };
+        } catch (err) {
           if (!resolved) {
             resolved = true;
             clearTimeout(timeout);
-            reject(new Error(`WASM module aborted: ${reason}`));
+            reject(err instanceof Error ? err : new Error(String(err)));
           }
-        };
-
-        mod.onRuntimeInitialized = () => {
-          if (!resolved) {
-            resolved = true;
-            clearTimeout(timeout);
-            resolve(mod);
-          }
-        };
-      } catch (err) {
-        if (!resolved) {
-          resolved = true;
-          clearTimeout(timeout);
-          reject(err instanceof Error ? err : new Error(String(err)));
         }
-      }
-    });
+      });
+    })();
   }
   return modulePromise;
 }
