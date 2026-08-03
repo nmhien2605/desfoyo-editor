@@ -1,8 +1,12 @@
-import { Text, TextStyle } from 'pixi.js';
+import { Text, TextStyle, Mesh, MeshGeometry, type Container, type Shader } from 'pixi.js';
 import type { TextNode } from '../../schema';
 import { applyTransform } from '../applyTransform';
 import { resolveFill } from '../fillToColor';
 import { loadGoogleFont } from '../../fonts/googleFonts';
+import { getFontForWarp } from '../../fonts/googleFontFiles';
+import { layoutGlyphs } from '../../text/layoutGlyphs';
+import { buildWarpedGlyphGeometry } from '../../text/warpMesh';
+import { buildGlyphFillShader, solidFillTintAlpha } from '../../text/shaders/glyphFill';
 
 // TextNode.stroke is schema-only in this slice — rendering multi-layer
 // text stroke is the decorations slice's job (see
@@ -63,13 +67,62 @@ function loadFontIfNeeded(obj: Text, node: TextNode): void {
     });
 }
 
+// Mesh<MeshGeometry, Shader>, not bare Mesh — Mesh's SHADER generic defaults
+// to TextureShader (see node_modules/pixi.js's Mesh.d.ts), but
+// buildGlyphFillShader returns a plain Shader, not a TextureShader (no
+// .texture). A bare `Mesh` annotation here would make every warped Text's
+// object fail to type-check against what `new Mesh({ shader: ... })` above
+// actually constructs.
+type GlyphMesh = Mesh<MeshGeometry, Shader>;
+
+// Mesh path: keyed the same way loadFontIfNeeded's flat-text path is, but
+// tracks the FULL geometry-affecting signature (content/font/fill/warp/size),
+// since fill and warp now bake directly into vertex data/shader uniforms
+// instead of TextStyle.
+const meshSignature = new WeakMap<GlyphMesh, string>();
+function warpSignature(node: TextNode): string {
+  return JSON.stringify([node.content, node.font, node.fill, node.warp, node.size.width, node.size.height]);
+}
+
+async function rebuildWarpMesh(obj: GlyphMesh, node: TextNode): Promise<void> {
+  if (!node.warp) return;
+  const font = await getFontForWarp(node.font.family, node.font.weight ?? 400, node.content);
+  if (!font || obj.destroyed) return; // never-throw degrade — see googleFontFiles.ts's own convention
+  const placements = layoutGlyphs(font, node.content, node.font.size, node.size.width, {
+    letterSpacing: node.font.letterSpacing,
+    lineHeight: node.font.lineHeight,
+    align: node.align,
+  });
+  const geom = buildWarpedGlyphGeometry(font, placements, node.font.size, node.warp, node.size.width, node.size.height);
+  obj.geometry = new MeshGeometry({ positions: geom.positions, uvs: geom.gradientUvs, indices: geom.indices });
+  obj.shader = buildGlyphFillShader(node.fill);
+  const { tint, alpha } = solidFillTintAlpha(node.fill);
+  obj.tint = tint;
+  obj.alpha = alpha * (obj.alpha || 1); // node opacity is applied separately by applyTransform; this only carries the fill's own alpha into the mesh's base tint-alpha channel the shader's uColor multiplies against
+}
+
 export const textRenderer = {
-  create(node: TextNode): Text {
+  create(node: TextNode): Text | GlyphMesh {
+    if (node.warp) {
+      const obj = new Mesh({ geometry: new MeshGeometry({ positions: new Float32Array(), uvs: new Float32Array(), indices: new Uint32Array() }), shader: buildGlyphFillShader(node.fill) });
+      this.update(obj, node);
+      return obj;
+    }
     const obj = new Text({ text: node.content, style: buildStyle(node) });
     this.update(obj, node);
     return obj;
   },
-  update(obj: Text, node: TextNode): void {
+  update(obj: Text | GlyphMesh, node: TextNode): void {
+    if (obj instanceof Mesh) {
+      const prevSig = meshSignature.get(obj);
+      const sig = warpSignature(node);
+      if (prevSig !== sig) {
+        meshSignature.set(obj, sig);
+        void rebuildWarpMesh(obj, node);
+      }
+      applyTransform(obj, node);
+      return;
+    }
     obj.text = node.content;
     const prevNode = latestNode.get(obj);
     if (!prevNode || styleSignature(prevNode) !== styleSignature(node)) {
@@ -77,5 +130,13 @@ export const textRenderer = {
     }
     loadFontIfNeeded(obj, node);
     applyTransform(obj, node);
+  },
+  // Consumed by SceneReconciler.apply() — see Global Constraints. A node
+  // whose `warp` presence disagrees with its current display object's class
+  // needs a full create+replace, not an in-place update, since PIXI.Text and
+  // PIXI.Mesh are structurally different Pixi objects.
+  needsRecreate(obj: Container, node: TextNode): boolean {
+    const isMesh = obj instanceof Mesh;
+    return isMesh !== !!node.warp;
   },
 };

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { Container, Graphics, Sprite, Text } from 'pixi.js';
+import { Container, Graphics, Mesh, Sprite, Text } from 'pixi.js';
 import { SceneReconciler } from '../SceneReconciler';
 import type { Document, Page } from '../../schema';
 
@@ -269,5 +269,31 @@ describe('SceneReconciler', () => {
     reconciler.mount(page, makeDoc(page));
 
     expect(reconciler.getDisplayObject('text-1')).toBeInstanceOf(Text);
+  });
+
+  it('recreates the display object (Text -> Mesh) when a text node gains a warp field, and back when it loses one', () => {
+    const layer = new Container();
+    const reconciler = new SceneReconciler(layer);
+    const page = makePage();
+    const doc = makeDoc(page);
+    reconciler.mount(page, doc);
+
+    const before = reconciler.getDisplayObject('text-1');
+    expect(before).toBeInstanceOf(Text);
+
+    const warpedPage: Page = {
+      ...page,
+      children: page.children.map((n) => (n.id === 'text-1' ? { ...n, warp: { type: 'arch', curve: 0.5 } } : n)),
+    };
+    const warpedDoc = { ...doc, pages: [warpedPage] };
+    reconciler.apply({ type: 'UpdateProps', pageId: page.id, nodeId: 'text-1', patch: { warp: { type: 'arch', curve: 0.5 } } }, warpedDoc);
+    const afterWarp = reconciler.getDisplayObject('text-1');
+    expect(afterWarp).not.toBe(before);
+    expect(afterWarp).toBeInstanceOf(Mesh);
+
+    reconciler.apply({ type: 'UpdateProps', pageId: page.id, nodeId: 'text-1', patch: { warp: undefined } }, doc);
+    const afterUnwarp = reconciler.getDisplayObject('text-1');
+    expect(afterUnwarp).not.toBe(afterWarp);
+    expect(afterUnwarp).toBeInstanceOf(Text);
   });
 });

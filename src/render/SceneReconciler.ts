@@ -43,6 +43,11 @@ function updateDisplayObject(obj: Container, node: Node, doc: Document): void {
   }
 }
 
+function needsRecreateDisplayObject(obj: Container, node: Node): boolean {
+  if (node.type === 'text') return textRenderer.needsRecreate(obj, node);
+  return false;
+}
+
 function findPage(doc: Document, pageId: string): Page | undefined {
   return doc.pages.find((p) => p.id === pageId);
 }
@@ -131,6 +136,17 @@ export class SceneReconciler {
         const obj = this.displayObjects.get(cmd.nodeId);
         const location = findNodeInTree(page.children, cmd.nodeId);
         if (!obj || !location) return;
+        if (needsRecreateDisplayObject(obj, location.node)) {
+          const parent = obj.parent;
+          const index = parent ? parent.getChildIndex(obj) : -1;
+          this.destroySubtree(obj);
+          const next = createDisplayObject(location.node, doc);
+          next.label = location.node.id;
+          this.displayObjects.set(location.node.id, next);
+          if (parent && index >= 0) parent.addChildAt(next, index);
+          this.onNodeMounted?.(next, location.node);
+          return;
+        }
         updateDisplayObject(obj, location.node, doc);
         break;
       }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { Text } from 'pixi.js';
+import { Text, Mesh } from 'pixi.js';
 import { textRenderer } from '../renderers/textRenderer';
 import type { TextNode } from '../../schema';
 
@@ -24,7 +24,7 @@ function makeTextNode(overrides: Partial<TextNode> = {}): TextNode {
 describe('textRenderer', () => {
   it('create() returns a PIXI.Text with the node content and position', () => {
     const node = makeTextNode();
-    const obj = textRenderer.create(node);
+    const obj = textRenderer.create(node) as Text;
     expect(obj).toBeInstanceOf(Text);
     expect(obj.text).toBe('Hello world');
     expect(obj.position.x).toBe(10);
@@ -33,7 +33,7 @@ describe('textRenderer', () => {
 
   it('update() changes the text content in place without recreating the object', () => {
     const node = makeTextNode();
-    const obj = textRenderer.create(node);
+    const obj = textRenderer.create(node) as Text;
     const updated = { ...node, content: 'Changed' };
     textRenderer.update(obj, updated);
     expect(obj.text).toBe('Changed');
@@ -41,7 +41,7 @@ describe('textRenderer', () => {
 
   it('update() applies fontSize/fontFamily/align from the node', () => {
     const node = makeTextNode({ font: { family: 'Montserrat', size: 64 }, align: 'center' });
-    const obj = textRenderer.create(node);
+    const obj = textRenderer.create(node) as Text;
     expect(obj.style.fontFamily).toBe('Montserrat');
     expect(obj.style.fontSize).toBe(64);
     expect(obj.style.align).toBe('center');
@@ -49,7 +49,7 @@ describe('textRenderer', () => {
 
   it('wraps text at the node size width', () => {
     const node = makeTextNode({ size: { width: 300, height: 100 } });
-    const obj = textRenderer.create(node);
+    const obj = textRenderer.create(node) as Text;
     expect(obj.style.wordWrap).toBe(true);
     expect(obj.style.wordWrapWidth).toBe(300);
   });
@@ -61,7 +61,7 @@ describe('textRenderer', () => {
 
   it('update() with same font but different size does not revert style after async font load', async () => {
     const node1 = makeTextNode({ size: { width: 200, height: 60 } });
-    const obj = textRenderer.create(node1);
+    const obj = textRenderer.create(node1) as Text;
     expect(obj.style.wordWrapWidth).toBe(200);
 
     const node2 = { ...node1, size: { width: 400, height: 60 } };
@@ -79,12 +79,35 @@ describe('textRenderer', () => {
 
   it('update() does not rebuild the TextStyle when only transform/opacity changed', () => {
     const node = makeTextNode();
-    const obj = textRenderer.create(node);
+    const obj = textRenderer.create(node) as Text;
     const styleBefore = obj.style;
 
     const moved = { ...node, transform: { ...node.transform, x: 999, y: 999 }, opacity: 0.5 };
     textRenderer.update(obj, moved);
 
     expect(obj.style).toBe(styleBefore);
+  });
+
+  it('create() returns a Mesh (not Text) when node.warp is set', () => {
+    const node = makeTextNode({ warp: { type: 'arch', curve: 0.3 } });
+    const obj = textRenderer.create(node);
+    expect(obj).toBeInstanceOf(Mesh);
+  });
+
+  it('create() still returns a Text when node.warp is undefined (zero regression)', () => {
+    const node = makeTextNode();
+    const obj = textRenderer.create(node);
+    expect(obj).toBeInstanceOf(Text);
+  });
+
+  it('needsRecreate is true only when Mesh-vs-Text disagrees with node.warp presence', () => {
+    const warped = makeTextNode({ warp: { type: 'arch', curve: 0.3 } });
+    const flat = makeTextNode();
+    const meshObj = textRenderer.create(warped);
+    const textObj = textRenderer.create(flat);
+    expect(textRenderer.needsRecreate(meshObj, flat)).toBe(true);
+    expect(textRenderer.needsRecreate(meshObj, warped)).toBe(false);
+    expect(textRenderer.needsRecreate(textObj, warped)).toBe(true);
+    expect(textRenderer.needsRecreate(textObj, flat)).toBe(false);
   });
 });
