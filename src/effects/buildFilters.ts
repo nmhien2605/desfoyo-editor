@@ -1,6 +1,6 @@
 import { BlurFilter, Color, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
 import { BevelFilter, DropShadowFilter, GlowFilter, OutlineFilter } from 'pixi-filters';
-import type { Effect } from '../schema';
+import type { Effect, Node } from '../schema';
 import { innerShadowFrag } from './shaders/innerShadow.frag';
 import { customShaders } from './shaders/customShaders';
 
@@ -11,6 +11,9 @@ import { customShaders } from './shaders/customShaders';
 // Phase 3 Pass D adds 'inner-shadow' (a hand-written GLSL filter — no
 // pixi-filters class does this) and 'custom' (picks a named shader from
 // customShaders.ts's registry; not arbitrary user-authored GLSL).
+// Slice 2 adds 'block-shadow' and '3d-shadow' (both reuse DropShadowFilter —
+// no new shader) and a `basis` scaling parameter so shadow-family effects
+// stay proportional on text nodes.
 
 // Effect.uniforms values map onto GLSL uniforms as `u_<key>`, inferring the
 // resource type tag from the JS value shape — a number is 'f32', an array
@@ -27,8 +30,25 @@ function customUniforms(uniforms: Record<string, number | number[]>): Record<str
   return resources;
 }
 
-export function buildFilters(effects: Effect[] | undefined): Filter[] {
+const SHADOW_3D_STEPS = 6;
+
+// Darkens a color toward black by `amount` (0..1) — used by the '3d-shadow'
+// case to progressively shade each chained layer, giving a receding-depth
+// look. Exported for its own focused unit test (no Pixi renderer needed).
+export function darkenColor(color: string, amount: number): string {
+  const [r, g, b] = new Color(color).toArray();
+  return new Color([r * (1 - amount), g * (1 - amount), b * (1 - amount)]).toHex();
+}
+
+// basis: text nodes scale the 4 shadow-family effects (shadow/block-shadow/
+// line-shadow/3d-shadow) by font size, so the same stored Effect looks
+// proportional at any text size — see docs/superpowers/specs/2026-08-03-text-effects-design.md
+// "Auto-scale with text size". basis is always 1 for non-text nodes (or
+// when no node is passed at all), so shape rendering is byte-for-byte
+// unchanged from before this parameter existed.
+export function buildFilters(effects: Effect[] | undefined, node?: Node): Filter[] {
   if (!effects) return [];
+  const basis = node?.type === 'text' ? node.font.size : 1;
 
   const filters: Filter[] = [];
   for (const effect of effects) {
@@ -37,12 +57,37 @@ export function buildFilters(effects: Effect[] | undefined): Filter[] {
         filters.push(
           new DropShadowFilter({
             color: effect.color,
-            blur: effect.blur,
-            offset: { x: effect.offset[0], y: effect.offset[1] },
+            blur: effect.blur * basis,
+            offset: { x: effect.offset[0] * basis, y: effect.offset[1] * basis },
             alpha: effect.alpha,
           }),
         );
         break;
+      case 'block-shadow':
+        filters.push(
+          new DropShadowFilter({
+            color: effect.color,
+            blur: 0,
+            offset: { x: effect.offset[0] * basis, y: effect.offset[1] * basis },
+            alpha: effect.alpha,
+          }),
+        );
+        break;
+      case '3d-shadow': {
+        const depth = effect.depth * basis;
+        for (let i = 1; i <= SHADOW_3D_STEPS; i++) {
+          const t = i / SHADOW_3D_STEPS;
+          filters.push(
+            new DropShadowFilter({
+              color: darkenColor(effect.color, t * 0.6),
+              blur: 0,
+              offset: { x: Math.cos(effect.angle) * depth * t, y: Math.sin(effect.angle) * depth * t },
+              alpha: effect.alpha,
+            }),
+          );
+        }
+        break;
+      }
       case 'glow':
         filters.push(
           new GlowFilter({
