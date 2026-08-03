@@ -44,7 +44,16 @@ export async function loadGoogleFont(family: string, weight = 400): Promise<void
   const link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@${weight}&display=swap`;
-  document.head.appendChild(link);
+  // document.fonts.load() only matches @font-face rules already registered
+  // in the CSSOM — which only happens once this stylesheet's fetch completes
+  // and is parsed. Wait for the link's own load/error event first; a failed
+  // fetch resolves (not rejects) so it can't hang the caller, same
+  // never-throw convention as the rest of this function.
+  await new Promise<void>((resolve) => {
+    link.onload = () => resolve();
+    link.onerror = () => resolve();
+    document.head.appendChild(link);
+  });
 
   await document.fonts.load(`${weight} 16px "${family}"`);
 }

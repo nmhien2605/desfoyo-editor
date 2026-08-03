@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GOOGLE_FONTS, DEFAULT_FONT_FAMILY, loadGoogleFont } from '../googleFonts';
 
 describe('GOOGLE_FONTS', () => {
@@ -17,7 +17,22 @@ describe('GOOGLE_FONTS', () => {
 });
 
 describe('loadGoogleFont', () => {
+  // jsdom never actually fetches the stylesheet, so the <link>'s load event
+  // never fires on its own. Simulate the browser firing it right after the
+  // link is appended, so loadGoogleFont's await doesn't hang.
+  const originalAppendChild = HTMLHeadElement.prototype.appendChild;
+  beforeEach(() => {
+    HTMLHeadElement.prototype.appendChild = function <T extends Node>(node: T): T {
+      const result = originalAppendChild.call(this, node) as T;
+      if (node instanceof HTMLLinkElement) {
+        queueMicrotask(() => node.dispatchEvent(new Event('load')));
+      }
+      return result;
+    };
+  });
+
   afterEach(() => {
+    HTMLHeadElement.prototype.appendChild = originalAppendChild;
     // @ts-expect-error - test-only stub cleanup
     delete document.fonts;
     document.head.querySelectorAll('link[rel="stylesheet"]').forEach((el) => el.remove());
