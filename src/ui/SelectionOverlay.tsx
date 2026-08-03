@@ -7,7 +7,7 @@ import { angleBetween, computeRotation } from '../render/interactions/rotate';
 import { computeSelectionBounds, applyGroupRotate } from '../render/interactions/groupTransformMath';
 import type { Rect } from '../render/interactions/marquee';
 import type { SnapGuide } from '../render/interactions/snapping';
-import type { ImageNode, Node, Transform } from '../schema';
+import type { ImageNode, Node, TextNode, Transform } from '../schema';
 
 const HANDLES: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
@@ -93,6 +93,8 @@ function SingleSelectionOverlay({
   const { canvas } = useCanvasContext();
   const [croppingNodeId, setCroppingNodeId] = useState<string | null>(null);
   const isCropping = node.type === 'image' && croppingNodeId === node.id;
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const isEditingText = node.type === 'text' && editingNodeId === node.id;
   const originX = node.transform.originX ?? 0;
   const originY = node.transform.originY ?? 0;
   // Un-rotated top-left corner in world space; CSS `transform: rotate()`
@@ -167,7 +169,10 @@ function SingleSelectionOverlay({
   return (
     <div className="pointer-events-none absolute inset-0">
       <div
-        onDoubleClick={() => node.type === 'image' && setCroppingNodeId(isCropping ? null : node.id)}
+        onDoubleClick={() => {
+          if (node.type === 'image') setCroppingNodeId(isCropping ? null : node.id);
+          if (node.type === 'text') setEditingNodeId(node.id);
+        }}
         // Only image nodes get `pointer-events-auto` here (for the
         // double-click-to-crop toggle above), which makes this DOM div
         // itself the native pointerdown target instead of the canvas below
@@ -197,7 +202,9 @@ function SingleSelectionOverlay({
             }),
           );
         }}
-        className={`absolute border-2 border-blue-500 ${node.type === 'image' ? 'pointer-events-auto' : ''}`}
+        className={`absolute border-2 border-blue-500 ${
+          node.type === 'image' || node.type === 'text' ? 'pointer-events-auto' : ''
+        }`}
         style={{
           left: topLeftScreen.x,
           top: topLeftScreen.y,
@@ -207,7 +214,7 @@ function SingleSelectionOverlay({
           transform: `rotate(${rotationDeg}deg)`,
         }}
       />
-      {!isCropping &&
+      {!isCropping && !isEditingText &&
         HANDLES.map((handle) => {
           const pos = viewport.toScreen(worldPoint(node, localCorner(handle, node.size.width, node.size.height)));
           return (
@@ -219,7 +226,7 @@ function SingleSelectionOverlay({
             />
           );
         })}
-      {!isCropping && (
+      {!isCropping && !isEditingText && (
         <div
           onPointerDown={startRotate}
           className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border border-blue-500 bg-white"
@@ -228,6 +235,16 @@ function SingleSelectionOverlay({
       )}
       {isCropping && node.type === 'image' && (
         <ImageCropHandles node={node} activePageId={activePageId} viewport={viewport} />
+      )}
+      {isEditingText && node.type === 'text' && (
+        <TextEditOverlay
+          node={node}
+          activePageId={activePageId}
+          topLeftScreen={topLeftScreen}
+          rotationDeg={rotationDeg}
+          zoom={camera.zoom}
+          onDone={() => setEditingNodeId(null)}
+        />
       )}
       {extras}
     </div>
@@ -317,6 +334,67 @@ function ImageCropHandles({ node, activePageId, viewport }: { node: ImageNode; a
         );
       })}
     </>
+  );
+}
+
+// Inline text editing: an absolutely-positioned <textarea> over the node's
+// screen-space rect (double-click to enter, mirroring ImageCropHandles'
+// double-click-to-crop toggle above). Enter (without Shift) or blur commits
+// via UpdateProps; Escape cancels without dispatching. Local `value` state
+// so keystrokes don't round-trip through the store/history on every
+// character — only the committed content becomes a history entry.
+function TextEditOverlay({
+  node,
+  activePageId,
+  topLeftScreen,
+  rotationDeg,
+  zoom,
+  onDone,
+}: {
+  node: TextNode;
+  activePageId: string;
+  topLeftScreen: Point;
+  rotationDeg: number;
+  zoom: number;
+  onDone: () => void;
+}) {
+  const store = useEditorStoreApi();
+  const [value, setValue] = useState(node.content);
+
+  const commit = () => {
+    if (value !== node.content) {
+      store.getState().dispatch({ type: 'UpdateProps', pageId: activePageId, nodeId: node.id, patch: { content: value } });
+    }
+    onDone();
+  };
+
+  return (
+    <textarea
+      autoFocus
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          onDone();
+        }
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          commit();
+        }
+      }}
+      className="pointer-events-auto absolute resize-none border-2 border-blue-500 bg-white/90 p-0 outline-none"
+      style={{
+        left: topLeftScreen.x,
+        top: topLeftScreen.y,
+        width: node.size.width * zoom,
+        height: node.size.height * zoom,
+        fontSize: node.font.size * zoom,
+        transformOrigin: '0 0',
+        transform: `rotate(${rotationDeg}deg)`,
+      }}
+    />
   );
 }
 
