@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
 import { customShaders } from '../effects/shaders/customShaders';
 import { decodeSvgText, listFillableIds } from '../render/renderers/svgRenderer';
-import type { BlendMode, Effect, Fill, ImageNode, Node, Stroke, SvgNode } from '../schema';
+import type { BlendMode, Effect, Fill, ImageNode, Node, Stroke, SvgNode, TextNode } from '../schema';
+import { GOOGLE_FONTS } from '../fonts/googleFonts';
 
 const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten'];
 const STROKE_ALIGNS: Stroke['align'][] = ['inside', 'center', 'outside'];
@@ -31,7 +32,7 @@ function defaultEffect(type: Effect['type']): Effect {
 }
 
 function hasFill(node: Node): node is Node & { fill: Fill } {
-  return node.type === 'shape';
+  return node.type === 'shape' || node.type === 'text';
 }
 
 function stopColor(fill: Fill, index: number): string {
@@ -111,6 +112,10 @@ export function PropertiesPanel() {
 
       {node.type === 'svg' && (
         <SvgControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />
+      )}
+
+      {node.type === 'text' && (
+        <TextControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />
       )}
 
       <EffectsControls effects={node.effects} onChange={(effects) => updateProps({ effects })} />
@@ -332,6 +337,79 @@ function SvgControls({ node, onChange }: { node: SvgNode; onChange: (patch: Part
           </label>
         );
       })}
+    </fieldset>
+  );
+}
+
+// Font/size/weight/italic/align controls for a TextNode. Fill/opacity/
+// blend-mode/effects are already handled by the shared controls above
+// (hasFill() now includes 'text'). Stroke controls are deliberately not
+// shown here yet — TextNode.stroke isn't rendered until the decorations
+// slice (see textRenderer.ts).
+function TextControls({ node, onChange }: { node: TextNode; onChange: (patch: Partial<TextNode>) => void }) {
+  const fontEntry = GOOGLE_FONTS.find((f) => f.family === node.font.family) ?? GOOGLE_FONTS[0];
+
+  return (
+    <fieldset className="flex flex-col gap-1">
+      <legend className="font-medium">Text</legend>
+      <label className="flex flex-col gap-1">
+        Font
+        <select
+          value={node.font.family}
+          onChange={(e) => onChange({ font: { ...node.font, family: e.target.value } })}
+          className="rounded border border-gray-300 px-1 py-0.5"
+        >
+          {GOOGLE_FONTS.map((f) => (
+            <option key={f.family} value={f.family}>
+              {f.family}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex flex-col gap-1">
+        Weight
+        <select
+          value={node.font.weight ?? 400}
+          onChange={(e) => onChange({ font: { ...node.font, weight: Number(e.target.value) } })}
+          className="rounded border border-gray-300 px-1 py-0.5"
+        >
+          {fontEntry.weights.map((w) => (
+            <option key={w} value={w}>
+              {w}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex flex-col gap-1">
+        Size
+        <input
+          type="number"
+          min={1}
+          value={node.font.size}
+          onChange={(e) => onChange({ font: { ...node.font, size: Number(e.target.value) } })}
+          className="rounded border border-gray-300 px-1 py-0.5"
+        />
+      </label>
+      <label className="flex items-center gap-1">
+        <input
+          type="checkbox"
+          checked={node.font.italic ?? false}
+          onChange={(e) => onChange({ font: { ...node.font, italic: e.target.checked } })}
+        />
+        Italic
+      </label>
+      <label className="flex flex-col gap-1">
+        Align
+        <select
+          value={node.align}
+          onChange={(e) => onChange({ align: e.target.value as TextNode['align'] })}
+          className="rounded border border-gray-300 px-1 py-0.5"
+        >
+          <option value="left">Left</option>
+          <option value="center">Center</option>
+          <option value="right">Right</option>
+        </select>
+      </label>
     </fieldset>
   );
 }
