@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { Container, Graphics, Sprite } from 'pixi.js';
+import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import { SceneReconciler } from '../SceneReconciler';
 import type { Document, Page } from '../../schema';
 
@@ -43,6 +43,19 @@ function makePage(): Page {
         locked: false,
         assetId: 'asset-1',
       },
+      {
+        id: 'text-1',
+        type: 'text',
+        transform: { x: 20, y: 20, scaleX: 1, scaleY: 1, rotation: 0 },
+        size: { width: 150, height: 40 },
+        opacity: 1,
+        visible: true,
+        locked: false,
+        content: 'Title',
+        font: { family: 'Roboto', size: 24 },
+        align: 'left',
+        fill: { type: 'solid', color: '#000000' },
+      },
     ],
   };
 }
@@ -64,7 +77,7 @@ describe('SceneReconciler', () => {
     const page = makePage();
     reconciler.mount(page, makeDoc(page));
 
-    expect(layer.children).toHaveLength(3);
+    expect(layer.children).toHaveLength(4);
     expect(reconciler.getDisplayObject('shape-0')).toBeInstanceOf(Graphics);
     expect(reconciler.getDisplayObject('shape-1')).toBeInstanceOf(Graphics);
     // Image nodes render as a wrapper Container (holding a Sprite child)
@@ -103,7 +116,7 @@ describe('SceneReconciler', () => {
 
     reconciler.apply({ type: 'AddNode', pageId: 'page-1', node: newNode }, doc);
 
-    expect(layer.children).toHaveLength(4);
+    expect(layer.children).toHaveLength(5);
     expect(reconciler.getDisplayObject('shape-2')).toBeInstanceOf(Graphics);
     expect(reconciler.getDisplayObject('shape-0')).toBe(existingShape0);
     expect(reconciler.getDisplayObject('shape-1')).toBe(existingShape);
@@ -122,7 +135,7 @@ describe('SceneReconciler', () => {
 
     reconciler.apply({ type: 'RemoveNode', pageId: 'page-1', nodeId: 'shape-1' }, newDoc);
 
-    expect(layer.children).toHaveLength(2);
+    expect(layer.children).toHaveLength(3);
     expect(reconciler.getDisplayObject('shape-1')).toBeUndefined();
     expect(obj.destroyed).toBe(true);
   });
@@ -199,7 +212,7 @@ describe('SceneReconciler', () => {
     const doc = makeDoc(page);
     reconciler.mount(page, doc);
 
-    expect(layer.children).toHaveLength(4); // 3 leaf nodes + 1 group container at the top level
+    expect(layer.children).toHaveLength(5); // 4 leaf nodes + 1 group container at the top level
     const groupContainer = reconciler.getDisplayObject('group-1')!;
     expect(groupContainer).toBeInstanceOf(Container);
     expect(groupContainer.parent).toBe(layer);
@@ -247,5 +260,14 @@ describe('SceneReconciler', () => {
     expect(reconciler.getDisplayObject('group-1')).toBeUndefined();
     expect(reconciler.getDisplayObject('nested-shape')).toBeUndefined();
     expect(nestedContainer.destroyed).toBe(true);
+  });
+
+  it('mounts a text node as a PIXI.Text', () => {
+    const layer = new Container();
+    const reconciler = new SceneReconciler(layer);
+    const page = makePage();
+    reconciler.mount(page, makeDoc(page));
+
+    expect(reconciler.getDisplayObject('text-1')).toBeInstanceOf(Text);
   });
 });
