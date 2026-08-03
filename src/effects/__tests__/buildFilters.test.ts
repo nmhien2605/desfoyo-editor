@@ -53,6 +53,12 @@ describe('buildFilters', () => {
     expect(filter).toBeInstanceOf(Filter);
   });
 
+  it('builds a custom Filter for line-shadow', () => {
+    const effects: Effect[] = [{ type: 'line-shadow', color: '#000000', offset: [6, 6], thickness: 1, alpha: 0.9 }];
+    const [filter] = buildFilters(effects);
+    expect(filter).toBeInstanceOf(Filter);
+  });
+
   it('builds a custom Filter for a known custom shaderId', () => {
     const effects: Effect[] = [{ type: 'custom', shaderId: 'chromatic-aberration', uniforms: { strength: 2 } }];
     const [filter] = buildFilters(effects);

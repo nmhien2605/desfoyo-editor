@@ -2,6 +2,7 @@ import { BlurFilter, Color, Filter, GlProgram, defaultFilterVert } from 'pixi.js
 import { BevelFilter, DropShadowFilter, GlowFilter, OutlineFilter } from 'pixi-filters';
 import type { Effect, Node } from '../schema';
 import { innerShadowFrag } from './shaders/innerShadow.frag';
+import { lineShadowFrag } from './shaders/lineShadow.frag';
 import { customShaders } from './shaders/customShaders';
 
 // Phase 1 wired up only 'shadow'. Phase 3 Pass A adds glow/outline/blur
@@ -124,6 +125,23 @@ export function buildFilters(effects: Effect[] | undefined, node?: Node): Filter
                 uColor: { value: new Float32Array([r, g, b]), type: 'vec3<f32>' },
                 uOffset: { value: effect.offset, type: 'vec2<f32>' },
                 uBlur: { value: effect.blur, type: 'f32' },
+              },
+            },
+          }),
+        );
+        break;
+      }
+      case 'line-shadow': {
+        const [r, g, b] = new Color(effect.color).toArray();
+        filters.push(
+          new Filter({
+            glProgram: new GlProgram({ vertex: defaultFilterVert, fragment: lineShadowFrag, name: 'line-shadow-filter' }),
+            resources: {
+              lineShadowUniforms: {
+                uColor: { value: new Float32Array([r, g, b]), type: 'vec3<f32>' },
+                uAlpha: { value: effect.alpha, type: 'f32' },
+                uOffset: { value: [effect.offset[0] * basis, effect.offset[1] * basis], type: 'vec2<f32>' },
+                uThickness: { value: effect.thickness * basis, type: 'f32' },
               },
             },
           }),
