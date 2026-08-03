@@ -129,5 +129,10 @@ export function serializeNode(node: Node, doc: Document, defs: string[], rasteri
     const children = group.children.map((c) => serializeNode(c, doc, defs, rasterized)).join('');
     return `<g${groupAttrs(node)}>${children}</g>`;
   }
+  if (node.type === 'text') {
+    const href = rasterized?.[node.id];
+    if (!href) return '';
+    return `<image${groupAttrs(node)} width="${node.size.width}" height="${node.size.height}" href="${href}"/>`;
+  }
   return `<g${groupAttrs(node)}>${shapeElement(node, defs)}</g>`;
 }

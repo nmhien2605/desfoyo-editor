@@ -16,7 +16,7 @@ export function exportPng(app: Application, pageContainer: Container): Promise<B
   });
 }
 
-// Walks the page for 'svg' nodes (the type svgSerializer.ts's serializeNode
+// Walks the page for 'svg' and 'text' nodes (the types svgSerializer.ts's serializeNode
 // rasterizes rather than serializing as real vector markup — see
 // svgSerializer.ts's RasterizedMap doc comment for why) and extracts each
 // one's live (post-effects) Pixi render via the same renderer.extract
@@ -26,7 +26,7 @@ async function rasterizeTextAndSvgNodes(app: Application, page: Page, reconciler
   const map: RasterizedMap = {};
   const pending: Promise<void>[] = [];
   walkTree(page.children, (node) => {
-    if (node.type !== 'svg') return;
+    if (node.type !== 'svg' && node.type !== 'text') return;
     const obj = reconciler.getDisplayObject(node.id);
     if (!obj) return;
     pending.push(

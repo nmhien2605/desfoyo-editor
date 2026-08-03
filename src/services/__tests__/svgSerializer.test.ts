@@ -26,6 +26,21 @@ function rectNode(overrides: Partial<ShapeNode> = {}): ShapeNode {
   };
 }
 
+function textNode(overrides: Partial<Node & { type: 'text' }> = {}): Node {
+  return {
+    id: 'text-1',
+    type: 'text',
+    transform: { ...baseTransform },
+    size: { width: 100, height: 40 },
+    ...baseFields,
+    content: 'Hi',
+    font: { family: 'Roboto', size: 24 },
+    align: 'left',
+    fill: { type: 'solid', color: '#000000' },
+    ...overrides,
+  } as Node;
+}
+
 describe('serializeNode', () => {
   it('returns an empty string for an invisible node', () => {
     expect(serializeNode(rectNode({ visible: false }), doc, [])).toBe('');
@@ -83,5 +98,15 @@ describe('serializeNode', () => {
     const out = serializeNode(group, doc, []);
     expect(out.startsWith('<g')).toBe(true);
     expect(out).toContain('<rect');
+  });
+
+  it('serializes a text node as an <image> using the rasterized map', () => {
+    const out = serializeNode(textNode(), doc, [], { 'text-1': 'data:image/png;base64,AAAA' });
+    expect(out).toContain('<image');
+    expect(out).toContain('href="data:image/png;base64,AAAA"');
+  });
+
+  it('returns an empty string for a text node with no rasterized entry', () => {
+    expect(serializeNode(textNode(), doc, [])).toBe('');
   });
 });
