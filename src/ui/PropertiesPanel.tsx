@@ -235,7 +235,7 @@ function EffectParams({ effect, onChange }: { effect: Effect; onChange: (effect:
       return (
         <>
           <input type="color" value={effect.color} onChange={(e) => onChange({ ...effect, color: e.target.value })} />
-          <input type="number" min={0} value={effect.blur} onChange={(e) => onChange({ ...effect, blur: Number(e.target.value) })} placeholder="blur" className="rounded border border-gray-300 px-1 py-0.5" />
+          <input type="number" min={0} step={0.01} value={effect.blur} onChange={(e) => onChange({ ...effect, blur: Number(e.target.value) })} placeholder="blur" className="rounded border border-gray-300 px-1 py-0.5" />
         </>
       );
     case 'glow':
@@ -274,6 +274,7 @@ function EffectParams({ effect, onChange }: { effect: Effect; onChange: (effect:
           <div className="flex gap-1">
             <input
               type="number"
+              step={0.01}
               placeholder="offset x"
               value={effect.offset[0]}
               onChange={(e) => onChange({ ...effect, offset: [Number(e.target.value), effect.offset[1]] })}
@@ -281,6 +282,7 @@ function EffectParams({ effect, onChange }: { effect: Effect; onChange: (effect:
             />
             <input
               type="number"
+              step={0.01}
               placeholder="offset y"
               value={effect.offset[1]}
               onChange={(e) => onChange({ ...effect, offset: [effect.offset[0], Number(e.target.value)] })}
@@ -296,6 +298,7 @@ function EffectParams({ effect, onChange }: { effect: Effect; onChange: (effect:
           <div className="flex gap-1">
             <input
               type="number"
+              step={0.01}
               placeholder="offset x"
               value={effect.offset[0]}
               onChange={(e) => onChange({ ...effect, offset: [Number(e.target.value), effect.offset[1]] })}
@@ -303,6 +306,7 @@ function EffectParams({ effect, onChange }: { effect: Effect; onChange: (effect:
             />
             <input
               type="number"
+              step={0.01}
               placeholder="offset y"
               value={effect.offset[1]}
               onChange={(e) => onChange({ ...effect, offset: [effect.offset[0], Number(e.target.value)] })}
@@ -312,6 +316,7 @@ function EffectParams({ effect, onChange }: { effect: Effect; onChange: (effect:
           <input
             type="number"
             min={0}
+            step={0.01}
             value={effect.thickness}
             onChange={(e) => onChange({ ...effect, thickness: Number(e.target.value) })}
             placeholder="thickness"
@@ -333,6 +338,7 @@ function EffectParams({ effect, onChange }: { effect: Effect; onChange: (effect:
           <input
             type="number"
             min={0}
+            step={0.01}
             value={effect.depth}
             onChange={(e) => onChange({ ...effect, depth: Number(e.target.value) })}
             placeholder="depth"

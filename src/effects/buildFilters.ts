@@ -76,13 +76,23 @@ export function buildFilters(effects: Effect[] | undefined, node?: Node): Filter
         break;
       case '3d-shadow': {
         const depth = effect.depth * basis;
+        // Pixi's FilterSystem chains a node's .filters sequentially via
+        // ping-pong texture buffers (see FilterSystem._applyFiltersToTexture,
+        // node_modules/pixi.js/lib/filters/FilterSystem.js:511-538): filter N's
+        // input is filter N-1's *output*, not the original unfiltered texture.
+        // So each step's DropShadowFilter.offset accumulates on top of every
+        // prior step's already-shifted result. A constant per-step offset of
+        // depth / SHADOW_3D_STEPS is what makes the chain's TOTAL displacement
+        // by the last step equal `depth` — a linearly-increasing per-step
+        // offset (the old `* t` factor) would instead sum to depth * 3.5.
+        const stepOffset = depth / SHADOW_3D_STEPS;
         for (let i = 1; i <= SHADOW_3D_STEPS; i++) {
           const t = i / SHADOW_3D_STEPS;
           filters.push(
             new DropShadowFilter({
               color: darkenColor(effect.color, t * 0.6),
               blur: 0,
-              offset: { x: Math.cos(effect.angle) * depth * t, y: Math.sin(effect.angle) * depth * t },
+              offset: { x: Math.cos(effect.angle) * stepOffset, y: Math.sin(effect.angle) * stepOffset },
               alpha: effect.alpha,
             }),
           );
@@ -133,6 +143,8 @@ export function buildFilters(effects: Effect[] | undefined, node?: Node): Filter
       }
       case 'line-shadow': {
         const [r, g, b] = new Color(effect.color).toArray();
+        const scaledOffset: [number, number] = [effect.offset[0] * basis, effect.offset[1] * basis];
+        const scaledThickness = effect.thickness * basis;
         filters.push(
           new Filter({
             glProgram: new GlProgram({ vertex: defaultFilterVert, fragment: lineShadowFrag, name: 'line-shadow-filter' }),
@@ -140,10 +152,16 @@ export function buildFilters(effects: Effect[] | undefined, node?: Node): Filter
               lineShadowUniforms: {
                 uColor: { value: new Float32Array([r, g, b]), type: 'vec3<f32>' },
                 uAlpha: { value: effect.alpha, type: 'f32' },
-                uOffset: { value: [effect.offset[0] * basis, effect.offset[1] * basis], type: 'vec2<f32>' },
-                uThickness: { value: effect.thickness * basis, type: 'f32' },
+                uOffset: { value: scaledOffset, type: 'vec2<f32>' },
+                uThickness: { value: scaledThickness, type: 'f32' },
               },
             },
+            // Unlike DropShadowFilter (which computes its own padding from
+            // blur+offset internally), a base Filter defaults padding to 0
+            // (node_modules/pixi.js/lib/filters/Filter.js) — without it, the
+            // part of the offset silhouette beyond the node's own bounds gets
+            // clipped off.
+            padding: Math.ceil(Math.max(Math.abs(scaledOffset[0]), Math.abs(scaledOffset[1])) + scaledThickness),
           }),
         );
         break;

@@ -132,12 +132,64 @@ describe('buildFilters', () => {
     const filters = buildFilters(effects) as DropShadowFilter[];
     expect(filters).toHaveLength(6);
     for (const filter of filters) expect(filter).toBeInstanceOf(DropShadowFilter);
-    // angle 0 -> offset is purely along x, increasing with each step
-    expect(filters[0].offset.x).toBeLessThan(filters[5].offset.x);
-    expect(filters[5].offset.x).toBeCloseTo(12); // last step reaches full depth
+    // Pixi chains a node's .filters sequentially (each filter's input is the
+    // previous filter's output, not the original texture — see
+    // FilterSystem._applyFiltersToTexture), so `depth` is the TOTAL
+    // accumulated displacement across the whole chain, not any single step's
+    // own offset. Each step's own DropShadowFilter.offset is a constant
+    // depth / SHADOW_3D_STEPS = 12 / 6 = 2 — identical across every step —
+    // and it's the chaining itself that sums these to the full depth by the
+    // last step.
+    expect(filters[0].offset.x).toBeCloseTo(2);
+    expect(filters[5].offset.x).toBeCloseTo(2);
     // each step's color should darken monotonically toward black
     const toRed = (f: DropShadowFilter) => new Color(f.color).toArray()[0];
     expect(toRed(filters[0])).toBeGreaterThan(toRed(filters[5]));
+  });
+
+  it('scales line-shadow offset/thickness by font size for a text node', () => {
+    const node: TextNode = {
+      id: 'text-1',
+      transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+      size: { width: 200, height: 60 },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      type: 'text',
+      content: 'Hi',
+      font: { family: 'Roboto', size: 50 },
+      align: 'left',
+      fill: { type: 'solid', color: '#000000' },
+    };
+    const effects: Effect[] = [{ type: 'line-shadow', color: '#000000', offset: [0.1, 0.1], thickness: 0.02, alpha: 0.9 }];
+    const [filter] = buildFilters(effects, node) as [Filter];
+    // Pixi's UniformGroup exposes each uniform's live value directly under
+    // `.uniforms.<name>` (not wrapped in `{ value }` like the resource
+    // descriptor object we constructed it from) — confirmed by inspecting
+    // the actual constructed Filter instance at runtime.
+    const uniforms = (filter.resources.lineShadowUniforms as { uniforms: { uOffset: number[]; uThickness: number } }).uniforms;
+    expect(uniforms.uOffset[0]).toBeCloseTo(5); // 0.1 * 50
+    expect(uniforms.uThickness).toBeCloseTo(1); // 0.02 * 50
+  });
+
+  it('scales 3d-shadow depth by font size for a text node', () => {
+    const node: TextNode = {
+      id: 'text-1',
+      transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+      size: { width: 200, height: 60 },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      type: 'text',
+      content: 'Hi',
+      font: { family: 'Roboto', size: 50 },
+      align: 'left',
+      fill: { type: 'solid', color: '#000000' },
+    };
+    const effects: Effect[] = [{ type: '3d-shadow', color: '#ffffff', angle: 0, depth: 0.2, alpha: 1 }];
+    const filters = buildFilters(effects, node) as DropShadowFilter[];
+    // each step's own offset is (depth * basis) / SHADOW_3D_STEPS = (0.2 * 50) / 6
+    expect(filters[0].offset.x).toBeCloseTo((0.2 * 50) / 6);
   });
 
   it('darkenColor scales rgb channels toward black without throwing on white or black input', () => {
