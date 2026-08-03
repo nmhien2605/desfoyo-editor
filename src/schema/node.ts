@@ -52,6 +52,22 @@ export const SvgNodeSchema = z.object({
 });
 export type SvgNode = z.infer<typeof SvgNodeSchema>;
 
+export const WarpSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('arch'), curve: z.number() }),
+  z.object({ type: z.literal('wave'), amplitude: z.number(), frequency: z.number() }),
+  z.object({ type: z.literal('rise'), amount: z.number() }),
+  z.object({ type: z.literal('flag'), amplitude: z.number(), frequency: z.number() }),
+  z.object({ type: z.literal('circle'), curve: z.number() }),
+  z.object({ type: z.literal('distort'), amountX: z.number(), amountY: z.number() }),
+  z.object({ type: z.literal('angle'), angle: z.number() }),
+  z.object({
+    type: z.literal('custom-mesh'),
+    gridSize: z.tuple([z.number(), z.number()]),
+    points: z.array(z.number()),
+  }),
+]);
+export type Warp = z.infer<typeof WarpSchema>;
+
 // TextNode (TextNode foundation slice, see
 // docs/superpowers/specs/2026-08-03-text-effects-design.md): plain text,
 // no warp/decorations yet (later slices). `stroke` reuses StrokeSchema
@@ -74,6 +90,7 @@ export const TextNodeSchema = z.object({
   align: z.enum(['left', 'center', 'right']),
   fill: FillSchema,
   stroke: StrokeSchema.optional(),
+  warp: WarpSchema.optional(),
 });
 export type TextNode = z.infer<typeof TextNodeSchema>;
 

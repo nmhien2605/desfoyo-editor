@@ -157,3 +157,40 @@ describe('DocumentSchema', () => {
     expect(() => EffectSchema.parse(effect)).toThrow();
   });
 });
+
+describe('TextNode.warp', () => {
+  const baseTextNode = {
+    id: 'node_warp',
+    type: 'text' as const,
+    transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+    size: { width: 200, height: 60 },
+    opacity: 1,
+    visible: true,
+    locked: false,
+    content: 'Hello',
+    font: { family: 'Roboto', size: 48 },
+    align: 'left' as const,
+    fill: { type: 'solid' as const, color: '#000000' },
+  };
+
+  const warpVariants = [
+    { type: 'arch', curve: 0.5 },
+    { type: 'wave', amplitude: 0.1, frequency: 2 },
+    { type: 'rise', amount: 0.3 },
+    { type: 'flag', amplitude: 0.1, frequency: 2 },
+    { type: 'circle', curve: -0.4 },
+    { type: 'distort', amountX: 5, amountY: 5 },
+    { type: 'angle', angle: 0.2 },
+    { type: 'custom-mesh', gridSize: [3, 2], points: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  ];
+
+  it.each(warpVariants)('accepts a $type TextNode.warp variant', (warp) => {
+    const node = { ...baseTextNode, warp };
+    expect(() => NodeSchema.parse(node)).not.toThrow();
+    expect(NodeSchema.parse(node)).toMatchObject({ warp });
+  });
+
+  it('TextNode.warp is optional — an existing warp-less TextNode still parses', () => {
+    expect(() => NodeSchema.parse(baseTextNode)).not.toThrow();
+  });
+});
