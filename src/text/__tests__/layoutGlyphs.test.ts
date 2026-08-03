@@ -40,4 +40,15 @@ describe('layoutGlyphs', () => {
     const withoutSpacing = layoutGlyphs(font, 'AA', 100, 1000);
     expect(withSpacing[1].x).toBeCloseTo(withoutSpacing[1].x + 10, 5);
   });
+
+  // Regression test for finding 1 of the final review: the first line's
+  // baseline must sit below the box top (at the font's ascender height), not
+  // at y=0 — a y=0 baseline puts every glyph entirely above the node's box
+  // once warpMesh.ts's y-up -> y-down flip is applied.
+  it("places the first line's baseline below the box top, not at y=0", () => {
+    const font = buildFixtureFont();
+    const placements = layoutGlyphs(font, 'A', 100, 1000);
+    expect(placements[0].y).toBeGreaterThan(0);
+    expect(placements[0].y).toBeLessThan(100); // fontSize
+  });
 });

@@ -16,10 +16,22 @@ function buildFixtureFont(): opentype.Font {
   const lPath = new opentype.Path();
   lPath.moveTo(0, 0); lPath.lineTo(200, 0); lPath.lineTo(200, 700); lPath.lineTo(0, 700); lPath.close();
 
+  // Two disjoint same-winding contours (same point order/winding as
+  // `outer` above), mimicking 'i''s stem + dot — regression fixture for
+  // finding 6 (multiple same-winding outer contours dropping all but the
+  // first).
+  const stem = new opentype.Path();
+  stem.moveTo(0, 0); stem.lineTo(200, 0); stem.lineTo(200, 500); stem.lineTo(0, 500); stem.close();
+  const dot = new opentype.Path();
+  dot.moveTo(0, 600); dot.lineTo(200, 600); dot.lineTo(200, 700); dot.lineTo(0, 700); dot.close();
+  const iPath = new opentype.Path();
+  iPath.commands = [...stem.commands, ...dot.commands];
+
   const notdef = new opentype.Glyph({ name: '.notdef', unicode: 0, advanceWidth: 0, path: new opentype.Path() });
   const oGlyph = new opentype.Glyph({ name: 'o', unicode: 111, advanceWidth: 600, path: oPath });
   const lGlyph = new opentype.Glyph({ name: 'l', unicode: 108, advanceWidth: 200, path: lPath });
-  return new opentype.Font({ familyName: 'Fixture', styleName: 'Regular', unitsPerEm: 1000, ascender: 800, descender: -200, glyphs: [notdef, oGlyph, lGlyph] });
+  const iGlyph = new opentype.Glyph({ name: 'i', unicode: 105, advanceWidth: 200, path: iPath });
+  return new opentype.Font({ familyName: 'Fixture', styleName: 'Regular', unitsPerEm: 1000, ascender: 800, descender: -200, glyphs: [notdef, oGlyph, lGlyph, iGlyph] });
 }
 
 describe('buildWarpedGlyphGeometry', () => {
@@ -102,5 +114,47 @@ describe('buildWarpedGlyphGeometry', () => {
     const flat = buildWarpedGlyphGeometry(font, placements, 100, { type: 'rise', amount: 0 }, 1000, 100);
     const risen = buildWarpedGlyphGeometry(font, placements, 100, { type: 'rise', amount: 1 }, 1000, 100);
     expect(flat.gradientUvs).toEqual(risen.gradientUvs);
+  });
+
+  // Regression test for finding 1 of the final review: with the baseline
+  // fix in layoutGlyphs.ts, an unwarped glyph's gradientUvs.y values must
+  // land within [0, 1] (box-relative), not in the negative range a y=0
+  // baseline would produce — otherwise glyphFill.ts's radial gradient and
+  // non-horizontal linear-gradient angles sample the wrong region.
+  it('gradientUvs y-component lands within [0, 1] for an unwarped glyph', () => {
+    const font = buildFixtureFont();
+    const boxHeight = 100;
+    const placements = layoutGlyphs(font, 'l', 100, 1000);
+    const noWarp = { type: 'arch' as const, curve: 0 }; // documented no-op
+    const geom = buildWarpedGlyphGeometry(font, placements, 100, noWarp, 1000, boxHeight);
+    for (let i = 1; i < geom.gradientUvs.length; i += 2) {
+      expect(geom.gradientUvs[i]).toBeGreaterThanOrEqual(0);
+      expect(geom.gradientUvs[i]).toBeLessThanOrEqual(1);
+    }
+  });
+
+  // Regression test for finding 6: a glyph with two disjoint same-winding
+  // contours (stem + dot, like 'i'/'j') must triangulate BOTH, not just the
+  // first. Verified via total triangle area, same technique as the
+  // hole-exclusion test above — both rects' areas must be present.
+  it('triangulates every same-winding contour in a multi-contour glyph (e.g. i/j dot)', () => {
+    const font = buildFixtureFont();
+    const placements = layoutGlyphs(font, 'i', 100, 1000);
+    const noWarp = { type: 'arch' as const, curve: 0 }; // documented no-op
+    const geom = buildWarpedGlyphGeometry(font, placements, 100, noWarp, 1000, 100);
+
+    let totalArea = 0;
+    for (let i = 0; i < geom.indices.length; i += 3) {
+      const ia = geom.indices[i], ib = geom.indices[i + 1], ic = geom.indices[i + 2];
+      const ax = geom.positions[ia * 2], ay = geom.positions[ia * 2 + 1];
+      const bx = geom.positions[ib * 2], by = geom.positions[ib * 2 + 1];
+      const cx = geom.positions[ic * 2], cy = geom.positions[ic * 2 + 1];
+      totalArea += Math.abs((bx - ax) * (cy - ay) - (cx - ax) * (by - ay)) / 2;
+    }
+
+    // stem 200x500 + dot 200x100, in font units, scaled by (fontSize/unitsPerEm)^2.
+    const scale = 100 / 1000;
+    const expectedArea = (200 * 500 + 200 * 100) * scale * scale;
+    expect(totalArea).toBeCloseTo(expectedArea, 5);
   });
 });

@@ -95,24 +95,47 @@ function signedArea(points: number[]): number {
   return area / 2;
 }
 
+// Groups contours into "shapes": each shape starts at an outer-winding
+// contour and picks up any immediately-following opposite-winding contours
+// as its holes. A glyph with multiple independent same-winding sub-shapes
+// (e.g. 'i'/'j''s dot, or '%'/'='/'"'/':'/'!'/'?''s disjoint parts) produces
+// multiple shapes here, each triangulated with its own earcut call and
+// concatenated — same index-rebasing idea buildWarpedGlyphGeometry already
+// uses one level up, to concatenate multiple glyphs.
 function triangulateGlyph(contours: Contour[]): { positions: number[]; indices: number[] } {
   if (contours.length === 0) return { positions: [], indices: [] };
   const outerSign = Math.sign(signedArea(contours[0].points));
-  const flatPositions: number[] = [];
-  const holeIndices: number[] = [];
+
+  const positions: number[] = [];
+  const indices: number[] = [];
+  let shapePositions: number[] = [];
+  let shapeHoleIndices: number[] = [];
+
+  const flushShape = () => {
+    if (shapePositions.length === 0) return;
+    const baseIndex = positions.length / 2;
+    const shapeIndices = earcut(shapePositions, shapeHoleIndices.length ? shapeHoleIndices : undefined);
+    for (const idx of shapeIndices) indices.push(baseIndex + idx);
+    positions.push(...shapePositions);
+    shapePositions = [];
+    shapeHoleIndices = [];
+  };
+
   for (const contour of contours) {
     const sign = Math.sign(signedArea(contour.points));
-    if (flatPositions.length > 0 && sign === outerSign) {
-      // A second same-winding contour (e.g. 'i''s dot) is a separate glyph
-      // shape, not a hole in the first — triangulate it independently and
-      // concatenate, since earcut only supports one outer + holes per call.
-      continue; // v1 scope cut: multi-outer-contour glyphs (dotted i/j, %) render only their first/largest contour — documented limitation, not a crash.
+    if (sign === outerSign) {
+      // A new outer-winding contour starts a new shape — flush whatever
+      // shape (outer + its holes) was accumulated so far.
+      flushShape();
+      shapePositions.push(...contour.points);
+    } else {
+      shapeHoleIndices.push(shapePositions.length / 2);
+      shapePositions.push(...contour.points);
     }
-    if (sign !== outerSign) holeIndices.push(flatPositions.length / 2);
-    flatPositions.push(...contour.points);
   }
-  const indices = earcut(flatPositions, holeIndices.length ? holeIndices : undefined);
-  return { positions: flatPositions, indices };
+  flushShape();
+
+  return { positions, indices };
 }
 
 export function buildWarpedGlyphGeometry(

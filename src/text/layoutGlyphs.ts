@@ -67,7 +67,12 @@ export function layoutGlyphs(
     const xOffset =
       options.align === 'center' ? (boxWidth - lineWidthActual) / 2 : options.align === 'right' ? boxWidth - lineWidthActual : 0;
     let x = xOffset;
-    const y = lineIndex * lineHeight;
+    // Baseline sits one ascender below the box top (matching PIXI.Text's
+    // box-top-at-y=0 convention), not at y=0 itself — see finding 1 of the
+    // final review: warpMesh.ts's flattenPath does `offsetY - y * scale`
+    // (font y-up -> screen y-down), so a y=0 baseline would place every
+    // glyph entirely ABOVE the box instead of inside it.
+    const y = (font.ascender / font.unitsPerEm) * fontSize + lineIndex * lineHeight;
     for (const char of line) {
       placements.push({ char, x, y });
       const glyph = font.charToGlyph(char);
