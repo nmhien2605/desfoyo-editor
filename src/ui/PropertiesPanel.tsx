@@ -13,11 +13,22 @@ const STROKE_ALIGNS: Stroke['align'][] = ['inside', 'center', 'outside'];
 const EFFECT_TYPES: Effect['type'][] = ['shadow', 'inner-shadow', 'glow', 'outline', 'blur', 'extrude3d', 'custom'];
 const CUSTOM_SHADER_IDS = Object.keys(customShaders);
 
-function defaultEffect(type: Effect['type']): Effect {
+// blur/offset/thickness/depth defaults differ for text vs. shape/image/svg
+// nodes because buildFilters.ts's basis scaling interprets these same
+// fields as "fraction of font size" for text but "raw px" for shapes (see
+// docs/superpowers/specs/2026-08-03-text-effects-design.md "Auto-scale
+// with text size") — a 4px-shaped default would resolve to an enormous
+// blur once multiplied by a 48+ px font size, so text gets small
+// fractional defaults instead. inner-shadow is deliberately NOT part of
+// this scaling convention (only the 4 FR-04 shadow kinds are), so it keeps
+// its original fixed defaults regardless of node type.
+function defaultEffect(type: Effect['type'], node: Node): Effect {
+  const isText = node.type === 'text';
   switch (type) {
     case 'shadow':
+      return { type: 'shadow', color: '#000000', blur: isText ? 0.08 : 4, offset: isText ? [0.04, 0.04] : [2, 2], alpha: 0.5 };
     case 'inner-shadow':
-      return { type, color: '#000000', blur: 4, offset: [2, 2], alpha: 0.5 };
+      return { type: 'inner-shadow', color: '#000000', blur: 4, offset: [2, 2], alpha: 0.5 };
     case 'glow':
       return { type: 'glow', color: '#ffffff', strength: 2, outer: true };
     case 'outline':
@@ -28,6 +39,12 @@ function defaultEffect(type: Effect['type']): Effect {
       return { type: 'extrude3d', depth: 4, angle: Math.PI / 4, color: '#000000' };
     case 'custom':
       return { type: 'custom', shaderId: CUSTOM_SHADER_IDS[0] ?? '', uniforms: { strength: 2 } };
+    case 'block-shadow':
+      return { type: 'block-shadow', color: '#000000', offset: isText ? [0.04, 0.04] : [4, 4], alpha: 0.8 };
+    case 'line-shadow':
+      return { type: 'line-shadow', color: '#000000', offset: isText ? [0.06, 0.06] : [6, 6], thickness: isText ? 0.01 : 1, alpha: 0.9 };
+    case '3d-shadow':
+      return { type: '3d-shadow', color: '#000000', angle: Math.PI / 4, depth: isText ? 0.1 : 10, alpha: 1 };
   }
 }
 
@@ -118,15 +135,62 @@ export function PropertiesPanel() {
         <TextControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />
       )}
 
-      <EffectsControls effects={node.effects} onChange={(effects) => updateProps({ effects })} />
+      <ShadowQuickAdd node={node} effects={node.effects} onChange={(effects) => updateProps({ effects })} />
+
+      <EffectsControls node={node} effects={node.effects} onChange={(effects) => updateProps({ effects })} />
     </div>
   );
 }
 
-function EffectsControls({
+const SHADOW_KINDS: { type: Effect['type']; label: string }[] = [
+  { type: 'shadow', label: 'Drop' },
+  { type: 'line-shadow', label: 'Line' },
+  { type: 'block-shadow', label: 'Block' },
+  { type: '3d-shadow', label: '3D' },
+];
+
+// One-click quick-add for FR-04's 4 named shadow kinds, separate from the
+// generic "+ Add Effect" dropdown below (which still lists all 7 other
+// effect types unchanged). Clicking a button always appends another
+// instance of that shadow kind — no dedup/replace — matching the existing
+// dropdown's own "just append" behavior; editing/removing an already-added
+// shadow happens in the generic Effects list below, which renders whatever
+// is in node.effects regardless of how it got there.
+function ShadowQuickAdd({
+  node,
   effects,
   onChange,
 }: {
+  node: Node;
+  effects: Effect[] | undefined;
+  onChange: (effects: Effect[]) => void;
+}) {
+  const list = effects ?? [];
+  return (
+    <fieldset className="flex flex-col gap-1">
+      <legend className="font-medium">Shadow</legend>
+      <div className="flex gap-1">
+        {SHADOW_KINDS.map(({ type, label }) => (
+          <button
+            key={type}
+            type="button"
+            onClick={() => onChange([...list, defaultEffect(type, node)])}
+            className="rounded bg-gray-100 px-2 py-1 text-xs"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function EffectsControls({
+  node,
+  effects,
+  onChange,
+}: {
+  node: Node;
   effects: Effect[] | undefined;
   onChange: (effects: Effect[]) => void;
 }) {
@@ -149,7 +213,7 @@ function EffectsControls({
       <select
         value=""
         onChange={(e) => {
-          if (e.target.value) onChange([...list, defaultEffect(e.target.value as Effect['type'])]);
+          if (e.target.value) onChange([...list, defaultEffect(e.target.value as Effect['type'], node)]);
         }}
         className="rounded border border-gray-300 px-1 py-0.5"
       >
@@ -201,6 +265,79 @@ function EffectParams({ effect, onChange }: { effect: Effect; onChange: (effect:
         <>
           <input type="color" value={effect.color} onChange={(e) => onChange({ ...effect, color: e.target.value })} />
           <input type="number" min={0} value={effect.depth} onChange={(e) => onChange({ ...effect, depth: Number(e.target.value) })} placeholder="depth" className="rounded border border-gray-300 px-1 py-0.5" />
+        </>
+      );
+    case 'block-shadow':
+      return (
+        <>
+          <input type="color" value={effect.color} onChange={(e) => onChange({ ...effect, color: e.target.value })} />
+          <div className="flex gap-1">
+            <input
+              type="number"
+              placeholder="offset x"
+              value={effect.offset[0]}
+              onChange={(e) => onChange({ ...effect, offset: [Number(e.target.value), effect.offset[1]] })}
+              className="w-1/2 rounded border border-gray-300 px-1 py-0.5"
+            />
+            <input
+              type="number"
+              placeholder="offset y"
+              value={effect.offset[1]}
+              onChange={(e) => onChange({ ...effect, offset: [effect.offset[0], Number(e.target.value)] })}
+              className="w-1/2 rounded border border-gray-300 px-1 py-0.5"
+            />
+          </div>
+        </>
+      );
+    case 'line-shadow':
+      return (
+        <>
+          <input type="color" value={effect.color} onChange={(e) => onChange({ ...effect, color: e.target.value })} />
+          <div className="flex gap-1">
+            <input
+              type="number"
+              placeholder="offset x"
+              value={effect.offset[0]}
+              onChange={(e) => onChange({ ...effect, offset: [Number(e.target.value), effect.offset[1]] })}
+              className="w-1/2 rounded border border-gray-300 px-1 py-0.5"
+            />
+            <input
+              type="number"
+              placeholder="offset y"
+              value={effect.offset[1]}
+              onChange={(e) => onChange({ ...effect, offset: [effect.offset[0], Number(e.target.value)] })}
+              className="w-1/2 rounded border border-gray-300 px-1 py-0.5"
+            />
+          </div>
+          <input
+            type="number"
+            min={0}
+            value={effect.thickness}
+            onChange={(e) => onChange({ ...effect, thickness: Number(e.target.value) })}
+            placeholder="thickness"
+            className="rounded border border-gray-300 px-1 py-0.5"
+          />
+        </>
+      );
+    case '3d-shadow':
+      return (
+        <>
+          <input type="color" value={effect.color} onChange={(e) => onChange({ ...effect, color: e.target.value })} />
+          <input
+            type="number"
+            value={Math.round((effect.angle * 180) / Math.PI)}
+            onChange={(e) => onChange({ ...effect, angle: (Number(e.target.value) * Math.PI) / 180 })}
+            placeholder="angle"
+            className="rounded border border-gray-300 px-1 py-0.5"
+          />
+          <input
+            type="number"
+            min={0}
+            value={effect.depth}
+            onChange={(e) => onChange({ ...effect, depth: Number(e.target.value) })}
+            placeholder="depth"
+            className="rounded border border-gray-300 px-1 py-0.5"
+          />
         </>
       );
     case 'custom':
