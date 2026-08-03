@@ -11,7 +11,8 @@ import {
 } from '../core/actions';
 import { fitToScreen } from '../render/interactions/viewportControls';
 import { decodeSvgText } from '../render/renderers/svgRenderer';
-import type { ImageNode, ShapeNode, SvgNode, Transform } from '../schema';
+import type { ImageNode, ShapeNode, SvgNode, TextNode, Transform } from '../schema';
+import { DEFAULT_FONT_FAMILY } from '../fonts/googleFonts';
 
 const DEFAULT_TRANSFORM: Transform = { x: 100, y: 100, scaleX: 1, scaleY: 1, rotation: 0, originX: 0.5, originY: 0.5 };
 
@@ -26,6 +27,22 @@ function defaultShapeNode(): ShapeNode {
     type: 'shape',
     shape: 'rect',
     fill: { type: 'solid', color: '#3b82f6' },
+  };
+}
+
+export function defaultTextNode(): TextNode {
+  return {
+    id: nanoid(),
+    transform: { ...DEFAULT_TRANSFORM },
+    size: { width: 200, height: 60 },
+    opacity: 1,
+    visible: true,
+    locked: false,
+    type: 'text',
+    content: 'Text',
+    font: { family: DEFAULT_FONT_FAMILY, size: 48 },
+    align: 'left',
+    fill: { type: 'solid', color: '#000000' },
   };
 }
 
@@ -110,7 +127,7 @@ export function Toolbar() {
     fitToScreen(store, { width: app.screen.width, height: app.screen.height }, page.size);
   };
 
-  const addNode = (node: ShapeNode | ImageNode | SvgNode) => {
+  const addNode = (node: ShapeNode | ImageNode | SvgNode | TextNode) => {
     store.getState().dispatch({ type: 'AddNode', pageId: activePageId, node });
     store.getState().select(node.id);
   };
@@ -144,6 +161,9 @@ export function Toolbar() {
       </button>
       <button type="button" onClick={() => addNode(defaultShapeNode())} className="rounded bg-gray-100 px-3 py-1">
         Add Shape
+      </button>
+      <button type="button" onClick={() => addNode(defaultTextNode())} className="rounded bg-gray-100 px-3 py-1">
+        Add Text
       </button>
       <button
         type="button"
