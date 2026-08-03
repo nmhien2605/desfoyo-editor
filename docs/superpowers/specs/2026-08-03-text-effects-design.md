@@ -129,9 +129,104 @@ Decorations (strokes/cuts/lines/textures, FR-05) and combining/toggling multiple
 
 ---
 
+## Slice 3: Transformations / Warp (FR-03)
+
+### Goal
+Give text nodes 8 shape-warp styles — arch, wave, rise, flag, circle, distort, angle, custom mesh — driven by true glyph-outline geometry (not a rasterized-texture warp), with slider controls and on-canvas drag handles.
+
+### Why glyph-outline warp, not texture warp
+The simpler alternative (render `PIXI.Text` to a texture, deform it via a `MeshPlane`-style grid) was considered and rejected in favor of true vector warp: crisper at any zoom/curve extremity, no font/script limitation beyond what opentype.js itself resolves. The cost is real — a new glyph-extraction and layout pipeline — accepted deliberately for quality.
+
+### New dependencies
+- `opentype.js` — parses TTF/OTF font binaries into glyph vector outlines (`font.getPath(char, x, y, fontSize)`).
+- `wawoff2` — decompresses WOFF2 to TTF in-browser (opentype.js cannot parse WOFF2 directly; verified via the library's own docs/discussions).
+- **No new triangulation dependency**: `earcut` is already bundled and re-exported by `pixi.js` (`node_modules/pixi.js/lib/index.js:1370`, `exports.earcut = utils.earcut`) — import `{ earcut }` from `'pixi.js'` directly.
+
+### Font-file access (`src/fonts/googleFontFiles.ts`, new)
+Google Fonts' CSS2 endpoint (already used by `loadGoogleFont` for on-screen `<link>` loading) returns multiple `@font-face` blocks, one per Unicode-range subset, each pointing at its own WOFF2 URL. To get real glyph outlines:
+1. Fetch the CSS2 response text for the family/weight.
+2. Parse every `@font-face` block into `{ unicodeRange: string, url: string }[]` (a real parse this time — slice 1's final review caught a regex-first-match bug that grabbed the wrong subset; this pipeline must not repeat it).
+3. For each character actually present in `node.content`, pick the block whose `unicode-range` covers that codepoint. Characters with no matching subset render un-warped as a same-position rasterized fallback quad — documented limitation, not a crash.
+4. Fetch the needed WOFF2 blob(s), decompress with `wawoff2`, parse with `opentype.parse()`.
+5. Cache the resulting `opentype.Font` per `family:weight`, module-level `Map`, mirroring `googleFonts.ts`'s existing `loaded` cache pattern.
+
+### Layout (`src/text/layoutGlyphs.ts`, new)
+Since `PIXI.Text` renders via Canvas and never exposes per-glyph positions, warp needs an independent layout pass — the single source of truth for both geometry and fill, so nothing has to agree pixel-for-pixel with Canvas's own text shaping:
+- Walks `node.content`, using the cached `opentype.Font`'s advance widths and kerning tables plus `node.font.letterSpacing`/`lineHeight`/`align` (same fields slice 1 already added) to compute each glyph's `(char, x, y)` placement, matching `node.size.width` word-wrap behavior.
+- Output: `GlyphPlacement[] = { char, x, y }[]`.
+
+### Geometry (`src/text/warpMesh.ts`, new)
+For each `GlyphPlacement`:
+1. `font.getPath(char, x, y, node.font.size)` → opentype `Path` (command list: M/L/C/Q/Z).
+2. Flatten Bezier commands to line segments (fixed 10-segment sampling per curve — adequate at typical export resolutions, no adaptive subdivision needed for v1).
+3. Triangulate the flattened contour(s) via `earcut`, passing hole indices for counters (letters like `o`/`a`/`e`/`g`) derived from opentype's contour winding direction.
+4. Apply the warp displacement function (table below) to every vertex's `(x, y)`, producing warped positions; retain each vertex's **pre-warp** `(x, y)` as a second attribute (`aGradientUv`) for gradient fills.
+5. Concatenate all glyphs' triangles into one `MeshGeometry(positions, gradientUvs, indices)`.
+
+### Warp displacement formulas (`src/text/warpFormulas.ts`, new)
+Each takes a vertex's un-warped `(x, y)` (relative to the text's local bounding box, normalized 0..1) plus the style's params, returns a `(dx, dy)` offset:
+
+| Style | Params | Formula sketch |
+|---|---|---|
+| `arch` | `curve: number` (-1..1) | `dy -= curve * sin(x * π) * boxHeight` — parabolic arc across the line |
+| `wave` | `amplitude, frequency: number` | `dy += amplitude * sin(x * frequency * 2π) * boxHeight` |
+| `rise` | `amount: number` (-1..1) | `dy -= amount * x * boxHeight` — linear baseline slant |
+| `flag` | `amplitude, frequency: number` | Same as `wave`, but amplitude scales by `x` (0 at the pinned left edge, full at the right) — a waving-flag taper `wave` doesn't have |
+| `circle` | `curve: number` (-1..1) | Remaps `x` to an angle around a circle of radius `1/abs(curve)`, remaps `y` radially — text follows the circle's circumference |
+| `distort` | `amountX, amountY: number` | `dx += amountX * x * (1-x)`, `dy += amountY * y * (1-y)` — independent per-axis perspective-like bulge |
+| `angle` | `angle: number` (radians) | Pure shear: `dx += y * tan(angle)` — cheapest style, still routed through the same mesh pipeline for one uniform code path |
+| `custom-mesh` | `gridSize: [cols, rows]`, `points: number[]` | Bilinear-interpolates the vertex's `(x, y)` against the user-authored control-point grid |
+
+### Fill rendering (`src/text/shaders/glyphFill.ts`, new)
+A hand-written `Mesh`-targeting shader (Pixi v8 `Shader`, not a post-process `Filter` — the first mesh shader in this codebase, same "write raw GLSL" convention `inner-shadow.frag.ts`/`lineShadow.frag.ts` already established for filters):
+- `fill.type === 'solid'` → vertex-colored directly from `fill.color`/`alpha`, no fragment-shader gradient math needed.
+- `fill.type === 'linear-gradient' | 'radial-gradient'` → fragment shader evaluates the gradient stops using each fragment's interpolated `aGradientUv` (the *pre-warp* position), so the gradient direction reads the same as it would on unwarped text — warping the shape doesn't warp the gradient's own axis.
+
+### Schema (`src/schema/node.ts` — `TextNode.warp`, new optional field)
+```ts
+export const WarpSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('arch'), curve: z.number() }),
+  z.object({ type: z.literal('wave'), amplitude: z.number(), frequency: z.number() }),
+  z.object({ type: z.literal('rise'), amount: z.number() }),
+  z.object({ type: z.literal('flag'), amplitude: z.number(), frequency: z.number() }),
+  z.object({ type: z.literal('circle'), curve: z.number() }),
+  z.object({ type: z.literal('distort'), amountX: z.number(), amountY: z.number() }),
+  z.object({ type: z.literal('angle'), angle: z.number() }),
+  z.object({ type: z.literal('custom-mesh'), gridSize: z.tuple([z.number(), z.number()]), points: z.array(z.number()) }),
+]);
+export type Warp = z.infer<typeof WarpSchema>;
+// TextNodeSchema gains: warp: WarpSchema.optional()
+```
+`warp` absent (the default) means `textRenderer` renders plain `PIXI.Text`, byte-for-byte unchanged from slices 1-2 — this slice is purely additive for every already-shipped text node.
+
+### Rendering integration
+- **`textRenderer.create`/`update`**: branch on `node.warp` — undefined returns/updates a `PIXI.Text` exactly as today; defined builds/updates a `Mesh` via the geometry+fill pipeline above.
+- **`SceneReconciler` gains a recreate hook**: today `apply()`'s `UpdateProps`/`UpdateTransform` case always calls `update()` on the existing display object (`SceneReconciler.ts:129-136`) — there's no path to swap a node's underlying Pixi object class. Renderers gain an optional `needsRecreate?(obj, node): boolean` method; `textRenderer` implements it (`true` when `obj instanceof Text` but `node.warp` is now set, or vice versa). `SceneReconciler.apply()` checks this before calling `update()`: if true, destroy the old object, `createDisplayObject`, replace it in `displayObjects` and at the same child index, call `onNodeMounted` again. Every other renderer leaves the hook unimplemented (default: never recreate) — zero behavior change for shape/image/svg/group.
+- **`applyTransform`/`buildFilters`**: unaffected — `Container.filters` (and thus all of slice 2's shadow effects) works identically on a `Mesh` as on a `Text`, applied after `applyTransform` sets pivot/position/scale/rotation as today.
+
+### UI (`src/ui/PropertiesPanel.tsx`, `src/ui/SelectionOverlay.tsx`)
+- **PropertiesPanel**: a warp-style picker row (mirrors slice 2's shadow quick-buttons — one-click apply with type-aware defaults), plus a `WarpParams` switch (same pattern as `EffectParams`) rendering the right sliders per style from the table above. A "Remove warp" control clears `node.warp` (`UpdateProps({ warp: undefined })`), reverting to plain `Text`.
+- **SelectionOverlay**: a `WarpHandles` component, precedented by `ImageCropHandles` (`SelectionOverlay.tsx:292`) — same `viewport.toScreen`/`toWorld` conversion, same `UpdateProps`-on-drag dispatch pattern.
+  - 7 formula styles: **one** draggable handle whose screen position maps to `(intensity, direction)` for that style (e.g. vertical drag → `arch.curve`, horizontal drag → `wave.frequency`) — a quick-adjust affordance; the PropertiesPanel sliders remain the precise control for the same fields.
+  - `custom-mesh`: a full `gridSize[0] × gridSize[1]` grid of independently-draggable handles, each editing one `points[i]` pair.
+
+### Non-goals for this slice
+Non-Latin/complex-script shaping beyond what opentype.js resolves natively (no bidi/complex-script reordering), variable-font axis warping, adaptive Bezier-flattening (fixed 10-segment sampling is enough for this slice), decorations (FR-05) and export preservation (FR-08) — deferred to their own slices per "Overall shape" above.
+
+### Testing
+- `warpFormulas.ts`: one test per style — a known input vertex + params produces the expected `(dx, dy)` (pure functions, no Pixi/opentype needed).
+- `layoutGlyphs.ts`: a short string's glyph placements match expected advance-width sums for a fixed test font fixture.
+- `warpMesh.ts`: triangulation produces a valid `MeshGeometry` (non-empty positions/indices, index values in range) for a glyph with a hole (e.g. `"o"`) and one without (e.g. `"l"`).
+- Schema: a `TextNode` with each of the 8 `warp` variants round-trips through `DocumentSchema.parse`.
+- `SceneReconciler`: toggling `node.warp` on an existing text node triggers a `needsRecreate` swap (object identity changes, class changes from `Text` to `Mesh` and back).
+- `googleFontFiles.ts`: CSS2-block parsing test — given a fixture CSS response with multiple `@font-face`/`unicode-range` blocks, resolves the correct URL for a given codepoint (regression test for the exact "wrong subset" bug class slice 1 hit in final review, this time at the parsing layer rather than the `<link>` layer).
+
+---
+
 ## Self-review notes
 
-- No placeholders/TBDs remain in slice 1 or slice 2 — both are fully specified down to file names and function signatures.
-- Internal consistency checked against current codebase state, including what actually shipped in slice 1 (the `googleFonts.ts` as-built note above; `buildFilters`'s current signature and the 7 existing `Effect` variants, re-read directly before writing slice 2).
-- Scope: slice 2 alone is right-sized for one implementation plan. Slices 3-5 remain one-paragraph placeholders in "Overall shape" above — they get their own detailed spec when reached.
-- Ambiguity resolved explicitly (all user decisions from this slice's brainstorm): "3D shadow" is a new effect distinct from the existing `extrude3d`, not a reuse of it; block/3D shadow are filter-based (not stacked-clone geometry) for quality-neutral simplicity and to preserve the "effects are renderer-agnostic" property; shadow auto-scale is resolved dynamically at render time via a ratio+basis convention, not a one-time apply-time conversion; the Effects panel gets a dedicated shadow quick-button row, not just 3 more dropdown entries.
+- No placeholders/TBDs remain in slice 1, 2, or 3 — all three are fully specified down to file names and function signatures.
+- Internal consistency checked against current codebase state: `SceneReconciler.ts`'s exact `apply()` switch (re-read directly before writing slice 3, confirming the `needsRecreate` gap), `buildFilters`'s current signature, `ImageCropHandles`'s drag-handle precedent, and that `earcut` is already bundled via `pixi.js` (checked `node_modules/pixi.js/lib/index.js` directly rather than assuming).
+- Scope: slice 3 alone is right-sized for one implementation plan — it's the largest slice so far (2 new dependencies, 5 new files, 1 new cross-cutting `SceneReconciler` hook), but every piece serves the single "true glyph-outline warp" goal; splitting further would fragment a pipeline whose stages depend on each other in sequence.
+- Ambiguity resolved explicitly (all user decisions from this slice's brainstorm): true glyph-outline warp via opentype.js chosen over texture/mesh-grid warp, despite the added dependency and layout-engine cost, for quality; all 8 styles (7 formula + custom mesh) built together in one slice rather than splitting custom-mesh out, since they share nearly all plumbing; gradient fills on warped text get full shader support in this slice rather than a solid-only v1 fallback; the 3D-shadow discrete-step banding tradeoff from slice 2 (raised during this slice's brainstorm) is being left as-is, not revisited.
+- Slices 4-5 (Decorations, Combined-effects polish + export) remain one-paragraph placeholders in "Overall shape" — they get their own detailed spec when reached.
