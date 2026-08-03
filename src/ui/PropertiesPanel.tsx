@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
 import { customShaders } from '../effects/shaders/customShaders';
 import { decodeSvgText, listFillableIds } from '../render/renderers/svgRenderer';
-import type { BlendMode, Effect, Fill, ImageNode, Node, Stroke, SvgNode, TextNode } from '../schema';
+import type { BlendMode, Effect, Fill, ImageNode, Node, Stroke, SvgNode, TextNode, Warp } from '../schema';
 import { GOOGLE_FONTS } from '../fonts/googleFonts';
 
 const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten'];
@@ -135,6 +135,10 @@ export function PropertiesPanel() {
         <TextControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />
       )}
 
+      {node.type === 'text' && (
+        <WarpControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />
+      )}
+
       <ShadowQuickAdd node={node} effects={node.effects} onChange={(effects) => updateProps({ effects })} />
 
       <EffectsControls node={node} effects={node.effects} onChange={(effects) => updateProps({ effects })} />
@@ -148,6 +152,30 @@ const SHADOW_KINDS: { type: Effect['type']; label: string }[] = [
   { type: 'block-shadow', label: 'Block' },
   { type: '3d-shadow', label: '3D' },
 ];
+
+const WARP_STYLES: { type: Warp['type']; label: string }[] = [
+  { type: 'arch', label: 'Arch' },
+  { type: 'wave', label: 'Wave' },
+  { type: 'rise', label: 'Rise' },
+  { type: 'flag', label: 'Flag' },
+  { type: 'circle', label: 'Circle' },
+  { type: 'distort', label: 'Distort' },
+  { type: 'angle', label: 'Angle' },
+  { type: 'custom-mesh', label: 'Custom' },
+];
+
+function defaultWarp(type: Warp['type']): Warp {
+  switch (type) {
+    case 'arch': return { type: 'arch', curve: 0.3 };
+    case 'wave': return { type: 'wave', amplitude: 0.1, frequency: 2 };
+    case 'rise': return { type: 'rise', amount: 0.2 };
+    case 'flag': return { type: 'flag', amplitude: 0.1, frequency: 2 };
+    case 'circle': return { type: 'circle', curve: 0.3 };
+    case 'distort': return { type: 'distort', amountX: 10, amountY: 10 };
+    case 'angle': return { type: 'angle', angle: 0.2 };
+    case 'custom-mesh': return { type: 'custom-mesh', gridSize: [4, 2], points: new Array(4 * 2 * 2).fill(0) };
+  }
+}
 
 // One-click quick-add for FR-04's 4 named shadow kinds, separate from the
 // generic "+ Add Effect" dropdown below (which still lists all 7 other
@@ -183,6 +211,79 @@ function ShadowQuickAdd({
       </div>
     </fieldset>
   );
+}
+
+function WarpControls({ node, onChange }: { node: TextNode; onChange: (patch: Partial<TextNode>) => void }) {
+  return (
+    <fieldset className="flex flex-col gap-1">
+      <legend className="font-medium">Warp</legend>
+      <div className="flex flex-wrap gap-1">
+        {WARP_STYLES.map(({ type, label }) => (
+          <button
+            key={type}
+            type="button"
+            onClick={() => onChange({ warp: defaultWarp(type) })}
+            className={`rounded px-2 py-1 text-xs ${node.warp?.type === type ? 'bg-blue-200' : 'bg-gray-100'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {node.warp && (
+        <>
+          <WarpParams warp={node.warp} onChange={(warp) => onChange({ warp })} />
+          <button type="button" onClick={() => onChange({ warp: undefined })} className="text-xs text-gray-500">
+            Remove warp
+          </button>
+        </>
+      )}
+    </fieldset>
+  );
+}
+
+function WarpParams({ warp, onChange }: { warp: Warp; onChange: (warp: Warp) => void }) {
+  const num = (label: string, value: number, set: (v: number) => void, step = 0.01) => (
+    <label className="flex flex-col gap-1" key={label}>
+      {label}
+      <input type="range" min={-1} max={1} step={step} value={value} onChange={(e) => set(Number(e.target.value))} />
+    </label>
+  );
+  switch (warp.type) {
+    case 'arch':
+      return num('Curve', warp.curve, (v) => onChange({ ...warp, curve: v }));
+    case 'wave':
+      return (
+        <>
+          {num('Amplitude', warp.amplitude, (v) => onChange({ ...warp, amplitude: v }))}
+          {num('Frequency', warp.frequency, (v) => onChange({ ...warp, frequency: v }), 0.1)}
+        </>
+      );
+    case 'rise':
+      return num('Amount', warp.amount, (v) => onChange({ ...warp, amount: v }));
+    case 'flag':
+      return (
+        <>
+          {num('Amplitude', warp.amplitude, (v) => onChange({ ...warp, amplitude: v }))}
+          {num('Frequency', warp.frequency, (v) => onChange({ ...warp, frequency: v }), 0.1)}
+        </>
+      );
+    case 'circle':
+      return num('Curve', warp.curve, (v) => onChange({ ...warp, curve: v }));
+    case 'distort':
+      return (
+        <>
+          {num('Amount X', warp.amountX, (v) => onChange({ ...warp, amountX: v }), 1)}
+          {num('Amount Y', warp.amountY, (v) => onChange({ ...warp, amountY: v }), 1)}
+        </>
+      );
+    case 'angle':
+      return num('Angle', warp.angle, (v) => onChange({ ...warp, angle: v }));
+    case 'custom-mesh':
+      // Precise editing is via the canvas handles (Task 9) — the panel just
+      // confirms custom-mesh is active and offers no sliders of its own,
+      // since per-point values don't map to a small fixed slider set.
+      return <p className="text-xs text-gray-500">Drag the grid handles on canvas to edit.</p>;
+  }
 }
 
 function EffectsControls({
