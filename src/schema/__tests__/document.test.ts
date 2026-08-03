@@ -103,4 +103,40 @@ describe('DocumentSchema', () => {
 
     expect(() => NodeSchema.parse(svgNode)).not.toThrow();
   });
+
+  it('NodeSchema accepts text nodes (TextNode foundation slice)', () => {
+    const textNode = {
+      id: 'node_4',
+      type: 'text',
+      transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+      size: { width: 200, height: 60 },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      content: 'Hello',
+      font: { family: 'Roboto', size: 48 },
+      align: 'left',
+      fill: { type: 'solid', color: '#000000' },
+    };
+
+    expect(() => NodeSchema.parse(textNode)).not.toThrow();
+  });
+
+  it('NodeSchema rejects a text node missing required font.size', () => {
+    const textNode = {
+      id: 'node_5',
+      type: 'text',
+      transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+      size: { width: 200, height: 60 },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      content: 'Hello',
+      font: { family: 'Roboto' },
+      align: 'left',
+      fill: { type: 'solid', color: '#000000' },
+    };
+
+    expect(() => NodeSchema.parse(textNode)).toThrow();
+  });
 });
