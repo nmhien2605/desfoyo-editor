@@ -16,6 +16,7 @@ import decompressBindingSrc from 'wawoff2/build/decompress_binding.js?raw';
 
 interface EmscriptenModule {
   onRuntimeInitialized?: () => void;
+  onAbort?: (reason: string) => void;
   decompress(buffer: Uint8Array): Uint8Array | false;
 }
 
@@ -24,14 +25,44 @@ let modulePromise: Promise<EmscriptenModule> | null = null;
 function loadModule(): Promise<EmscriptenModule> {
   if (!modulePromise) {
     modulePromise = new Promise((resolve, reject) => {
+      let resolved = false;
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          reject(new Error('WASM module instantiation timeout (10s) — possible fetch/CORS failure'));
+        }
+      }, 10000);
+
       try {
         // eslint-disable-next-line no-new-func -- see file-level comment: this is
         // how we recover the Module reference the glue file never exports.
         const factory = new Function(`${decompressBindingSrc}\nreturn Module;`) as () => EmscriptenModule;
         const mod = factory();
-        mod.onRuntimeInitialized = () => resolve(mod);
+
+        // Wire onAbort to catch async instantiation failures (e.g., fetch 404, CORS block).
+        // Emscripten calls Module["onAbort"] if async WASM instantiation fails; without
+        // this, the promise never settles and decompress() hangs forever.
+        mod.onAbort = (reason: string) => {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeout);
+            reject(new Error(`WASM module aborted: ${reason}`));
+          }
+        };
+
+        mod.onRuntimeInitialized = () => {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeout);
+            resolve(mod);
+          }
+        };
       } catch (err) {
-        reject(err instanceof Error ? err : new Error(String(err)));
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          reject(err instanceof Error ? err : new Error(String(err)));
+        }
       }
     });
   }
