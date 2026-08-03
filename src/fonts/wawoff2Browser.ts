@@ -34,8 +34,8 @@ function loadModule(): Promise<EmscriptenModule> {
       }, 10000);
 
       try {
-        // eslint-disable-next-line no-new-func -- see file-level comment: this is
-        // how we recover the Module reference the glue file never exports.
+        // See file-level comment: this is how we recover the Module reference
+        // the glue file never exports.
         const factory = new Function(`${decompressBindingSrc}\nreturn Module;`) as () => EmscriptenModule;
         const mod = factory();
 
