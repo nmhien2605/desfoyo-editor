@@ -175,21 +175,22 @@ function SingleSelectionOverlay({
           if (node.type === 'image') setCroppingNodeId(isCropping ? null : node.id);
           if (node.type === 'text') setEditingNodeId(node.id);
         }}
-        // Only image nodes get `pointer-events-auto` here (for the
-        // double-click-to-crop toggle above), which makes this DOM div
-        // itself the native pointerdown target instead of the canvas below
-        // it — canvas and this overlay are DOM siblings (see CanvasHost.tsx/
-        // Editor.tsx), not nested, so the click never reaches the Pixi
-        // Sprite underneath, and attachDrag's `obj.on('pointerdown', ...)`
-        // (src/render/interactions/drag.ts) never fires: image nodes looked
-        // undraggable. Pixi's own pointermove/pointerup listeners are bound
-        // at `document`/`window` in the capture phase (see EventSystem's
+        // Image and text nodes get `pointer-events-auto` here (for the
+        // double-click-to-crop/double-click-to-edit toggles below), which
+        // makes this DOM div itself the native pointerdown target instead
+        // of the canvas below it — canvas and this overlay are DOM siblings
+        // (see CanvasHost.tsx/Editor.tsx), not nested, so the click never
+        // reaches the Pixi object underneath, and attachDrag's
+        // `obj.on('pointerdown', ...)` (src/render/interactions/drag.ts)
+        // never fires: both node types looked undraggable without this.
+        // Pixi's own pointermove/pointerup listeners are bound at
+        // `document`/`window` in the capture phase (see EventSystem's
         // `init()`), so once a pointerdown actually reaches the canvas they
         // keep tracking the drag regardless of what's on top — only the
         // initial pointerdown needs manually forwarding to the canvas
         // element so Pixi's own hit-test and attachDrag take over from there.
         onPointerDown={(e) => {
-          if (node.type !== 'image' || !canvas) return;
+          if ((node.type !== 'image' && node.type !== 'text') || !canvas) return;
           canvas.dispatchEvent(
             new PointerEvent('pointerdown', {
               bubbles: true,
