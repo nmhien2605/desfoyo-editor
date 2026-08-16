@@ -208,38 +208,54 @@ export function buildWavePath(intensity: number, baselineRatio: number): WarpPat
   };
 }
 
-function warpContour(
-  contour: Contour,
-  sampler: PathSampler,
-  box: { width: number; baselineY: number },
-): Contour {
-  const out = new Array<number>(contour.length);
-  for (let i = 0; i < contour.length; i += 2) {
-    const { point, tangent } = sampler.at((contour[i] / box.width) * sampler.length);
-    const dy = contour[i + 1] - box.baselineY;
-    // N = (-T.y, T.x): pháp tuyến trong hệ y hướng xuống. Với path phẳng
-    // (T = (1,0), N = (0,1)) công thức rút về p' = p — phép đồng nhất.
-    out[i] = point.x - tangent.y * dy;
-    out[i + 1] = point.y + tangent.x * dy;
-  }
-  return out;
-}
-
-// Chữ được kéo giãn cho vừa chiều dài path: hoành độ trong hộp ánh xạ tuyến
-// tính sang arc-length. Chiều cao chữ giữ nguyên, chỉ trượt và nghiêng theo
-// tiếp tuyến (baseline follow — xem spec §6.2).
-export function warpShapes(
+// Đặt từng glyph lên path như một khối cứng, theo ngữ nghĩa SVG <textPath>:
+// điểm neo là trung điểm advance của glyph, glyph được xoay quanh điểm
+// baseline của chính nó theo tiếp tuyến tại đó rồi tịnh tiến.
+//
+// Ma trận [T | N] trực chuẩn (‖T‖ = 1, N ⊥ T) nên phép biến đổi bảo toàn
+// khoảng cách — hình glyph không thể méo. Đây là điểm khác căn bản với bản
+// cũ, vốn tra tiếp tuyến riêng cho *từng điểm* outline.
+//
+// pathBaselineY là baseline dòng đầu (mốc quy chiếu của path). Dòng thứ i
+// chạy trên offset curve cách path một khoảng (baselineY - pathBaselineY)
+// theo pháp tuyến.
+export function placeOnPath(
   shapes: GlyphShape[],
   sampler: PathSampler,
-  box: { width: number; baselineY: number },
+  pathBaselineY: number,
 ): GlyphShape[] {
-  if (sampler.length < EPSILON || box.width < EPSILON) return shapes;
-  return shapes.map((shape) => ({
-    outer: warpContour(shape.outer, sampler, box),
-    holes: shape.holes.map((hole) => warpContour(hole, sampler, box)),
-    anchorX: shape.anchorX,
-    baselineY: shape.baselineY,
-  }));
+  const placed: GlyphShape[] = [];
+  for (const shape of shapes) {
+    // Glyph vượt quá cuối path thì không vẽ (ngữ nghĩa SVG textPath). Với
+    // path preset đã fit thì nhánh này không bao giờ chạy.
+    if (shape.anchorX > sampler.length) continue;
+
+    const { point, tangent } = sampler.at(shape.anchorX);
+    const nx = -tangent.y;
+    const ny = tangent.x;
+    const offset = shape.baselineY - pathBaselineY;
+    const ox = point.x + nx * offset;
+    const oy = point.y + ny * offset;
+
+    const place = (contour: Contour): Contour => {
+      const out = new Array<number>(contour.length);
+      for (let i = 0; i < contour.length; i += 2) {
+        const dx = contour[i] - shape.anchorX;
+        const dy = contour[i + 1] - shape.baselineY;
+        out[i] = ox + tangent.x * dx + nx * dy;
+        out[i + 1] = oy + tangent.y * dx + ny * dy;
+      }
+      return out;
+    };
+
+    placed.push({
+      outer: place(shape.outer),
+      holes: shape.holes.map(place),
+      anchorX: shape.anchorX,
+      baselineY: shape.baselineY,
+    });
+  }
+  return placed;
 }
 
 // Co toạ độ x của path quanh TÂM NGANG của hộp (không quanh gốc): nếu co

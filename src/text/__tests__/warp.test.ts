@@ -5,8 +5,8 @@ import {
   bakeScale,
   buildPathSampler,
   buildWavePath,
+  placeOnPath,
   solveHorizontalScale,
-  warpShapes,
 } from '../warp';
 import type { GlyphShape } from '../glyphOutlines';
 
@@ -89,42 +89,61 @@ describe('buildWavePath', () => {
   });
 });
 
-describe('warpShapes', () => {
-  const shapes: GlyphShape[] = [
-    {
-      outer: [0, 40, 100, 40, 100, 60, 0, 60],
-      holes: [[10, 45, 20, 45, 20, 55]],
-      anchorX: 50,
-      baselineY: 50,
-    },
-  ];
-  const box = { width: 400, baselineY: 50 };
+function shape(points: number[], anchorX: number, baselineY: number): GlyphShape {
+  return { outer: points, holes: [], anchorX, baselineY };
+}
 
-  it('path phang cho phep dong nhat', () => {
+describe('placeOnPath', () => {
+  it('path phang tai baseline la phep dong nhat', () => {
     const sampler = buildPathSampler(flatPath(0.5), SIZE);
-    const result = warpShapes(shapes, sampler, box);
-    result[0].outer.forEach((value, i) => expect(value).toBeCloseTo(shapes[0].outer[i], 4));
-    result[0].holes[0].forEach((value, i) => expect(value).toBeCloseTo(shapes[0].holes[0][i], 4));
+    const input = [shape([10, 40, 30, 60], 20, 50)];
+    const [out] = placeOnPath(input, sampler, 50);
+    expect(out.outer[0]).toBeCloseTo(10, 6);
+    expect(out.outer[1]).toBeCloseTo(40, 6);
+    expect(out.outer[2]).toBeCloseTo(30, 6);
+    expect(out.outer[3]).toBeCloseTo(60, 6);
   });
 
-  it('giu nguyen so shape va so lo', () => {
-    const sampler = buildPathSampler(buildWavePath(0.6, 0.5), SIZE);
-    const result = warpShapes(shapes, sampler, box);
-    expect(result).toHaveLength(1);
-    expect(result[0].holes).toHaveLength(1);
-    expect(result[0].outer).toHaveLength(shapes[0].outer.length);
-  });
-
-  it('path cong lam toa do doi va van huu han', () => {
+  it('bao toan khoang cach trong cung glyph tren path cong', () => {
     const sampler = buildPathSampler(buildWavePath(1, 0.5), SIZE);
-    const result = warpShapes(shapes, sampler, box);
-    expect(result[0].outer.every(Number.isFinite)).toBe(true);
-    expect(result[0].outer).not.toEqual(shapes[0].outer);
+    const input = [shape([10, 20, 30, 80], 20, 50)];
+    const before = Math.hypot(10 - 30, 20 - 80);
+    const [out] = placeOnPath(input, sampler, 50);
+    const after = Math.hypot(out.outer[0] - out.outer[2], out.outer[1] - out.outer[3]);
+    expect(after).toBeCloseTo(before, 6);
   });
 
-  it('sampler suy bien tra ve shape goc, khong chia cho 0', () => {
-    const sampler = { length: 0, at: () => ({ point: { x: 0, y: 0 }, tangent: { x: 1, y: 0 } }) };
-    expect(warpShapes(shapes, sampler, box)).toBe(shapes);
+  it('dong thu hai nam dung offset theo phap tuyen', () => {
+    const sampler = buildPathSampler(buildWavePath(1, 0.5), SIZE);
+    const lineStep = 120;
+    const [a, b] = placeOnPath(
+      [shape([20, 50], 20, 50), shape([20, 50 + lineStep], 20, 50 + lineStep)],
+      sampler,
+      50,
+    );
+    const { point, tangent } = sampler.at(20);
+    expect(a.outer[0]).toBeCloseTo(point.x, 6);
+    expect(a.outer[1]).toBeCloseTo(point.y, 6);
+    expect(b.outer[0]).toBeCloseTo(point.x - tangent.y * lineStep, 6);
+    expect(b.outer[1]).toBeCloseTo(point.y + tangent.x * lineStep, 6);
+  });
+
+  it('bo glyph co anchorX vuot qua cuoi path', () => {
+    const sampler = buildPathSampler(flatPath(0.5), SIZE); // length = 400
+    const out = placeOnPath([shape([0, 50], 100, 50), shape([0, 50], 500, 50)], sampler, 50);
+    expect(out).toHaveLength(1);
+    expect(out[0].anchorX).toBe(100);
+  });
+
+  it('giu nguyen khoang cach ARC-LENGTH giua hai glyph lien tiep', () => {
+    // Neo dat theo advance that: s = anchorX. Khoang cach doc cung giua hai
+    // neo phai bang hieu anchorX, khong bi keo gian theo do cong cua path.
+    const sampler = buildPathSampler(buildWavePath(1, 0.5), SIZE);
+    const [a, b] = placeOnPath([shape([120, 50], 120, 50), shape([200, 50], 200, 50)], sampler, 50);
+    expect(a.outer[0]).toBeCloseTo(sampler.at(120).point.x, 6);
+    expect(a.outer[1]).toBeCloseTo(sampler.at(120).point.y, 6);
+    expect(b.outer[0]).toBeCloseTo(sampler.at(200).point.x, 6);
+    expect(b.outer[1]).toBeCloseTo(sampler.at(200).point.y, 6);
   });
 });
 

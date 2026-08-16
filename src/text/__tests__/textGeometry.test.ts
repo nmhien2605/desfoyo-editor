@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { TextNode } from '../../schema';
 import { measureText, resolveWarpPath, textGeometry } from '../textGeometry';
+import { buildWavePath } from '../warp';
 
 let poppins: opentype.Font;
 beforeAll(() => {
@@ -40,7 +41,7 @@ describe('resolveWarpPath', () => {
   });
 
   it('sinh path preset cho wave khi chua co paths', () => {
-    const path = resolveWarpPath(textNode({ warp: { type: 'wave', intensity: 0.5 } }), 0.8);
+    const path = resolveWarpPath(textNode({ warp: { type: 'wave', intensity: 0.5 } }), 0.8)?.path;
     expect(path?.anchors).toHaveLength(3);
   });
 
@@ -56,7 +57,7 @@ describe('resolveWarpPath', () => {
     const path = resolveWarpPath(
       textNode({ warp: { type: 'wave', intensity: 0.5, paths: [stored] } }),
       0.8,
-    );
+    )?.path;
     expect(path).toEqual(stored);
   });
 
@@ -119,5 +120,52 @@ describe('textGeometry', () => {
     const empty = textNode({ text: '' });
     expect(textGeometry(empty, poppins).width).toBe(0);
     expect(measureText(empty, poppins).width).toBeGreaterThan(0);
+  });
+});
+
+describe('text-on-path', () => {
+  it('intensity = 0 cho hinh hoc trung khit layout, moi dong', () => {
+    const node = textNode({ text: 'Hi\nHi', warp: { type: 'wave', intensity: 0 } });
+    const geometry = textGeometry(node, poppins);
+    const plain = textGeometry({ ...node, warp: undefined }, poppins);
+    geometry.shapes.forEach((shape, i) => {
+      shape.outer.forEach((value, j) => {
+        expect(value).toBeCloseTo(plain.shapes[i].outer[j], 6);
+      });
+    });
+  });
+
+  it('wave bao toan hinh hoc tung glyph', () => {
+    const node = textNode({ text: 'Headline', warp: { type: 'wave', intensity: 1 } });
+    const warped = textGeometry(node, poppins);
+    const plain = textGeometry({ ...node, warp: undefined }, poppins);
+    expect(warped.shapes).toHaveLength(plain.shapes.length);
+    warped.shapes.forEach((shape, i) => {
+      const a = plain.shapes[i].outer;
+      const b = shape.outer;
+      for (let k = 2; k < a.length; k += 2) {
+        expect(Math.hypot(b[k] - b[0], b[k + 1] - b[1])).toBeCloseTo(
+          Math.hypot(a[k] - a[0], a[k + 1] - a[1]),
+          4,
+        );
+      }
+    });
+  });
+
+  it('node.size khong doi khi intensity doi', () => {
+    const base = textNode({ text: 'Headline' });
+    const flat = measureText({ ...base, warp: { type: 'wave', intensity: 0 } }, poppins);
+    const curved = measureText({ ...base, warp: { type: 'wave', intensity: 1 } }, poppins);
+    expect(curved).toEqual(flat);
+  });
+
+  it('resolveWarpPath danh dau preset la fit, path da luu la khong fit', () => {
+    const preset = textNode({ warp: { type: 'wave', intensity: 1 } });
+    expect(resolveWarpPath(preset, 0.8)?.fit).toBe(true);
+
+    const stored = textNode({
+      warp: { type: 'wave', intensity: 1, paths: [buildWavePath(0.5, 0.8)] },
+    });
+    expect(resolveWarpPath(stored, 0.8)?.fit).toBe(false);
   });
 });

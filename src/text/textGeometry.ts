@@ -1,8 +1,16 @@
 import type { Font } from 'opentype.js';
 import type { TextNode, WarpPath } from '../schema';
 import type { GlyphShape } from './glyphOutlines';
+import type { TextLayout } from './layout';
 import { layoutText } from './layout';
-import { buildPathSampler, buildWavePath, warpShapes } from './warp';
+import type { PathSampler } from './warp';
+import {
+  bakeScale,
+  buildPathSampler,
+  buildWavePath,
+  placeOnPath,
+  solveHorizontalScale,
+} from './warp';
 
 export interface TextGeometry {
   shapes: GlyphShape[];
@@ -14,18 +22,41 @@ export interface TextGeometry {
   baselineY: number;
 }
 
-// paths đã lưu thắng preset. Preset chỉ tồn tại cho 'wave' ở v1; 7 kiểu còn
-// lại trả null (vẽ như không warp) cho tới khi có hàm sinh path riêng —
-// cùng quy ước "silently inert" mà buildFilters.ts dùng cho shaderId lạ.
-export function resolveWarpPath(node: TextNode, baselineRatio: number): WarpPath | null {
+// paths đã lưu thắng preset. `fit` phân biệt hai chế độ đặt chữ: preset thì
+// co path cho vừa chữ, path do user kéo tay thì giữ nguyên (text-on-path
+// thật — chữ chạy hết path đến đâu thì thôi, phần thừa bị bỏ).
+export function resolveWarpPath(
+  node: TextNode,
+  baselineRatio: number,
+): { path: WarpPath; fit: boolean } | null {
   const warp = node.warp;
   if (!warp || warp.type === 'none') return null;
 
   const stored = warp.paths?.find((path) => path.role === 'baseline');
-  if (stored) return stored.anchors.length >= 2 ? stored : null;
+  if (stored) return stored.anchors.length >= 2 ? { path: stored, fit: false } : null;
 
-  if (warp.type === 'wave') return buildWavePath(warp.intensity, baselineRatio);
+  if (warp.type === 'wave') {
+    return { path: buildWavePath(warp.intensity, baselineRatio), fit: true };
+  }
   return null;
+}
+
+// Nguồn DUY NHẤT của "path thật sự đang dùng". WarpHandlesOverlay phải vẽ
+// handle trên đúng path này — nếu nó tự ghép lại các bước thì handle và chữ
+// sẽ lệch nhau ngay khi hệ số co khác 1.
+export function resolveWarpGeometry(
+  node: TextNode,
+  layout: TextLayout,
+): { path: WarpPath; sampler: PathSampler } | null {
+  if (layout.height <= 0 || layout.width <= 0) return null;
+  const resolved = resolveWarpPath(node, layout.baselineY / layout.height);
+  if (!resolved) return null;
+
+  const size = { width: layout.width, height: layout.height };
+  const path = resolved.fit
+    ? bakeScale(resolved.path, solveHorizontalScale(resolved.path, size, layout.width))
+    : resolved.path;
+  return { path, sampler: buildPathSampler(path, size) };
 }
 
 export function textGeometry(node: TextNode, font: Font): TextGeometry {
@@ -38,17 +69,9 @@ export function textGeometry(node: TextNode, font: Font): TextGeometry {
     align: node.align,
   });
 
-  const path = layout.height > 0 ? resolveWarpPath(node, layout.baselineY / layout.height) : null;
-  if (!path) return layout;
-
-  const sampler = buildPathSampler(path, { width: layout.width, height: layout.height });
-  return {
-    ...layout,
-    shapes: warpShapes(layout.shapes, sampler, {
-      width: layout.width,
-      baselineY: layout.baselineY,
-    }),
-  };
+  const warped = resolveWarpGeometry(node, layout);
+  if (!warped) return layout;
+  return { ...layout, shapes: placeOnPath(layout.shapes, warped.sampler, layout.baselineY) };
 }
 
 // Dùng bởi UI để giữ node.size khớp với nội dung sau khi sửa chữ/font —

@@ -82,7 +82,7 @@ export function WarpHandlesOverlay({
 
   const geometry = textGeometry(node, font);
   if (geometry.height <= 0) return null;
-  const path = resolveWarpPath(node, geometry.baselineY / geometry.height);
+  const path = resolveWarpPath(node, geometry.baselineY / geometry.height)?.path;
   if (!path) return null;
 
   const box = { width: geometry.width, height: geometry.height };
