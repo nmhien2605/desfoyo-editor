@@ -16,7 +16,10 @@ const listeners = new Set<(family: string) => void>();
 // khai báo font của mình ở đây — `source` là URL (Vite `?url` import) hoặc
 // ArrayBuffer sẵn có (test đọc thẳng từ đĩa).
 export function registerFont(family: string, source: string | ArrayBuffer): void {
-  sources.set(family, typeof source === 'string' ? { kind: 'url', url: source } : { kind: 'buffer', buffer: source });
+  sources.set(
+    family,
+    typeof source === 'string' ? { kind: 'url', url: source } : { kind: 'buffer', buffer: source },
+  );
 }
 
 export function registeredFamilies(): string[] {

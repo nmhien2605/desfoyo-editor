@@ -13,7 +13,10 @@ import {
 export function readFontBuffer(fileName: string): ArrayBuffer {
   const path = fileURLToPath(new URL(`../fonts/${fileName}`, import.meta.url));
   const buffer = readFileSync(path);
-  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+  return buffer.buffer.slice(
+    buffer.byteOffset,
+    buffer.byteOffset + buffer.byteLength,
+  ) as ArrayBuffer;
 }
 
 afterEach(() => resetFontsForTest());
