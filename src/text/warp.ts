@@ -241,3 +241,46 @@ export function warpShapes(
     baselineY: shape.baselineY,
   }));
 }
+
+// Co toạ độ x của path quanh TÂM NGANG của hộp (không quanh gốc): nếu co
+// quanh gốc, chữ sẽ trượt dần sang trái khi intensity tăng, trong khi
+// node.size.width không đổi. k = 1 là phép đồng nhất.
+export function bakeScale(path: WarpPath, k: number): WarpPath {
+  const scale = (p: { x: number; y: number }) => ({ x: (p.x - 0.5) * k + 0.5, y: p.y });
+  return {
+    ...path,
+    anchors: path.anchors.map((anchor) => ({
+      ...scale(anchor),
+      ...(anchor.in ? { in: scale(anchor.in) } : {}),
+      ...(anchor.out ? { out: scale(anchor.out) } : {}),
+    })),
+  };
+}
+
+const MIN_SCALE = 0.05;
+const LENGTH_TOL = 0.01; // px
+
+// Giải k sao cho arcLength(bakeScale(path, k)) ≈ target.
+//
+// Bisection hợp lệ vì L(k) = ∫√(k²x′² + y′²)dt tăng ngặt theo k > 0:
+// dL/dk = ∫ k·x′²/√(k²x′² + y′²) dt ≥ 0, dương ở mọi nơi x′ ≠ 0.
+//
+// Path preset trải x ∈ [0, W] nên L(1) ≥ W = target ⇒ nghiệm nằm trong (0,1].
+// Nhánh MIN_SCALE bắt trường hợp biên độ dọc lớn tới mức co hết cỡ vẫn dài
+// hơn target — khi đó glyph tràn sẽ bị placeOnPath bỏ, đúng quy ước §2.3.
+export function solveHorizontalScale(path: WarpPath, size: Size, target: number): number {
+  if (target < EPSILON) return 1;
+  if (arcLength(path, size) <= target) return 1;
+  if (arcLength(bakeScale(path, MIN_SCALE), size) >= target) return MIN_SCALE;
+
+  let low = MIN_SCALE;
+  let high = 1;
+  for (let i = 0; i < 60; i++) {
+    const mid = (low + high) / 2;
+    const length = arcLength(bakeScale(path, mid), size);
+    if (Math.abs(length - target) < LENGTH_TOL) return mid;
+    if (length > target) high = mid;
+    else low = mid;
+  }
+  return (low + high) / 2;
+}

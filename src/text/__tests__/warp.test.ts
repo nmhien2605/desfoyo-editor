@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { WarpPath } from '../../schema';
-import { buildPathSampler, buildWavePath, warpShapes } from '../warp';
+import {
+  arcLength,
+  bakeScale,
+  buildPathSampler,
+  buildWavePath,
+  solveHorizontalScale,
+  warpShapes,
+} from '../warp';
 import type { GlyphShape } from '../glyphOutlines';
 
 const SIZE = { width: 400, height: 100 };
@@ -118,6 +125,40 @@ describe('warpShapes', () => {
   it('sampler suy bien tra ve shape goc, khong chia cho 0', () => {
     const sampler = { length: 0, at: () => ({ point: { x: 0, y: 0 }, tangent: { x: 1, y: 0 } }) };
     expect(warpShapes(shapes, sampler, box)).toBe(shapes);
+  });
+});
+
+describe('bakeScale', () => {
+  it('co quanh tam ngang, giu nguyen y', () => {
+    const baked = bakeScale(flatPath(0.5), 0.5);
+    expect(baked.anchors[0].x).toBeCloseTo(0.25, 9);
+    expect(baked.anchors[1].x).toBeCloseTo(0.75, 9);
+    expect(baked.anchors[0].y).toBeCloseTo(0.5, 9);
+    expect(baked.anchors[0].out?.x).toBeCloseTo(0.415, 9);
+  });
+
+  it('k = 1 la phep dong nhat', () => {
+    expect(bakeScale(buildWavePath(1, 0.8), 1)).toEqual(buildWavePath(1, 0.8));
+  });
+});
+
+describe('solveHorizontalScale', () => {
+  it('path phang da vua chu => k = 1', () => {
+    expect(solveHorizontalScale(flatPath(0.5), SIZE, SIZE.width)).toBe(1);
+  });
+
+  it('path cong => k < 1 va arc length khop be rong chu', () => {
+    const path = buildWavePath(1, 0.8);
+    const k = solveHorizontalScale(path, SIZE, SIZE.width);
+    expect(k).toBeLessThan(1);
+    expect(k).toBeGreaterThan(0.05);
+    expect(arcLength(bakeScale(path, k), SIZE)).toBeCloseTo(SIZE.width, 1);
+  });
+
+  it('bien do qua lon so voi be rong => tra ve san MIN_SCALE', () => {
+    // target rat nho: du co ngang het co, path van dai hon.
+    const k = solveHorizontalScale(buildWavePath(1, 0.8), SIZE, 1);
+    expect(k).toBeCloseTo(0.05, 9);
   });
 });
 
