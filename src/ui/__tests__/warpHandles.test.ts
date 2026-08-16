@@ -40,6 +40,24 @@ describe('movePathPoint', () => {
     expect(next.anchors[1].out!.y).toBeCloseTo(0.87, 10);
   });
 
+  it('keo anchor0 (chi co out): anchor va out cung doi, in van undefined', () => {
+    const next = movePathPoint(path, { anchor: 0, kind: 'anchor' }, { x: 0.2, y: -0.1 });
+    expect(next.anchors[0].x).toBeCloseTo(0.2, 10);
+    expect(next.anchors[0].y).toBeCloseTo(0.8, 10);
+    expect(next.anchors[0].out!.x).toBeCloseTo(0.4, 10);
+    expect(next.anchors[0].out!.y).toBeCloseTo(0.8, 10);
+    expect(next.anchors[0].in).toBeUndefined();
+  });
+
+  it('keo anchor2 (chi co in): anchor va in cung doi, out van undefined', () => {
+    const next = movePathPoint(path, { anchor: 2, kind: 'anchor' }, { x: -0.15, y: 0.05 });
+    expect(next.anchors[2].x).toBeCloseTo(0.85, 10);
+    expect(next.anchors[2].y).toBeCloseTo(0.91, 10);
+    expect(next.anchors[2].in!.x).toBeCloseTo(0.6, 10);
+    expect(next.anchors[2].in!.y).toBeCloseTo(0.77, 10);
+    expect(next.anchors[2].out).toBeUndefined();
+  });
+
   it('khong dung toi cac anchor khac', () => {
     const next = movePathPoint(path, { anchor: 1, kind: 'anchor' }, { x: 0.1, y: 0.1 });
     expect(next.anchors[0]).toEqual(path.anchors[0]);
