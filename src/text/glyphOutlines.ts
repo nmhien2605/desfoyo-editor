@@ -170,8 +170,9 @@ function groupIntoShapes(contours: Contour[]): GlyphShape[] {
   return shapes;
 }
 
-// Chỉ nơi duy nhất trong codebase gọi vào opentype.js. Đổi sang harfbuzzjs
-// hay fontkit về sau chỉ phải viết lại file này — xem docs/text-future-work.md.
+// Chỉ nơi duy nhất trong codebase đọc glyph outline/path từ opentype.js.
+// fontService.ts chỉ parse font file thành Font object, không đụng tới path geometry.
+// Đổi sang harfbuzzjs hay fontkit về sau chỉ phải viết lại file này — xem docs/text-future-work.md.
 //
 // Trả về một phần tử cho mỗi *glyph* chứ không phải mỗi ký tự: khi font có
 // ligature, số glyph ít hơn số ký tự. layout.ts vì vậy tự cắt dòng theo '\n'
