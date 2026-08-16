@@ -8,7 +8,11 @@ export const GradientStopSchema = z.object({
 export type GradientStop = z.infer<typeof GradientStopSchema>;
 
 export const FillSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('solid'), color: z.string(), alpha: z.number().min(0).max(1).optional() }),
+  z.object({
+    type: z.literal('solid'),
+    color: z.string(),
+    alpha: z.number().min(0).max(1).optional(),
+  }),
   z.object({
     type: z.literal('linear-gradient'),
     stops: z.array(GradientStopSchema),

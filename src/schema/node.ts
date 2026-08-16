@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { BaseNodeShape, type BaseNode } from './base';
 import { FillSchema, StrokeSchema } from './fill-stroke';
+import { WarpSchema } from './warp';
 
 // 'shape' | 'image' | 'group' are valid node types.
 // 'svg' arrived in Phase 4 Pass E (see CONTEXT.md "Node" and
@@ -51,6 +52,28 @@ export const SvgNodeSchema = z.object({
 });
 export type SvgNode = z.infer<typeof SvgNodeSchema>;
 
+// TextNode: text là nội dung thô, mọi hình học suy ra từ đó tại render time
+// (src/text/textGeometry.ts) chứ không lưu trong model. `align: 'justify'` mà
+// plan/04-data-model.md nêu bị cắt khỏi v1 — justify cần auto-wrap, xem
+// docs/text-future-work.md mục 2.
+export const TextNodeSchema = z.object({
+  ...BaseNodeShape,
+  type: z.literal('text'),
+  text: z.string(),
+  font: z.object({
+    family: z.string(),
+    weight: z.number(),
+    style: z.enum(['normal', 'italic']),
+    size: z.number().positive(),
+  }),
+  align: z.enum(['left', 'center', 'right']),
+  letterSpacing: z.number(),
+  lineHeight: z.number().positive(),
+  fill: FillSchema,
+  warp: WarpSchema.optional(),
+});
+export type TextNode = z.infer<typeof TextNodeSchema>;
+
 // GroupNode per plan/04-data-model.md: exactly BaseNode + children, no other
 // fields. z.lazy() is required because NodeSchema is now self-referential
 // (a group's children can themselves include groups).
@@ -73,6 +96,7 @@ export const NodeSchema: z.ZodType<Node> = z.discriminatedUnion('type', [
   ShapeNodeSchema,
   ImageNodeSchema,
   SvgNodeSchema,
+  TextNodeSchema,
   GroupNodeSchema,
 ]);
-export type Node = ShapeNode | ImageNode | SvgNode | GroupNode;
+export type Node = ShapeNode | ImageNode | SvgNode | TextNode | GroupNode;
