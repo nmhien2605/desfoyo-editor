@@ -84,7 +84,12 @@ describe('buildWavePath', () => {
 
 describe('warpShapes', () => {
   const shapes: GlyphShape[] = [
-    { outer: [0, 40, 100, 40, 100, 60, 0, 60], holes: [[10, 45, 20, 45, 20, 55]] },
+    {
+      outer: [0, 40, 100, 40, 100, 60, 0, 60],
+      holes: [[10, 45, 20, 45, 20, 55]],
+      anchorX: 50,
+      baselineY: 50,
+    },
   ];
   const box = { width: 400, baselineY: 50 };
 

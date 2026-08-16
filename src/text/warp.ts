@@ -144,5 +144,7 @@ export function warpShapes(
   return shapes.map((shape) => ({
     outer: warpContour(shape.outer, sampler, box),
     holes: shape.holes.map((hole) => warpContour(hole, sampler, box)),
+    anchorX: shape.anchorX,
+    baselineY: shape.baselineY,
   }));
 }
