@@ -8,6 +8,7 @@ import { computeSelectionBounds, applyGroupRotate } from '../render/interactions
 import type { Rect } from '../render/interactions/marquee';
 import type { SnapGuide } from '../render/interactions/snapping';
 import type { ImageNode, Node, Transform } from '../schema';
+import { TextEditOverlay } from './TextEditOverlay';
 
 const HANDLES: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
@@ -93,6 +94,8 @@ function SingleSelectionOverlay({
   const { canvas } = useCanvasContext();
   const [croppingNodeId, setCroppingNodeId] = useState<string | null>(null);
   const isCropping = node.type === 'image' && croppingNodeId === node.id;
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const isEditingText = node.type === 'text' && editingNodeId === node.id;
   const originX = node.transform.originX ?? 0;
   const originY = node.transform.originY ?? 0;
   // Un-rotated top-left corner in world space; CSS `transform: rotate()`
@@ -167,7 +170,10 @@ function SingleSelectionOverlay({
   return (
     <div className="pointer-events-none absolute inset-0">
       <div
-        onDoubleClick={() => node.type === 'image' && setCroppingNodeId(isCropping ? null : node.id)}
+        onDoubleClick={() => {
+          if (node.type === 'image') setCroppingNodeId(isCropping ? null : node.id);
+          if (node.type === 'text') setEditingNodeId(isEditingText ? null : node.id);
+        }}
         // Only image nodes get `pointer-events-auto` here (for the
         // double-click-to-crop toggle above), which makes this DOM div
         // itself the native pointerdown target instead of the canvas below
@@ -182,7 +188,7 @@ function SingleSelectionOverlay({
         // initial pointerdown needs manually forwarding to the canvas
         // element so Pixi's own hit-test and attachDrag take over from there.
         onPointerDown={(e) => {
-          if (node.type !== 'image' || !canvas) return;
+          if ((node.type !== 'image' && node.type !== 'text') || !canvas) return;
           canvas.dispatchEvent(
             new PointerEvent('pointerdown', {
               bubbles: true,
@@ -197,7 +203,9 @@ function SingleSelectionOverlay({
             }),
           );
         }}
-        className={`absolute border-2 border-blue-500 ${node.type === 'image' ? 'pointer-events-auto' : ''}`}
+        className={`absolute border-2 border-blue-500 ${
+          node.type === 'image' || node.type === 'text' ? 'pointer-events-auto' : ''
+        }`}
         style={{
           left: topLeftScreen.x,
           top: topLeftScreen.y,
@@ -220,7 +228,7 @@ function SingleSelectionOverlay({
             />
           );
         })}
-      {!isCropping && (
+      {!isCropping && !isEditingText && (
         <div
           onPointerDown={startRotate}
           className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border border-blue-500 bg-white"
@@ -229,6 +237,14 @@ function SingleSelectionOverlay({
       )}
       {isCropping && node.type === 'image' && (
         <ImageCropHandles node={node} activePageId={activePageId} viewport={viewport} />
+      )}
+      {isEditingText && node.type === 'text' && (
+        <TextEditOverlay
+          node={node}
+          viewport={viewport}
+          activePageId={activePageId}
+          onClose={() => setEditingNodeId(null)}
+        />
       )}
       {extras}
     </div>
