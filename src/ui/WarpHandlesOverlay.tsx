@@ -8,6 +8,24 @@ import type { Node, TextNode, WarpAnchor, WarpPath } from '../schema';
 
 export type HandleRef = { anchor: number; kind: 'anchor' | 'in' | 'out' };
 
+// Pivot -> scale -> rotate -> translate -> camera, tach rieng khoi component
+// de test duoc doc lap (khong can render React/jsdom). Cung mot cong thuc
+// worldPoint() trong SelectionOverlay.tsx dung cho handle resize, chi khac
+// nguon toa do local (o day la box hinh hoc text, khong phai node.size) nen
+// khong gop chung duoc thanh 1 ham dung nguyen — xem toScreen() ben duoi.
+export function projectLocalPoint(
+  local: { x: number; y: number },
+  pivot: { x: number; y: number },
+  transform: { x: number; y: number; scaleX: number; scaleY: number; rotation: number },
+  viewport: Viewport,
+): { x: number; y: number } {
+  const offset = rotateVector(
+    { x: (local.x - pivot.x) * transform.scaleX, y: (local.y - pivot.y) * transform.scaleY },
+    transform.rotation,
+  );
+  return viewport.toScreen({ x: transform.x + offset.x, y: transform.y + offset.y });
+}
+
 export function listHandles(path: WarpPath): HandleRef[] {
   const refs: HandleRef[] = [];
   path.anchors.forEach((anchor, index) => {
@@ -77,14 +95,7 @@ export function WarpHandlesOverlay({
   const toScreen = (point: { x: number; y: number }) => {
     const local = { x: point.x * box.width, y: point.y * box.height };
     const pivot = { x: originX * node.size.width, y: originY * node.size.height };
-    const offset = rotateVector(
-      {
-        x: (local.x - pivot.x) * node.transform.scaleX,
-        y: (local.y - pivot.y) * node.transform.scaleY,
-      },
-      node.transform.rotation,
-    );
-    return viewport.toScreen({ x: node.transform.x + offset.x, y: node.transform.y + offset.y });
+    return projectLocalPoint(local, pivot, node.transform, viewport);
   };
 
   const startDrag = (ref: HandleRef) => (downEvent: ReactPointerEvent) => {

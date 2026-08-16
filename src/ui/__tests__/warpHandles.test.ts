@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WarpPath } from '../../schema';
-import { listHandles, movePathPoint } from '../WarpHandlesOverlay';
+import { listHandles, movePathPoint, projectLocalPoint } from '../WarpHandlesOverlay';
+import type { Viewport } from '../../render/viewport';
 
 const path: WarpPath = {
   role: 'baseline',
@@ -68,5 +69,49 @@ describe('movePathPoint', () => {
     const before = JSON.stringify(path);
     movePathPoint(path, { anchor: 0, kind: 'anchor' }, { x: 1, y: 1 });
     expect(JSON.stringify(path)).toBe(before);
+  });
+});
+
+// projectLocalPoint la phep chieu pivot -> scale -> rotate -> translate ->
+// camera dung cho handle warp tren node da xoay/scale — cung cong thuc
+// worldPoint() trong SelectionOverlay.tsx dung, nhung chua tung co test tu
+// dong nao bao ve no (chi duoc kiem tra thu cong tren node xoay khi review
+// task 11). Cac so o day chon tron de tu tay tinh ra ket qua ky vong, khong
+// phai goi lai chinh cong thuc dang test roi so khop voi chinh no:
+//
+//   local = (40, 0), pivot = (20, 10)  =>  local - pivot = (20, -10)
+//   scale x2 ca hai truc               =>  (40, -20)
+//   xoay 90 do (cos=0, sin=1):
+//     x' = x*cos - y*sin = 40*0 - (-20)*1 = 20
+//     y' = x*sin + y*cos = 40*1 + (-20)*0 = 40
+//   offset = (20, 40); transform.x/y = (100, 200) => world = (120, 240)
+//   camera zoom=2, pan=(10,5) => screen = world*zoom + pan = (250, 485)
+describe('projectLocalPoint', () => {
+  const viewport: Viewport = {
+    toScreen: (p) => ({ x: p.x * 2 + 10, y: p.y * 2 + 5 }),
+    toWorld: (p) => ({ x: (p.x - 10) / 2, y: (p.y - 5) / 2 }),
+  };
+
+  it('chieu dung toa do man hinh cho node da xoay 90 do va scale x2', () => {
+    const screen = projectLocalPoint(
+      { x: 40, y: 0 },
+      { x: 20, y: 10 },
+      { x: 100, y: 200, scaleX: 2, scaleY: 2, rotation: Math.PI / 2 },
+      viewport,
+    );
+    expect(screen.x).toBeCloseTo(250, 8);
+    expect(screen.y).toBeCloseTo(485, 8);
+  });
+
+  it('khong xoay/khong scale/khong pan thi local - pivot cong thang vao transform', () => {
+    const identityViewport: Viewport = { toScreen: (p) => p, toWorld: (p) => p };
+    const screen = projectLocalPoint(
+      { x: 40, y: 0 },
+      { x: 20, y: 10 },
+      { x: 100, y: 200, scaleX: 1, scaleY: 1, rotation: 0 },
+      identityViewport,
+    );
+    // (40-20, 0-10) = (20, -10) cong vao (100, 200) => (120, 190)
+    expect(screen).toEqual({ x: 120, y: 190 });
   });
 });
