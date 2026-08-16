@@ -14,6 +14,16 @@ export function textEditPatch(node: TextNode, text: string, font: Font | null): 
   return { text, size: measureText({ ...node, text }, font) };
 }
 
+// Pure predicate behind the capture-phase "click away commits" handler below
+// — pulled out so the branch (inside vs. outside the textarea) has its own
+// test instead of only being covered indirectly through DOM event wiring.
+export function isOutsideTextarea(
+  target: EventTarget | null,
+  textarea: HTMLTextAreaElement | null,
+): boolean {
+  return !(target instanceof Node && textarea?.contains(target));
+}
+
 // Dùng <textarea> DOM thật thay vì tự vẽ caret trên canvas: trình duyệt lo
 // caret, bôi đen và IME tiếng Việt. Đánh đổi đã biết: khi node đang warp,
 // textarea vẫn hiện chữ thẳng — xem docs/text-future-work.md mục 10.
@@ -31,6 +41,10 @@ export function TextEditOverlay({
   const store = useEditorStoreApi();
   const [value, setValue] = useState(node.text);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Guards against dispatching the same commit twice — the capture-phase
+  // pointerdown handler below and the textarea's own onBlur can both fire
+  // for the same "click away" gesture (see that handler's comment).
+  const committedRef = useRef(false);
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -38,6 +52,8 @@ export function TextEditOverlay({
   }, []);
 
   const commit = () => {
+    if (committedRef.current) return;
+    committedRef.current = true;
     if (value !== node.text) {
       const font = getLoadedFont(node.font.family)?.font ?? null;
       store.getState().dispatch({
@@ -49,6 +65,31 @@ export function TextEditOverlay({
     }
     onClose();
   };
+
+  // Kept fresh every render (in an effect, not during render — mutating a
+  // ref while rendering is a lint error) so the capture-phase listener
+  // (registered once, below) always commits the latest typed value instead
+  // of closing over a stale one from mount time.
+  const commitRef = useRef(commit);
+  useEffect(() => {
+    commitRef.current = commit;
+  });
+
+  // Canvas has its own native `pointerdown` listener (Pixi's stage handler
+  // in marquee.ts) that, for an empty-canvas click, synchronously deselects
+  // the node and unmounts this overlay — which happens before the browser's
+  // native `blur` event would otherwise reach onBlur below, silently
+  // discarding whatever was typed. A capture-phase listener on `document`
+  // always runs before any listener on a descendant (the canvas), regardless
+  // of that descendant's own phase, so committing here wins the race and the
+  // edit is saved before the canvas gets a chance to unmount us.
+  useEffect(() => {
+    const handlePointerDownOutside = (e: PointerEvent) => {
+      if (isOutsideTextarea(e.target, textareaRef.current)) commitRef.current();
+    };
+    document.addEventListener('pointerdown', handlePointerDownOutside, true);
+    return () => document.removeEventListener('pointerdown', handlePointerDownOutside, true);
+  }, []);
 
   const originX = node.transform.originX ?? 0;
   const originY = node.transform.originY ?? 0;
