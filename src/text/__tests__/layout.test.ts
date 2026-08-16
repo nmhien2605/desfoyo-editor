@@ -76,3 +76,24 @@ describe('layoutText', () => {
     expect(Number.isFinite(result.height)).toBe(true);
   });
 });
+
+describe('neo tuyet doi', () => {
+  it('anchorX cong don theo pen, baselineY theo dong', () => {
+    const result = layout('Hi\nHi');
+    const ascent = (poppins.ascender * 100) / poppins.unitsPerEm;
+    const lineStep = 100 * 1.2;
+
+    const line1 = result.shapes.filter((s) => s.baselineY === ascent);
+    const line2 = result.shapes.filter((s) => s.baselineY === ascent + lineStep);
+    expect(line1.length).toBeGreaterThan(0);
+    expect(line2.length).toBe(line1.length);
+
+    // Cung noi dung => anchorX hai dong trung nhau
+    expect(line2.map((s) => s.anchorX)).toEqual(line1.map((s) => s.anchorX));
+  });
+
+  it('anchorX cua glyph dau bang nua advance cua chinh no', () => {
+    const [first] = getGlyphOutlines('Hi', poppins, 100);
+    expect(layout('Hi').shapes[0].anchorX).toBeCloseTo(first.advance / 2, 9);
+  });
+});
