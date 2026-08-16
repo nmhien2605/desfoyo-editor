@@ -8,14 +8,14 @@ Mỗi mục ghi rõ: **khi nào cần** — dấu hiệu để biết đã đế
 
 ## 1. Đổi opentype.js → harfbuzzjs
 
-**Vì sao hoãn.** opentype.js 2.0 chỉ shaping cơ bản (`liga`, `rlig`, kern). Đủ cho font Latin/display — 90% use case poster/logo.
+**Vì sao hoãn.** opentype.js 2.0 chỉ shaping cơ bản (`liga`, `rlig`, kern — `kern` được `getGlyphOutlines()` áp dụng qua `font.getKerningValue()` khi cộng advance giữa các glyph liền kề). Đủ cho font Latin/display — 90% use case poster/logo.
 
 **Khi nào cần.**
 - Hỗ trợ font script/handwritten có swash, alternates, stylistic set (`salt`, `ss01..ss20`) — đúng loại font mà Kittl sống bằng nó.
 - Hỗ trợ tiếng Ả Rập, Ấn Độ, Thái — những ngôn ngữ mà thứ tự glyph khác thứ tự ký tự.
 - User báo một font cụ thể hiện sai chữ ghép.
 
-**Chạm vào đâu.** Chỉ `src/text/glyphOutlines.ts`. Interface `getGlyphOutlines(text, font, size) → { advance, contours }[]` được thiết kế đúng để cô lập chuyện này. Phần khó không phải outline mà là **init bất đồng bộ của WASM** — `fontService` sẽ phải `await` module wasm trước khi parse font đầu tiên, và test sẽ cần setup async.
+**Chạm vào đâu.** Chỉ `src/text/glyphOutlines.ts`. Interface `getGlyphOutlines(text, font, size) → GlyphOutline[]` (mỗi phần tử `{ advance, shapes: GlyphShape[] }`, không phải `contours` phẳng — xem §5.1 của spec cho lý do) được thiết kế đúng để cô lập chuyện này. Phần khó không phải outline mà là **init bất đồng bộ của WASM** — `fontService` sẽ phải `await` module wasm trước khi parse font đầu tiên, và test sẽ cần setup async.
 
 **So sánh các lựa chọn đã cân nhắc.**
 
@@ -39,6 +39,8 @@ Nếu chỉ thiếu variable font mà không thiếu shaping thì **fontkit** l�
 **Chạm vào đâu.** `src/text/layout.ts` — thuật toán greedy word-wrap khoảng 15-20 dòng: tích luỹ advance đến khi vượt `node.size.width` thì ngắt ở khoảng trắng gần nhất. Vấn đề thật sự không nằm ở thuật toán mà ở chỗ nó **kéo theo mục 3**: có wrap thì `node.size.width` trở thành input của layout thay vì output, đảo chiều quan hệ giữa size và nội dung.
 
 Ngắt dòng tiếng Việt: cẩn thận với dấu tổ hợp (combining diacritics) — không được ngắt giữa ký tự cơ sở và dấu.
+
+**Liên quan — `align` hiện là no-op hình ảnh cho text một dòng.** `node.size.width` luôn đúng bằng chiều rộng thật của chữ (xem bất biến "size derived from content"), nên `center`/`right` không có khoảng trống (`slack`) nào để dịch vào — `layout.ts` tính đúng `slack = 0` và không có gì thay đổi trên màn hình. Đây là hành vi đúng, không phải bug; nó chỉ trở nên có ý nghĩa khi có text box chiều rộng cố định hoặc auto-wrap nhiều dòng (mục này), lúc đó `node.size.width` mới có thể lớn hơn chiều rộng một dòng chữ.
 
 ---
 

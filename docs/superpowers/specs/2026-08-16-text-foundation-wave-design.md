@@ -104,10 +104,10 @@ Ba điểm thiết kế:
 | File | Việc | Phụ thuộc |
 |---|---|---|
 | `fontService.ts` | family → ArrayBuffer → `opentype.Font`, cache; đăng ký `FontFace` cho textarea overlay | opentype.js |
-| `glyphOutlines.ts` | **seam duy nhất chạm opentype.js**: `getGlyphOutlines(text, font, size) → { advance, contours }[]`. Bezier được flatten thành polyline tại đây | opentype.js |
+| `glyphOutlines.ts` | **seam duy nhất chạm opentype.js**: `getGlyphOutlines(text, font, size) → GlyphOutline[]`, mỗi phần tử `{ advance, shapes: GlyphShape[] }`. Bezier được flatten thành polyline tại đây; cũng là nơi cộng kerning (`font.getKerningValue`) vào `advance` | opentype.js |
 | `layout.ts` | ngắt dòng theo `\n`, align, letterSpacing, lineHeight, đo bbox → glyph đã định vị + `baselineY` | glyphOutlines |
 | `warp.ts` | kiểu `WarpPath`, đánh giá bezier + bảng arc-length, preset sinh path theo `type`+`intensity`, `applyWarp()` | — |
-| `textGeometry.ts` | keo dán: `textContours(node, font) → Contour[]` | 3 file trên |
+| `textGeometry.ts` | keo dán: `textGeometry(node, font) → TextGeometry` (`{ shapes: GlyphShape[], width, height, baselineY }`) | 3 file trên |
 
 Hai lựa chọn kỹ thuật đáng ghi lại:
 
@@ -123,10 +123,10 @@ Hai lựa chọn kỹ thuật đáng ghi lại:
   Nên dữ liệu hình học không phải là `Contour[]` phẳng mà là **`GlyphShape[]`**, mỗi shape gồm `{ outer, holes }`. Renderer vẽ theo từng shape: `poly(outer).fill(style)` rồi mỗi `poly(hole).cut()`.
 
   Phân loại outer/hole làm trong `glyphOutlines.ts`, **trước** khi warp (rẻ hơn và an toàn hơn, warp không đổi quan hệ bao nhau): lấy contour có `|diện tích có dấu|` lớn nhất trong glyph làm mốc — cùng dấu với nó là outer, ngược dấu là hole. Cách này đúng cho cả TrueType (outer CW) lẫn CFF/OTF (outer CCW) mà không cần biết font thuộc loại nào. Glyph nhiều outer (`%`, `i`) thì gán mỗi hole cho outer chứa nó bằng point-in-polygon, mặc định về outer đầu tiên.
-- **`src/ui/TextEditOverlay.tsx`** — double-click node text → `<textarea>` định vị bằng `viewport.toScreen`, style theo `font`/`fill` của node, dùng `FontFace` do `fontService` đăng ký. Blur hoặc Escape → `dispatch(UpdateProps)`. Trong lúc sửa, node trên canvas ẩn đi để không chồng hình.
+- **`src/ui/TextEditOverlay.tsx`** — double-click node text → `<textarea>` định vị bằng `viewport.toScreen`, style theo `font`/`fill` của node, dùng `FontFace` do `fontService` đăng ký. Blur hoặc Escape → `dispatch(UpdateProps)`. Trong lúc sửa, node trên canvas **không** ẩn đi — chỉ handle resize/rotate ẩn (xem dòng dưới); `<textarea>` phủ lên bằng nền bán trong suốt (`bg-white/90`) để không chồng hình rối mắt, thay vì phải đồng bộ ẩn/hiện với vòng render Pixi.
 - **`src/ui/WarpHandlesOverlay.tsx`** — SVG overlay vẽ path xanh + 3 anchor + 4 handle + đoạn nối anchor–handle, kéo được. Dùng lại nguyên `viewport.toScreen/toWorld` và `beginGesture/endGesture` mà `ImageCropHandles` trong `SelectionOverlay.tsx` đang dùng (coalesce history khi kéo liên tục).
 - **Sửa nhẹ:** `SceneReconciler.ts` (thêm case `'text'`), `svgSerializer.ts` (text → `<path>` vector thật, vì đã có contour), `PropertiesPanel.tsx` (khối text + khối Transformation), `Toolbar.tsx` (nút thêm text + `defaultTextNode`, đặt cạnh `defaultImageNode`/`defaultSvgNode` đang nằm sẵn ở đó — `core/actions.ts` chỉ chứa hành động gộp nhiều dispatch, không phải factory node).
-- **`SelectionOverlay.tsx`**: node `type === 'text'` không hiện 8 handle resize (quyết định #5). Handle rotate vẫn còn.
+- **`SelectionOverlay.tsx`**: node `type === 'text'` không hiện 8 handle resize (quyết định #5). Handle rotate vẫn còn, nhưng ẩn trong lúc đang sửa chữ (`isEditingText`) để không chồng lên `<textarea>` overlay.
 
 ## 6. Wave
 
@@ -183,7 +183,7 @@ UI slider/handle ──dispatch(UpdateProps)──► store ──lastCommand─
                                                                           │
                                                           textRenderer.update(node)
                                                                           │
-                                                  textContours() ──► Graphics.poly()+fill()
+                                                  textGeometry() ──► Graphics.poly()+fill()
 ```
 
 `beginGesture`/`endGesture` bọc mỗi lần kéo để history gộp thành một bước undo.
@@ -193,7 +193,7 @@ UI slider/handle ──dispatch(UpdateProps)──► store ──lastCommand─
 | Tình huống | Hành vi |
 |---|---|
 | Font chưa load xong khi render | Renderer vẽ rỗng, kích hoạt `loadFont()` rồi vẽ lại qua callback `onFontLoaded`. Một callback phủ được cả lần render đầu lẫn node thêm sau với font lạ, nên không cần bước preload riêng trong `CanvasHost` — đổi lại là có thể nháy một frame trống lúc mở document. |
-| File font hỏng / parse fail | `fontService` log lỗi, fallback về font bundle mặc định. Không throw ra render loop. |
+| File font hỏng / parse fail | `fontService` log lỗi, không throw ra render loop. Thư viện **không** ship font mặc định nào của riêng nó ([src/text/fonts/README.md](../../../src/text/fonts/README.md) — quyết định có chủ ý), nên không có gì để fallback về: node chỉ đứng im, không vẽ ra gì, cho tới khi đổi sang font khác đã nạp được. |
 | `text` rỗng | `contours` rỗng, node vẫn tồn tại với bbox tối thiểu để còn chọn/xoá được. |
 | Ký tự không có trong font | opentype trả `.notdef` (glyph 0), vẽ bình thường — không cần xử lý riêng. |
 | `warp.paths` có < 2 anchor | Coi như `type: 'none'`. |
