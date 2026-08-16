@@ -4,6 +4,7 @@ import { customShaders } from '../effects/shaders/customShaders';
 import { decodeSvgText, listFillableIds } from '../render/renderers/svgRenderer';
 import { getLoadedFont, onFontLoaded, registeredFamilies } from '../text/fontService';
 import { measureText } from '../text/textGeometry';
+import { TransformationControls } from './TransformationControls';
 import type { BlendMode, Effect, Fill, ImageNode, Node, Stroke, SvgNode, TextNode } from '../schema';
 
 const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten'];
@@ -110,6 +111,8 @@ export function PropertiesPanel() {
       {node.type === 'text' && (
         <TextControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />
       )}
+
+      {node.type === 'text' && <TransformationControls node={node} activePageId={activePageId} />}
 
       {node.type === 'image' && (
         <ImageControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />
