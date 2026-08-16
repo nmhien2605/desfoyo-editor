@@ -180,8 +180,17 @@ function groupIntoShapes(contours: Contour[]): GlyphShape[] {
 // ký tự.
 export function getGlyphOutlines(text: string, font: Font, fontSize: number): GlyphOutline[] {
   const scale = fontSize / font.unitsPerEm;
-  return font.stringToGlyphs(text).map((glyph) => ({
+  const glyphs = font.stringToGlyphs(text);
+  const outlines = glyphs.map((glyph) => ({
     advance: (glyph.advanceWidth ?? 0) * scale,
     shapes: groupIntoShapes(commandsToContours(glyph.getPath(0, 0, fontSize).commands)),
   }));
+  // GPOS/kern cho từng cặp liền kề — cộng thêm vào advance của glyph đứng
+  // trước trong cặp, vì pen chỉ tiến sau khi đã "qua" glyph đó. Chỉ cộng dồn,
+  // không đụng tới shapes/outer/hole ở trên.
+  for (let i = 0; i < glyphs.length - 1; i++) {
+    const kern = font.getKerningValue(glyphs[i], glyphs[i + 1]);
+    if (kern) outlines[i].advance += kern * scale;
+  }
+  return outlines;
 }
