@@ -29,15 +29,66 @@ const node: TextNode = {
   fill: { type: 'solid', color: '#ff0000' },
 };
 
+function loadFontBuffer(relativePath: string): ArrayBuffer {
+  const path = fileURLToPath(new URL(relativePath, import.meta.url));
+  const buffer = readFileSync(path);
+  return buffer.buffer.slice(
+    buffer.byteOffset,
+    buffer.byteOffset + buffer.byteLength,
+  ) as ArrayBuffer;
+}
+
+// Parser + winding-number check độc lập với production code (không import từ
+// svgSerializer.ts/glyphOutlines.ts) — để test này thực sự là một phép kiểm
+// tra chéo, không phải suy ra công thức rồi tự khớp với chính nó.
+function parseSubpaths(d: string): Array<Array<[number, number]>> {
+  const subpaths: Array<Array<[number, number]>> = [];
+  const re = /M ([-\d.]+) ([-\d.]+)((?:\s+L\s+[-\d.]+\s+[-\d.]+)*)\s+Z/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(d))) {
+    const pts: Array<[number, number]> = [[parseFloat(m[1]), parseFloat(m[2])]];
+    const lre = /L ([-\d.]+) ([-\d.]+)/g;
+    let lm: RegExpExecArray | null;
+    while ((lm = lre.exec(m[3]))) pts.push([parseFloat(lm[1]), parseFloat(lm[2])]);
+    subpaths.push(pts);
+  }
+  return subpaths;
+}
+
+// evenodd: đếm số lần cạnh cắt qua tia ngang từ điểm, chẵn/lẻ quyết định tô.
+function evenOddFilled(subpaths: Array<Array<[number, number]>>, px: number, py: number): boolean {
+  let count = 0;
+  for (const pts of subpaths) {
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i, i++) {
+      const [xi, yi] = pts[i];
+      const [xj, yj] = pts[j];
+      if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) count++;
+    }
+  }
+  return count % 2 === 1;
+}
+
+// nonzero: cộng dồn dấu (+1 lên, -1 xuống) của mỗi lần cắt, khác 0 thì tô.
+function nonzeroFilled(subpaths: Array<Array<[number, number]>>, px: number, py: number): boolean {
+  let winding = 0;
+  for (const pts of subpaths) {
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i, i++) {
+      const [xi, yi] = pts[i];
+      const [xj, yj] = pts[j];
+      if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) {
+        winding += yj > yi ? 1 : -1;
+      }
+    }
+  }
+  return winding !== 0;
+}
+
 beforeAll(async () => {
   resetFontsForTest();
-  const path = fileURLToPath(new URL('../../text/fonts/Poppins-Regular.ttf', import.meta.url));
-  const buffer = readFileSync(path);
-  registerFont(
-    'Poppins',
-    buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer,
-  );
+  registerFont('Poppins', loadFontBuffer('../../text/fonts/Poppins-Regular.ttf'));
+  registerFont('Lobster', loadFontBuffer('../../text/fonts/Lobster-Regular.ttf'));
   await loadFont('Poppins');
+  await loadFont('Lobster');
 });
 
 describe('serializeNode cho text', () => {
@@ -47,10 +98,10 @@ describe('serializeNode cho text', () => {
     expect(svg).not.toContain('<image');
   });
 
-  it('mang mau fill va fill-rule evenodd cho lo', () => {
+  it('mang mau fill va fill-rule nonzero cho lo', () => {
     const svg = serializeNode(node, doc, []);
     expect(svg).toContain('fill="#ff0000"');
-    expect(svg).toContain('fill-rule="evenodd"');
+    expect(svg).toContain('fill-rule="nonzero"');
   });
 
   it('chu "o" xuat ra 2 subpath: outer + lo', () => {
@@ -72,5 +123,39 @@ describe('serializeNode cho text', () => {
 
   it('node an thi khong xuat gi', () => {
     expect(serializeNode({ ...node, visible: false }, doc, [])).toBe('');
+  });
+
+  // Font script "Lobster" khien glyph 'b' va 's' trong tu "Lobster" chong
+  // outer-outer len nhau thuc su (khong phai quan he outer/hole). Da xac
+  // minh bang khao sat hinh hoc: tai diem (182.74, 94.87) trong khong gian
+  // local cua text, outer cua 'b' VA outer cua 's' deu chua diem nay, ca hai
+  // cuon cung chieu (cung la outer trong font nay) nen winding cong don
+  // thanh +-2 (khac 0) — nonzero to dung (khop canvas, ve tung glyph doc
+  // lap), con evenodd dem duoc 2 lan cat (chan) nen KHONG to — sinh lo gia
+  // khong ton tai. Day chinh la bug ma fix #2 sua.
+  it('overlap outer-outer that giua 2 glyph (font Lobster) van duoc to dung duoi nonzero, se sai duoi evenodd', () => {
+    const overlapNode: TextNode = {
+      ...node,
+      text: 'Lobster',
+      font: { family: 'Lobster', weight: 400, style: 'normal', size: 110 },
+      size: { width: 300, height: 160 },
+    };
+    const svg = serializeNode(overlapNode, doc, []);
+    expect(svg).toContain('fill-rule="nonzero"');
+
+    const d = svg.match(/d="([^"]+)"/)?.[1];
+    expect(d).toBeTruthy();
+    const subpaths = parseSubpaths(d!);
+    // 7 chu cai, 3 co lo (o, b, e) => 10 subpath.
+    expect(subpaths.length).toBeGreaterThan(7);
+
+    const px = 182.74;
+    const py = 94.87;
+    // Day la khang dinh cot loi: diem nam trong vung "b" va "s" chong len
+    // nhau (khong phai lo) phai duoc to duoi nonzero...
+    expect(nonzeroFilled(subpaths, px, py)).toBe(true);
+    // ...nhung se KHONG duoc to duoi evenodd — chung minh 2 luat khac nhau
+    // that su tren chinh du lieu nay, khong phai gia dinh suong.
+    expect(evenOddFilled(subpaths, px, py)).toBe(false);
   });
 });

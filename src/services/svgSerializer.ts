@@ -122,7 +122,14 @@ function contourToPathData(contour: number[]): string {
 
 // Text xuất ra vector thật (khác 'svg' node vốn phải rasterize) vì contour đã
 // có sẵn từ textGeometry — không cần nhúng font, không cần <text>. Lỗ đi kèm
-// outer trong cùng một `d` và để SVG tự cắt bằng fill-rule="evenodd".
+// outer trong cùng một `d`. fill-rule="nonzero" (không phải evenodd): trong
+// một glyph, outer và hole của nó cuộn ngược chiều nhau (groupIntoShapes ở
+// glyphOutlines.ts phân loại đúng bằng signedArea), nên dưới nonzero winding
+// number vẫn triệt tiêu về 0 tại hole — cắt đúng. Nhưng khi hai glyph khác
+// nhau chồng lên nhau (không phải quan hệ outer/hole), outer của chúng cuộn
+// CÙNG chiều nên winding cộng dồn thành ±2 — evenodd sẽ coi đó là "chẵn" và
+// đục lỗ sai (không khớp canvas, vốn tô từng glyph độc lập); nonzero vẫn tô
+// đúng vì winding ±2 khác 0.
 function textElement(node: TextNode, defs: string[]): string {
   const loaded = getLoadedFont(node.font.family);
   // Font chưa nạp thì bỏ qua node, cùng quy ước "thiếu dữ liệu thì im lặng"
@@ -133,7 +140,7 @@ function textElement(node: TextNode, defs: string[]): string {
   const data = shapes
     .map((shape) => [shape.outer, ...shape.holes].map(contourToPathData).join(' '))
     .join(' ');
-  return `<path d="${data}" fill-rule="evenodd" ${fillAttr(node.fill, defs)}/>`;
+  return `<path d="${data}" fill-rule="nonzero" ${fillAttr(node.fill, defs)}/>`;
 }
 
 export function serializeNode(node: Node, doc: Document, defs: string[], rasterized?: RasterizedMap): string {
