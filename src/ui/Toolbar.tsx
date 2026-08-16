@@ -11,7 +11,9 @@ import {
 } from '../core/actions';
 import { fitToScreen } from '../render/interactions/viewportControls';
 import { decodeSvgText } from '../render/renderers/svgRenderer';
-import type { ImageNode, ShapeNode, SvgNode, Transform } from '../schema';
+import { getLoadedFont, loadFont, registeredFamilies } from '../text/fontService';
+import { measureText } from '../text/textGeometry';
+import type { ImageNode, ShapeNode, SvgNode, TextNode, Transform } from '../schema';
 
 const DEFAULT_TRANSFORM: Transform = { x: 100, y: 100, scaleX: 1, scaleY: 1, rotation: 0, originX: 0.5, originY: 0.5 };
 
@@ -91,6 +93,27 @@ export function svgNaturalSize(svgText: string): { width: number; height: number
   return { width: 200, height: 200 };
 }
 
+// Kích thước text là *kết quả* của layout chứ không phải đầu vào, nên node
+// được tạo với size đo thật ngay từ đầu — SelectionOverlay và applyTransform
+// đều đọc node.size.
+export function defaultTextNode(family: string, size: { width: number; height: number }): TextNode {
+  return {
+    id: nanoid(),
+    transform: { ...DEFAULT_TRANSFORM },
+    size,
+    opacity: 1,
+    visible: true,
+    locked: false,
+    type: 'text',
+    text: 'Your text',
+    font: { family, weight: 400, style: 'normal', size: 96 },
+    align: 'left',
+    letterSpacing: 0,
+    lineHeight: 1.2,
+    fill: { type: 'solid', color: '#111827' },
+  };
+}
+
 export function Toolbar() {
   const store = useEditorStoreApi();
   const activePageId = useEditorStore((s) => s.activePageId);
@@ -110,9 +133,20 @@ export function Toolbar() {
     fitToScreen(store, { width: app.screen.width, height: app.screen.height }, page.size);
   };
 
-  const addNode = (node: ShapeNode | ImageNode | SvgNode) => {
+  const addNode = (node: ShapeNode | ImageNode | SvgNode | TextNode) => {
     store.getState().dispatch({ type: 'AddNode', pageId: activePageId, node });
     store.getState().select(node.id);
+  };
+
+  const fontFamilies = registeredFamilies();
+
+  const handleAddText = async () => {
+    const family = fontFamilies[0];
+    if (!family) return;
+    const loaded = getLoadedFont(family) ?? (await loadFont(family));
+    if (!loaded) return;
+    const draft = defaultTextNode(family, { width: 1, height: 1 });
+    addNode({ ...draft, size: measureText(draft, loaded.font) });
   };
 
   const handleImageFile = async (file: File) => {
@@ -144,6 +178,15 @@ export function Toolbar() {
       </button>
       <button type="button" onClick={() => addNode(defaultShapeNode())} className="rounded bg-gray-100 px-3 py-1">
         Add Shape
+      </button>
+      <button
+        type="button"
+        disabled={fontFamilies.length === 0}
+        title={fontFamilies.length === 0 ? 'Chua dang ky font nao (registerFont)' : undefined}
+        onClick={() => void handleAddText()}
+        className="rounded bg-gray-100 px-3 py-1 disabled:opacity-50"
+      >
+        Add Text
       </button>
       <button
         type="button"

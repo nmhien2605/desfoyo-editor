@@ -3,6 +3,14 @@ import { createRoot } from 'react-dom/client';
 import { Editor, type EditorHandle } from '../src/index';
 import { samples } from './samples';
 import '../src/ui/styles.css';
+import { registerFont } from '../src/text/fontService';
+import poppinsUrl from '../src/text/fonts/Poppins-Regular.ttf?url';
+import antonUrl from '../src/text/fonts/Anton-Regular.ttf?url';
+import lobsterUrl from '../src/text/fonts/Lobster-Regular.ttf?url';
+
+registerFont('Poppins', poppinsUrl);
+registerFont('Anton', antonUrl);
+registerFont('Lobster', lobsterUrl);
 
 function App() {
   const [sampleName, setSampleName] = useState<keyof typeof samples>('Basic shapes');

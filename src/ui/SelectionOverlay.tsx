@@ -208,6 +208,7 @@ function SingleSelectionOverlay({
         }}
       />
       {!isCropping &&
+        node.type !== 'text' &&
         HANDLES.map((handle) => {
           const pos = viewport.toScreen(worldPoint(node, localCorner(handle, node.size.width, node.size.height)));
           return (

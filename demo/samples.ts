@@ -27,7 +27,15 @@ export const basicShapesSample: Document = baseDoc({
         {
           id: 'shape-1',
           type: 'shape',
-          transform: { x: 200, y: 200, scaleX: 1, scaleY: 1, rotation: 0, originX: 0.5, originY: 0.5 },
+          transform: {
+            x: 200,
+            y: 200,
+            scaleX: 1,
+            scaleY: 1,
+            rotation: 0,
+            originX: 0.5,
+            originY: 0.5,
+          },
           size: { width: 200, height: 150 },
           opacity: 1,
           visible: true,
@@ -39,7 +47,15 @@ export const basicShapesSample: Document = baseDoc({
         {
           id: 'shape-2',
           type: 'shape',
-          transform: { x: 550, y: 200, scaleX: 1, scaleY: 1, rotation: 0.2, originX: 0.5, originY: 0.5 },
+          transform: {
+            x: 550,
+            y: 200,
+            scaleX: 1,
+            scaleY: 1,
+            rotation: 0.2,
+            originX: 0.5,
+            originY: 0.5,
+          },
           size: { width: 160, height: 160 },
           opacity: 1,
           visible: true,
@@ -65,7 +81,15 @@ export const shadowEffectSample: Document = baseDoc({
         {
           id: 'shape-shadow',
           type: 'shape',
-          transform: { x: 400, y: 380, scaleX: 1, scaleY: 1, rotation: -0.1, originX: 0.5, originY: 0.5 },
+          transform: {
+            x: 400,
+            y: 380,
+            scaleX: 1,
+            scaleY: 1,
+            rotation: -0.1,
+            originX: 0.5,
+            originY: 0.5,
+          },
           size: { width: 220, height: 140 },
           opacity: 1,
           visible: true,
@@ -78,7 +102,15 @@ export const shadowEffectSample: Document = baseDoc({
         {
           id: 'image-1',
           type: 'image',
-          transform: { x: 680, y: 480, scaleX: 1, scaleY: 1, rotation: 0.15, originX: 0.5, originY: 0.5 },
+          transform: {
+            x: 680,
+            y: 480,
+            scaleX: 1,
+            scaleY: 1,
+            rotation: 0.15,
+            originX: 0.5,
+            originY: 0.5,
+          },
           size: { width: 120, height: 120 },
           opacity: 1,
           visible: true,
@@ -90,7 +122,70 @@ export const shadowEffectSample: Document = baseDoc({
   ],
 });
 
+export const textWaveSample: Document = baseDoc({
+  id: 'sample-text-wave',
+  assets: {},
+  pages: [
+    {
+      id: 'page-1',
+      name: 'Page 1',
+      size: { width: 900, height: 500 },
+      background: { type: 'color', value: '#ffffff' },
+      children: [
+        {
+          id: 'text-plain',
+          type: 'text',
+          transform: {
+            x: 450,
+            y: 140,
+            scaleX: 1,
+            scaleY: 1,
+            rotation: 0,
+            originX: 0.5,
+            originY: 0.5,
+          },
+          size: { width: 420, height: 130 },
+          opacity: 1,
+          visible: true,
+          locked: false,
+          text: 'Desfoyo',
+          font: { family: 'Anton', weight: 400, style: 'normal', size: 110 },
+          align: 'center',
+          letterSpacing: 0,
+          lineHeight: 1.2,
+          fill: { type: 'solid', color: '#111827' },
+        },
+        {
+          id: 'text-waved',
+          type: 'text',
+          transform: {
+            x: 450,
+            y: 340,
+            scaleX: 1,
+            scaleY: 1,
+            rotation: 0,
+            originX: 0.5,
+            originY: 0.5,
+          },
+          size: { width: 420, height: 130 },
+          opacity: 1,
+          visible: true,
+          locked: false,
+          text: 'Desfoyo',
+          font: { family: 'Anton', weight: 400, style: 'normal', size: 110 },
+          align: 'center',
+          letterSpacing: 0,
+          lineHeight: 1.2,
+          fill: { type: 'solid', color: '#2563eb' },
+          warp: { type: 'wave', intensity: 0.5 },
+        },
+      ],
+    },
+  ],
+});
+
 export const samples: Record<string, Document> = {
   'Basic shapes': basicShapesSample,
   'Shadow effect': shadowEffectSample,
+  'Text + wave': textWaveSample,
 };
