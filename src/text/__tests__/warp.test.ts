@@ -120,3 +120,66 @@ describe('warpShapes', () => {
     expect(warpShapes(shapes, sampler, box)).toBe(shapes);
   });
 });
+
+// Tich phan do dai cung bang cach chia rat min — ban cai dat doc lap de doi
+// chieu, khong dung lai code cua sampler.
+function referenceLength(p: number[][], steps = 40000): number {
+  const at = (t: number, i: number) => {
+    const u = 1 - t;
+    return (
+      u * u * u * p[0][i] + 3 * u * u * t * p[1][i] + 3 * u * t * t * p[2][i] + t * t * t * p[3][i]
+    );
+  };
+  let total = 0;
+  for (let k = 1; k <= steps; k++) {
+    const t0 = (k - 1) / steps;
+    const t1 = k / steps;
+    total += Math.hypot(at(t1, 0) - at(t0, 0), at(t1, 1) - at(t0, 1));
+  }
+  return total;
+}
+
+describe('sampler chinh xac', () => {
+  it('tangent khong suy bien khi anchor thieu handle', () => {
+    // anchor dau khong co `out` => c1 = p0 => B'(0) = 0. Cong thuc cu tra
+    // vector khong, lam glyph co ve mot diem khi ap phep bien doi cung.
+    const noHandle: WarpPath = {
+      role: 'baseline',
+      closed: false,
+      anchors: [
+        { x: 0, y: 0.5 },
+        { x: 1, y: 0.5, in: { x: 0.5, y: 0.5 } },
+      ],
+    };
+    const { tangent } = buildPathSampler(noHandle, SIZE).at(0);
+    expect(Math.hypot(tangent.x, tangent.y)).toBeCloseTo(1, 9);
+    expect(tangent.x).toBeCloseTo(1, 6);
+    expect(tangent.y).toBeCloseTo(0, 6);
+  });
+
+  it('do dai khop voi tich phan doc lap tren path cong manh', () => {
+    const curved: WarpPath = {
+      role: 'baseline',
+      closed: false,
+      anchors: [
+        { x: 0, y: 0.9, out: { x: 0.1, y: 0.0 } },
+        { x: 1, y: 0.9, in: { x: 0.9, y: 0.0 } },
+      ],
+    };
+    const expected = referenceLength([
+      [0, 90],
+      [40, 0],
+      [360, 0],
+      [400, 90],
+    ]);
+    expect(buildPathSampler(curved, SIZE).length).toBeCloseTo(expected, 1);
+  });
+
+  it('tangent la vector don vi tai moi vi tri tren path cong', () => {
+    const sampler = buildPathSampler(buildWavePath(1, 0.8), SIZE);
+    for (let i = 0; i <= 10; i++) {
+      const { tangent } = sampler.at((sampler.length * i) / 10);
+      expect(Math.hypot(tangent.x, tangent.y)).toBeCloseTo(1, 9);
+    }
+  });
+});

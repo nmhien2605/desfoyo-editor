@@ -1,5 +1,6 @@
-import type { Size, WarpAnchor, WarpPath } from '../schema';
+import type { Size, WarpPath } from '../schema';
 import type { Contour, GlyphShape } from './glyphOutlines';
+import { evalCubic, evalD1, evalD2, evalD3 } from './bezier';
 
 export interface Point {
   x: number;
@@ -11,81 +12,173 @@ export interface PathSampler {
   at(distance: number): { point: Point; tangent: Point };
 }
 
-const SAMPLES_PER_SEGMENT = 32;
+const FLATNESS_TOL = 0.01; // px
+const MIN_STEPS = 8;
+const MAX_STEPS = 256;
 const EPSILON = 1e-6;
 
-function cubicPoint(p0: Point, p1: Point, p2: Point, p3: Point, t: number): Point {
-  const u = 1 - t;
-  const a = u * u * u;
-  const b = 3 * u * u * t;
-  const c = 3 * u * t * t;
-  const d = t * t * t;
-  return {
-    x: a * p0.x + b * p1.x + c * p2.x + d * p3.x,
-    y: a * p0.y + b * p1.y + c * p2.y + d * p3.y,
-  };
+interface Segment {
+  p0: Point;
+  c1: Point;
+  c2: Point;
+  p3: Point;
 }
 
-// Chuyển path chuẩn hoá 0..1 thành bảng {khoảng cách tích luỹ, điểm} trong px.
-// Tra cứu theo arc-length (chứ không theo tham số t của bezier) là điều kiện
-// để chữ phân bố đều dọc đường cong — tham số t chạy nhanh chậm không đều.
-export function buildPathSampler(path: WarpPath, size: Size): PathSampler {
+function segmentsOf(path: WarpPath, size: Size): Segment[] {
   const toPx = (p: { x: number; y: number }): Point => ({
     x: p.x * size.width,
     y: p.y * size.height,
   });
-  const anchorPoint = (a: WarpAnchor): Point => toPx(a);
-
-  const points: Point[] = [];
+  const segments: Segment[] = [];
   for (let i = 0; i < path.anchors.length - 1; i++) {
     const from = path.anchors[i];
     const to = path.anchors[i + 1];
-    const p0 = anchorPoint(from);
-    const p3 = anchorPoint(to);
-    const p1 = from.out ? toPx(from.out) : p0;
-    const p2 = to.in ? toPx(to.in) : p3;
-    for (let step = 0; step <= SAMPLES_PER_SEGMENT; step++) {
-      // Bỏ mẫu đầu của mọi đoạn trừ đoạn đầu tiên — nó trùng với mẫu cuối
-      // của đoạn trước, để lại sẽ tạo một bước dài 0 trong bảng arc-length.
-      if (i > 0 && step === 0) continue;
-      points.push(cubicPoint(p0, p1, p2, p3, step / SAMPLES_PER_SEGMENT));
+    const p0 = toPx(from);
+    const p3 = toPx(to);
+    segments.push({ p0, c1: from.out ? toPx(from.out) : p0, c2: to.in ? toPx(to.in) : p3, p3 });
+  }
+  return segments;
+}
+
+// Cận sai số chuẩn của xấp xỉ cubic bằng n đoạn thẳng: sai số ≤ (3/4)·M/n²
+// với M là hiệu bậc hai lớn nhất của đa giác điều khiển. Thay cho 32 mẫu
+// cố định — cung càng gắt càng nhiều mẫu, cung thoải thì ít.
+function stepsFor(s: Segment): number {
+  const m = Math.max(
+    Math.hypot(s.p0.x - 2 * s.c1.x + s.c2.x, s.p0.y - 2 * s.c1.y + s.c2.y),
+    Math.hypot(s.c1.x - 2 * s.c2.x + s.p3.x, s.c1.y - 2 * s.c2.y + s.p3.y),
+  );
+  const n = Math.ceil(Math.sqrt((0.75 * m) / FLATNESS_TOL));
+  return Math.min(MAX_STEPS, Math.max(MIN_STEPS, Number.isFinite(n) ? n : MIN_STEPS));
+}
+
+function pointAt(s: Segment, t: number): Point {
+  return {
+    x: evalCubic(s.p0.x, s.c1.x, s.c2.x, s.p3.x, t),
+    y: evalCubic(s.p0.y, s.c1.y, s.c2.y, s.p3.y, t),
+  };
+}
+
+// B'(t) = 0 ở cusp và ở anchor thiếu handle (c1 = p0). Theo quy tắc
+// L'Hôpital, hướng tiếp tuyến khi đó là hướng của đạo hàm bậc cao kế tiếp.
+// Trả null chỉ khi cả segment suy biến thành một điểm.
+function tangentAt(s: Segment, t: number): Point | null {
+  const candidates: Point[] = [
+    {
+      x: evalD1(s.p0.x, s.c1.x, s.c2.x, s.p3.x, t),
+      y: evalD1(s.p0.y, s.c1.y, s.c2.y, s.p3.y, t),
+    },
+    {
+      x: evalD2(s.p0.x, s.c1.x, s.c2.x, s.p3.x, t),
+      y: evalD2(s.p0.y, s.c1.y, s.c2.y, s.p3.y, t),
+    },
+    {
+      x: evalD3(s.p0.x, s.c1.x, s.c2.x, s.p3.x),
+      y: evalD3(s.p0.y, s.c1.y, s.c2.y, s.p3.y),
+    },
+  ];
+  for (const v of candidates) {
+    const n = Math.hypot(v.x, v.y);
+    if (n > EPSILON) return { x: v.x / n, y: v.y / n };
+  }
+  return null;
+}
+
+// Chỉ tổng chiều dài, không dựng bảng — solveHorizontalScale gọi hàm này
+// vài chục lần cho mỗi lần layout nên không muốn cấp phát bảng mỗi vòng.
+export function arcLength(path: WarpPath, size: Size): number {
+  let total = 0;
+  let prev: Point | null = null;
+  for (const s of segmentsOf(path, size)) {
+    const n = stepsFor(s);
+    for (let k = 0; k <= n; k++) {
+      const p = pointAt(s, k / n);
+      if (prev) total += Math.hypot(p.x - prev.x, p.y - prev.y);
+      prev = p;
     }
   }
+  return total;
+}
 
-  const distances: number[] = [0];
-  for (let i = 1; i < points.length; i++) {
-    distances.push(
-      distances[i - 1] + Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y),
-    );
+// Chuyển path chuẩn hoá 0..1 thành bảng {khoảng cách tích luỹ, tham số} trong
+// px. Tra cứu theo arc-length (chứ không theo tham số t của bezier) là điều
+// kiện để chữ phân bố đều dọc đường cong — tham số t chạy nhanh chậm không
+// đều. Lấy mẫu thích ứng theo độ cong (stepsFor) thay cho số mẫu cố định, và
+// tangent tính giải tích từ đạo hàm bezier thay vì xấp xỉ bằng dây cung.
+export function buildPathSampler(path: WarpPath, size: Size): PathSampler {
+  const segments = segmentsOf(path, size);
+  const entries: { seg: number; t: number; s: number }[] = [];
+  let acc = 0;
+  let prev: Point | null = null;
+
+  segments.forEach((segment, si) => {
+    const n = stepsFor(segment);
+    for (let k = 0; k <= n; k++) {
+      // Mẫu đầu của mọi đoạn trừ đoạn đầu tiên trùng mẫu cuối của đoạn
+      // trước — giữ lại sẽ tạo một bước dài 0 trong bảng arc-length.
+      if (si > 0 && k === 0) continue;
+      const t = k / n;
+      const p = pointAt(segment, t);
+      if (prev) acc += Math.hypot(p.x - prev.x, p.y - prev.y);
+      entries.push({ seg: si, t, s: acc });
+      prev = p;
+    }
+  });
+
+  const length = acc;
+  // Dùng khi một segment suy biến hẳn thành điểm: mượn hướng của chỗ khác
+  // trên path thay vì trả vector không.
+  let fallback: Point = { x: 1, y: 0 };
+  for (const entry of entries) {
+    const t = tangentAt(segments[entry.seg], entry.t);
+    if (t) {
+      fallback = t;
+      break;
+    }
   }
-  const length = distances[distances.length - 1] ?? 0;
 
   return {
     length,
     at(distance: number) {
-      if (points.length < 2 || length < EPSILON) {
-        return { point: points[0] ?? { x: 0, y: 0 }, tangent: { x: 1, y: 0 } };
+      if (entries.length === 0) return { point: { x: 0, y: 0 }, tangent: fallback };
+      if (entries.length < 2 || length < EPSILON) {
+        const first = entries[0];
+        return {
+          point: pointAt(segments[first.seg], first.t),
+          tangent: tangentAt(segments[first.seg], first.t) ?? fallback,
+        };
       }
       const clamped = Math.min(Math.max(distance, 0), length);
 
       let low = 0;
-      let high = distances.length - 1;
+      let high = entries.length - 1;
       while (high - low > 1) {
         const mid = (low + high) >> 1;
-        if (distances[mid] <= clamped) low = mid;
+        if (entries[mid].s <= clamped) low = mid;
         else high = mid;
       }
 
-      const span = distances[high] - distances[low];
-      const t = span < EPSILON ? 0 : (clamped - distances[low]) / span;
-      const a = points[low];
-      const b = points[high];
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const norm = Math.hypot(dx, dy) || 1;
+      const span = entries[high].s - entries[low].s;
+      const f = span < EPSILON ? 0 : (clamped - entries[low].s) / span;
+      // Khoảng bắc cầu giữa hai segment: mẫu `low` là t=1 của segment trước,
+      // trùng điểm với t=0 của segment sau — nội suy trong segment sau.
+      const sameSegment = entries[low].seg === entries[high].seg;
+      const seg = sameSegment ? entries[low].seg : entries[high].seg;
+      const t = sameSegment
+        ? entries[low].t + (entries[high].t - entries[low].t) * f
+        : entries[high].t * f;
+
+      // Điểm: nội suy tuyến tính trực tiếp giữa hai mẫu đã có sẵn (dây cung
+      // cục bộ), KHÔNG tái tính pointAt(seg, t) từ t nội suy — vì quan hệ
+      // s(t) phi tuyến trong mỗi bước, tái tính theo t làm sai số vượt quá
+      // sai số dây cung, phá test dung sai chặt của path thẳng-tốc-độ-đổi.
+      // Tangent vẫn lấy giải tích tại t nội suy như spec.
+      const pLow = pointAt(segments[entries[low].seg], entries[low].t);
+      const pHigh = pointAt(segments[entries[high].seg], entries[high].t);
+
       return {
-        point: { x: a.x + dx * t, y: a.y + dy * t },
-        tangent: { x: dx / norm, y: dy / norm },
+        point: { x: pLow.x + (pHigh.x - pLow.x) * f, y: pLow.y + (pHigh.y - pLow.y) * f },
+        tangent: tangentAt(segments[seg], t) ?? fallback,
       };
     },
   };
