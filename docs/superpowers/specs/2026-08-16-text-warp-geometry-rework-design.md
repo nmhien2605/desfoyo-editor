@@ -11,13 +11,13 @@ QC (`QC/qc.md` + ảnh so sánh) chỉ ra wave đang cho ra biến dạng kiểu
 
 ### 1.1 Các lỗi đã xác nhận
 
-| # | Lỗi | Vị trí |
-|---|---|---|
-| L1 | Warp áp ở **mức điểm**, không ở mức glyph → glyph bị bẻ, xoè, đổi tỉ lệ x-height theo độ cong | `warp.ts:118-133` |
-| L2 | Ép chữ giãn ngang hệ số `L/W` trong khi chiều cao giữ nguyên → non-uniform scale, letter-spacing "thở" khi kéo slider | `warp.ts:125` |
-| L3 | **Multi-line hỏng**: mọi dòng dùng chung `baselineY` của dòng đầu → dòng 2+ bị đẩy xa dọc pháp tuyến | `layout.ts:60` + `textGeometry.ts:47-50` |
-| L4 | **Tangent suy biến làm glyph co về một điểm**: `norm = Math.hypot(0,0) \|\| 1` cho `tangent = (0,0)`. Vô hại với per-point, chí mạng với rigid transform | `warp.ts:85-88` |
-| L5 | Tangent lấy từ dây cung (chord) → góc xoay lượng tử hoá 32 bậc/segment | `warp.ts:83-88` |
+| #   | Lỗi                                                                                                                                                      | Vị trí                                   |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| L1  | Warp áp ở **mức điểm**, không ở mức glyph → glyph bị bẻ, xoè, đổi tỉ lệ x-height theo độ cong                                                            | `warp.ts:118-133`                        |
+| L2  | Ép chữ giãn ngang hệ số `L/W` trong khi chiều cao giữ nguyên → non-uniform scale, letter-spacing "thở" khi kéo slider                                    | `warp.ts:125`                            |
+| L3  | **Multi-line hỏng**: mọi dòng dùng chung `baselineY` của dòng đầu → dòng 2+ bị đẩy xa dọc pháp tuyến                                                     | `layout.ts:60` + `textGeometry.ts:47-50` |
+| L4  | **Tangent suy biến làm glyph co về một điểm**: `norm = Math.hypot(0,0) \|\| 1` cho `tangent = (0,0)`. Vô hại với per-point, chí mạng với rigid transform | `warp.ts:85-88`                          |
+| L5  | Tangent lấy từ dây cung (chord) → góc xoay lượng tử hoá 32 bậc/segment                                                                                   | `warp.ts:83-88`                          |
 
 ### 1.2 Không phải lỗi (đã kiểm, ghi lại để khỏi sửa nhầm)
 
@@ -49,6 +49,7 @@ Glyph có trung điểm advance `s > arcLength` thì không render (ngữ nghĩa
 `node.size` đang gánh ba vai: pivot của transform (`applyTransform.ts:17`), khung + handle resize (`SelectionOverlay.tsx:106,213,222`), pivot của `WarpHandlesOverlay` (`:97`). Cho nó chạy theo hình đã warp sẽ làm **pivot dịch → node đã xoay nhảy vị trí khi kéo slider**.
 
 Tách theo mô hình Illustrator/Figma:
+
 - `node.size` = **text frame** (layout chưa warp). Giữ nguyên vai trò cơ sở transform/pivot/chuẩn hoá path. `measureText` không đổi.
 - `TextGeometry.bounds` = **visual bounds** của hình đã warp. Chỉ dùng để vẽ khung chọn.
 
@@ -56,12 +57,12 @@ Tách theo mô hình Illustrator/Figma:
 
 Rigid transform là **affine** → map thẳng control point của bezier, không cần lấy mẫu. Kéo theo:
 
-| Người tiêu thụ | Trước | Sau |
-|---|---|---|
-| Pixi | `poly(polyline)` | `moveTo` + `bezierCurveTo` + `closePath` (Pixi tự tessellate) |
-| SVG export | `M/L/Z` | `M/C/Z` — nhỏ hơn, sắc ở mọi zoom |
-| `signedArea` | shoelace trên polyline | Gauss–Legendre trên cung (chính xác tuyệt đối) |
-| bbox | min/max điểm mẫu | giải `B'(t)=0` (chính xác tuyệt đối) |
+| Người tiêu thụ | Trước                  | Sau                                                           |
+| -------------- | ---------------------- | ------------------------------------------------------------- |
+| Pixi           | `poly(polyline)`       | `moveTo` + `bezierCurveTo` + `closePath` (Pixi tự tessellate) |
+| SVG export     | `M/L/Z`                | `M/C/Z` — nhỏ hơn, sắc ở mọi zoom                             |
+| `signedArea`   | shoelace trên polyline | Gauss–Legendre trên cung (chính xác tuyệt đối)                |
+| bbox           | min/max điểm mẫu       | giải `B'(t)=0` (chính xác tuyệt đối)                          |
 
 Toàn bộ code flatten trong `glyphOutlines.ts` (`FLATTEN_STEP_PX`, `stepsFor`, sampler `cubic`/`quadratic`) bị **xoá**. Flatten duy nhất còn lại là bảng arc-length của warp path, vốn không tránh được.
 
@@ -103,6 +104,7 @@ export type Contour = number[];
 Tính chất then chốt: **mọi cặp số là một điểm 2D**, kể cả control point. Phép affine map đồng nhất mọi cặp — `placeOnPath` không cần biết cặp nào on-curve.
 
 Chuyển đổi từ opentype (chính xác, không xấp xỉ):
+
 - `lineTo` → cubic với `c1 = p0 + (p3−p0)/3`, `c2 = p0 + 2(p3−p0)/3`
 - `quadraticCurveTo` (TrueType) → cubic với `c1 = p0 + ⅔(q−p0)`, `c2 = p3 + ⅔(q−p3)`
 - `bezierCurveTo` (CFF/OTF) → giữ nguyên
@@ -113,7 +115,7 @@ Chuyển đổi từ opentype (chính xác, không xấp xỉ):
 export interface GlyphShape {
   outer: Contour;
   holes: Contour[];
-  anchorX: number;   // trung điểm advance của glyph, trong toạ độ hộp layout
+  anchorX: number; // trung điểm advance của glyph, trong toạ độ hộp layout
   baselineY: number; // baseline của DÒNG chứa glyph này
 }
 ```
@@ -169,7 +171,7 @@ Dấu của `A` vẫn là tiêu chí phân biệt outer/hole như cũ (TrueType 
 **`translateContour`** giữ nguyên (dịch mọi cặp — vẫn đúng với control point).
 
 **`containsPoint`** (gán hole cho outer): giữ ray-cast trên **các điểm on-curve** của outer.
-*Trần đã biết:* sai chỉ khi điểm đầu của một hole rơi đúng vào vùng giữa cung và dây cung của outer khác. Chưa gặp với font Latin; nếu cần chính xác hẳn thì thay bằng đếm giao điểm tia với từng cubic (giải phương trình bậc 3). Ghi vào `text-future-work.md`.
+_Trần đã biết:_ sai chỉ khi điểm đầu của một hole rơi đúng vào vùng giữa cung và dây cung của outer khác. Chưa gặp với font Latin; nếu cần chính xác hẳn thì thay bằng đếm giao điểm tia với từng cubic (giải phương trình bậc 3). Ghi vào `text-future-work.md`.
 
 ### 5.2 `src/text/layout.ts`
 
@@ -214,9 +216,10 @@ n = clamp( ceil( sqrt( 0.75 * M / TOL ) ), 8, 256 )      TOL = 0.01 px
 Thay cho `SAMPLES_PER_SEGMENT = 32` cố định.
 
 **Mỗi mục LUT lưu `{ seg, t, s }`** (`s` = chiều dài dây cung tích luỹ). Tra cứu:
+
 1. Nhị phân trên `s` → khoảng `[lo, hi]`.
 2. Nội suy tuyến tính `t` trong khoảng (hợp lệ ở mức TOL đã chọn).
-3. **Điểm và tangent đều tính giải tích** từ `(seg, t)` — không nội suy toạ độ. Sửa L5.
+3. **Điểm nội suy tuyến tính trực tiếp giữa hai điểm mẫu `pointAt(seg_lo, t_lo)` và `pointAt(seg_hi, t_hi)` đã có sẵn (dây cung cục bộ)** — không tái tính `pointAt` từ `t` nội suy, vì quan hệ `s(t)` phi tuyến trong mỗi bước khiến tái tính theo `t` cho sai số lớn hơn cả dây cung, đã đo được là vượt ngưỡng test dung sai chặt (xem Task 2, ledger `progress.md`). Sai số dây cung này bị chặn bởi đúng TOL mà `stepsFor` dùng để chọn số bước lấy mẫu, nên vẫn nằm trong sai số đã định. **Tangent thì tính giải tích** từ `(seg, t)` tại `t` nội suy — không nội suy tangent giữa hai mẫu. Sửa L5.
 
 **Đạo hàm giải tích:**
 
@@ -235,7 +238,7 @@ Không bao giờ trả vector không — đó chính là thứ làm glyph co v�
 
 ```ts
 // Trả hệ số k co ngang path sao cho arcLength ≈ target (target = layout.width).
-export function solveHorizontalScale(path: WarpPath, size: Size, target: number): number
+export function solveHorizontalScale(path: WarpPath, size: Size, target: number): number;
 ```
 
 **k được áp bằng phép co quanh tâm ngang của hộp**, không phải quanh gốc:
@@ -264,8 +267,8 @@ Chạy một lần cho mỗi lần layout, không nằm trong vòng lặp vẽ.
 export function placeOnPath(
   shapes: GlyphShape[],
   sampler: PathSampler,
-  pathBaselineY: number,   // layout.baselineY — mốc quy chiếu của path
-): GlyphShape[]
+  pathBaselineY: number, // layout.baselineY — mốc quy chiếu của path
+): GlyphShape[];
 ```
 
 Với mỗi shape:
@@ -306,7 +309,7 @@ Giữ nguyên hình dạng và ngữ nghĩa `intensity`/`baselineRatio` (vẫn k
 export function resolveWarpPath(
   node: TextNode,
   baselineRatio: number,
-): { path: WarpPath; fit: boolean } | null
+): { path: WarpPath; fit: boolean } | null;
 ```
 
 `fit = false` cho path đã lưu (user kéo tay), `fit = true` cho preset. Quy tắc "paths đã lưu thắng preset" giữ nguyên.
@@ -368,7 +371,14 @@ Lấy nghiệm trong `(0,1)`, đánh giá `B(t)`, gộp với hai đầu mút. X
 ```ts
 export interface TextDrawTarget {
   moveTo(x: number, y: number): TextDrawTarget;
-  bezierCurveTo(c1x: number, c1y: number, c2x: number, c2y: number, x: number, y: number): TextDrawTarget;
+  bezierCurveTo(
+    c1x: number,
+    c1y: number,
+    c2x: number,
+    c2y: number,
+    x: number,
+    y: number,
+  ): TextDrawTarget;
   closePath(): TextDrawTarget;
   fill(style?: unknown): TextDrawTarget;
   cut(): TextDrawTarget;
@@ -408,19 +418,19 @@ Vì `resolveWarpGeometry` trả về path đã bake, `startPath` trong `startDra
 
 ## 6. Bất biến & test
 
-| # | Bất biến | Test |
-|---|---|---|
-| B1 | `warp = none` hoặc `intensity = 0` → geometry **trùng khít** layout, mọi dòng | so sánh từng số của contour, text 1 dòng và 3 dòng |
-| B2 | Phép đặt là isometry | khoảng cách từng cặp điểm trong cùng glyph bảo toàn trước/sau (sai số < 1e-9) |
-| B3 | Advance được tôn trọng | khoảng cách **arc-length** giữa hai glyph liền kề == `(advance_i + advance_{i+1})/2 + letterSpacing` |
-| B4 | k-fit đúng | `\|arcLength(path·k) − layout.width\| < 0.01`; và `k = 1` khi `intensity = 0` |
-| B5 | Không suy biến | `WarpPath` dựng thủ công với anchor thiếu `out`/`in` (⇒ `c1 = p0`) → không glyph nào co về điểm; bbox mỗi glyph > 0 |
-| B5b | Bake k không nhảy hình | render preset ở `intensity = 1`, bake theo §5.5, render lại với `fit = false` → contour trùng khít |
-| B6 | Multi-line xếp đúng | 2 dòng trên path cong → dòng 2 cách dòng 1 đúng `lineStep` theo pháp tuyến tại cùng `s` |
-| B7 | Bỏ glyph tràn | path kéo tay ngắn hơn chữ → số shape giảm đúng bằng số glyph có `anchorX > L` |
-| B8 | Bbox chính xác | cubic có cực trị ngoài bao lồi các điểm on-curve → `bounds` bao đúng cực trị đó |
-| B9 | `measureText` không đổi | `node.size` giữ nguyên khi `intensity` đổi |
-| B10 | `signedArea` chính xác | hình tròn dựng bằng 4 cung cubic → diện tích khớp `πr²` trong 1e-6 |
+| #   | Bất biến                                                                      | Test                                                                                                                |
+| --- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| B1  | `warp = none` hoặc `intensity = 0` → geometry **trùng khít** layout, mọi dòng | so sánh từng số của contour, text 1 dòng và 3 dòng                                                                  |
+| B2  | Phép đặt là isometry                                                          | khoảng cách từng cặp điểm trong cùng glyph bảo toàn trước/sau (sai số < 1e-9)                                       |
+| B3  | Advance được tôn trọng                                                        | khoảng cách **arc-length** giữa hai glyph liền kề == `(advance_i + advance_{i+1})/2 + letterSpacing`                |
+| B4  | k-fit đúng                                                                    | `\|arcLength(path·k) − layout.width\| < 0.01`; và `k = 1` khi `intensity = 0`                                       |
+| B5  | Không suy biến                                                                | `WarpPath` dựng thủ công với anchor thiếu `out`/`in` (⇒ `c1 = p0`) → không glyph nào co về điểm; bbox mỗi glyph > 0 |
+| B5b | Bake k không nhảy hình                                                        | render preset ở `intensity = 1`, bake theo §5.5, render lại với `fit = false` → contour trùng khít                  |
+| B6  | Multi-line xếp đúng                                                           | 2 dòng trên path cong → dòng 2 cách dòng 1 đúng `lineStep` theo pháp tuyến tại cùng `s`                             |
+| B7  | Bỏ glyph tràn                                                                 | path kéo tay ngắn hơn chữ → số shape giảm đúng bằng số glyph có `anchorX > L`                                       |
+| B8  | Bbox chính xác                                                                | cubic có cực trị ngoài bao lồi các điểm on-curve → `bounds` bao đúng cực trị đó                                     |
+| B9  | `measureText` không đổi                                                       | `node.size` giữ nguyên khi `intensity` đổi                                                                          |
+| B10 | `signedArea` chính xác                                                        | hình tròn dựng bằng 4 cung cubic → diện tích khớp `πr²` trong 1e-6                                                  |
 
 Regression đã có (kerning, fill-rule nonzero, toạ độ handle khi xoay/scale, đồng bộ `node.size` sau khi font nạp) phải tiếp tục pass.
 

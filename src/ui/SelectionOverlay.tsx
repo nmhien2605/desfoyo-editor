@@ -28,17 +28,19 @@ function localCorner(handle: ResizeHandle, width: number, height: number): Point
 // hộp layout chưa warp (nó phải giữ nguyên vì là pivot của applyTransform).
 // Font chưa nạp thì lùi về node.size, cùng quy ước "thiếu dữ liệu thì im
 // lặng" mà textRenderer.ts dùng.
-function selectionBox(node: Node): { x: number; y: number; width: number; height: number } {
+export function selectionBox(node: Node): { x: number; y: number; width: number; height: number } {
   if (node.type === 'text') {
     const font = getLoadedFont(node.font.family)?.font;
     if (font) {
       const { bounds } = textGeometry(node, font);
-      return {
-        x: bounds.minX,
-        y: bounds.minY,
-        width: bounds.maxX - bounds.minX,
-        height: bounds.maxY - bounds.minY,
-      };
+      if (bounds.maxX > bounds.minX) {
+        return {
+          x: bounds.minX,
+          y: bounds.minY,
+          width: bounds.maxX - bounds.minX,
+          height: bounds.maxY - bounds.minY,
+        };
+      }
     }
   }
   return { x: 0, y: 0, width: node.size.width, height: node.size.height };
@@ -251,7 +253,17 @@ function SingleSelectionOverlay({
           top: topLeftScreen.y,
           width: box.width * camera.zoom,
           height: box.height * camera.zoom,
-          transformOrigin: `${originX * 100}% ${originY * 100}%`,
+          // Pixi rotates around the pivot in *unwarped* local space
+          // (originX/Y * node.size — see applyTransform.ts), but `box` is
+          // the warped bbox and may be offset/sized differently from
+          // node.size. transformOrigin must express that same pivot in
+          // px relative to this div's own top-left (box.x/box.y), not as
+          // a % of the div's own box — % of box.width/height would only
+          // coincide with the real pivot when box === node.size (i.e.
+          // non-text nodes, where this reduces back to originX*100%).
+          transformOrigin: `${(originX * node.size.width - box.x) * camera.zoom}px ${
+            (originY * node.size.height - box.y) * camera.zoom
+          }px`,
           transform: `rotate(${rotationDeg}deg)`,
         }}
       />
@@ -358,14 +370,12 @@ function ImageCropHandles({
       const scaleY = node.transform.scaleY || 1;
       const duv = { x: local.x / scaleX / node.size.width, y: local.y / scaleY / node.size.height };
       const nextCrop = updateCropHandle(startCrop, handle, duv);
-      store
-        .getState()
-        .dispatch({
-          type: 'UpdateProps',
-          pageId: activePageId,
-          nodeId: node.id,
-          patch: { crop: nextCrop },
-        });
+      store.getState().dispatch({
+        type: 'UpdateProps',
+        pageId: activePageId,
+        nodeId: node.id,
+        patch: { crop: nextCrop },
+      });
     };
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
