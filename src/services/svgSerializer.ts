@@ -1,5 +1,8 @@
-import type { Document, Fill, GroupNode, Node, ShapeNode } from '../schema';
+import type { Document, Fill, GroupNode, Node, ShapeNode, TextNode } from '../schema';
 import { resolveAsset } from './assetResolver';
+import { getLoadedFont } from '../text/fontService';
+import { textGeometry } from '../text/textGeometry';
+import type { GlyphShape } from '../text/glyphOutlines';
 
 // nodeId -> data:image/png;base64,... , built by the caller (exportService
 // .ts's exportSvg) via Pixi's live-render extract, since this module is
@@ -110,6 +113,29 @@ function groupAttrs(node: Node): string {
   return ` transform="${transformAttr(node)}"${opacity}${blend}`;
 }
 
+function contourToPathData(contour: number[]): string {
+  const parts: string[] = [`M ${contour[0]} ${contour[1]}`];
+  for (let i = 2; i < contour.length; i += 2) parts.push(`L ${contour[i]} ${contour[i + 1]}`);
+  parts.push('Z');
+  return parts.join(' ');
+}
+
+// Text xuất ra vector thật (khác 'svg' node vốn phải rasterize) vì contour đã
+// có sẵn từ textGeometry — không cần nhúng font, không cần <text>. Lỗ đi kèm
+// outer trong cùng một `d` và để SVG tự cắt bằng fill-rule="evenodd".
+function textElement(node: TextNode, defs: string[]): string {
+  const loaded = getLoadedFont(node.font.family);
+  // Font chưa nạp thì bỏ qua node, cùng quy ước "thiếu dữ liệu thì im lặng"
+  // mà nhánh 'svg' phía dưới dùng khi thiếu bản rasterize.
+  if (!loaded) return '';
+  const shapes: GlyphShape[] = textGeometry(node, loaded.font).shapes;
+  if (shapes.length === 0) return '';
+  const data = shapes
+    .map((shape) => [shape.outer, ...shape.holes].map(contourToPathData).join(' '))
+    .join(' ');
+  return `<path d="${data}" fill-rule="evenodd" ${fillAttr(node.fill, defs)}/>`;
+}
+
 export function serializeNode(node: Node, doc: Document, defs: string[], rasterized?: RasterizedMap): string {
   if (!node.visible) return '';
 
@@ -123,6 +149,10 @@ export function serializeNode(node: Node, doc: Document, defs: string[], rasteri
     // have no SVG <clipPath>/CSS-filter mapping yet, ponytail-scoped out.
     const href = resolveAsset(node.assetId, doc);
     return `<image${groupAttrs(node)} width="${node.size.width}" height="${node.size.height}" href="${href}"/>`;
+  }
+  if (node.type === 'text') {
+    const element = textElement(node, defs);
+    return element ? `<g${groupAttrs(node)}>${element}</g>` : '';
   }
   if (node.type === 'group') {
     const group = node as GroupNode;
