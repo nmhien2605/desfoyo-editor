@@ -541,6 +541,29 @@ function StrokeControls({ stroke, onChange }: { stroke: Stroke | undefined; onCh
   );
 }
 
+const SIZE_RECONCILE_EPSILON = 0.01;
+
+// Doi chieu 1 lan: neu font cua node da nap xong (tu truoc, co the tu mot
+// lan chon node khac hoac mot listener onFontLoaded da ban trong luc node
+// nay dang bi bo chon) ma node.size dang luu lech voi kich thuoc do that,
+// tra ve patch de sua. Tra null khi font chua nap hoac size da khop — export
+// rieng de test doc lap, khong phai render React (xem TextEditOverlay.tsx's
+// textEditPatch cho cung quy uoc).
+export function reconcileStaleSize(
+  node: TextNode,
+  font: Parameters<typeof measureText>[1] | null,
+): { width: number; height: number } | null {
+  if (!font) return null;
+  const measured = measureText(node, font);
+  if (
+    Math.abs(measured.width - node.size.width) < SIZE_RECONCILE_EPSILON &&
+    Math.abs(measured.height - node.size.height) < SIZE_RECONCILE_EPSILON
+  ) {
+    return null;
+  }
+  return measured;
+}
+
 // Mọi thay đổi ảnh hưởng tới hình chữ (nội dung, font, size, spacing, line
 // height, align) đều phải đo lại node.size cùng lúc — size là kết quả của
 // layout, và cả pivot lẫn khung chọn đều đọc nó.
@@ -580,6 +603,27 @@ function TextControls({ node, onChange }: { node: TextNode; onChange: (patch: Pa
       });
     });
   }, [node.id, store]);
+
+  // Gap con lai cua effect tren: neu font resolve XONG trong luc node nay
+  // dang bi bo chon (TextControls unmount, listener onFontLoaded bi go),
+  // roi sau do nguoi dung chon lai node — effect tren dang ky lai listener
+  // nhung su kien da ban ra tu truoc, se khong bao gio ban lai. Effect nay
+  // xu ly rieng truong hop do bang cach doi chieu 1 lan luc mount/doi node:
+  // neu font da san co ma size dang luu khac voi do that, sua ngay, khong
+  // cho mot su kien khong con toi.
+  useEffect(() => {
+    const font = getLoadedFont(node.font.family)?.font ?? null;
+    const size = reconcileStaleSize(node, font);
+    if (!size) return;
+    const state = store.getState();
+    state.dispatch({
+      type: 'UpdateProps',
+      pageId: state.activePageId,
+      nodeId: node.id,
+      patch: { size },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chi can chay lai khi doi node (font/text moi cua CUNG node da co applyWithMeasure lo).
+  }, [node.id]);
 
   return (
     <div className="flex flex-col gap-2 border-t border-gray-200 pt-2">
