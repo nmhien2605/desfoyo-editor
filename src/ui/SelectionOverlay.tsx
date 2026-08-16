@@ -4,10 +4,15 @@ import { useEditorStore, useEditorStoreApi, useCanvasContext } from './EditorCon
 import { createViewport, type Point, type Viewport } from '../render/viewport';
 import { rotateVector, computeResize, type ResizeHandle } from '../render/interactions/resizeMath';
 import { angleBetween, computeRotation } from '../render/interactions/rotate';
-import { computeSelectionBounds, applyGroupRotate } from '../render/interactions/groupTransformMath';
+import {
+  computeSelectionBounds,
+  applyGroupRotate,
+} from '../render/interactions/groupTransformMath';
 import type { Rect } from '../render/interactions/marquee';
 import type { SnapGuide } from '../render/interactions/snapping';
 import type { ImageNode, Node, Transform } from '../schema';
+import { getLoadedFont } from '../text/fontService';
+import { textGeometry } from '../text/textGeometry';
 import { TextEditOverlay } from './TextEditOverlay';
 import { WarpHandlesOverlay } from './WarpHandlesOverlay';
 
@@ -19,11 +24,37 @@ function localCorner(handle: ResizeHandle, width: number, height: number): Point
   return { x, y };
 }
 
+// Khung chọn của text bám hình đã warp, không bám node.size — node.size là
+// hộp layout chưa warp (nó phải giữ nguyên vì là pivot của applyTransform).
+// Font chưa nạp thì lùi về node.size, cùng quy ước "thiếu dữ liệu thì im
+// lặng" mà textRenderer.ts dùng.
+function selectionBox(node: Node): { x: number; y: number; width: number; height: number } {
+  if (node.type === 'text') {
+    const font = getLoadedFont(node.font.family)?.font;
+    if (font) {
+      const { bounds } = textGeometry(node, font);
+      return {
+        x: bounds.minX,
+        y: bounds.minY,
+        width: bounds.maxX - bounds.minX,
+        height: bounds.maxY - bounds.minY,
+      };
+    }
+  }
+  return { x: 0, y: 0, width: node.size.width, height: node.size.height };
+}
+
 function worldPoint(node: Node, local: Point): Point {
   const { transform, size } = node;
-  const pivotLocal = { x: (transform.originX ?? 0) * size.width, y: (transform.originY ?? 0) * size.height };
+  const pivotLocal = {
+    x: (transform.originX ?? 0) * size.width,
+    y: (transform.originY ?? 0) * size.height,
+  };
   const offset = rotateVector(
-    { x: (local.x - pivotLocal.x) * transform.scaleX, y: (local.y - pivotLocal.y) * transform.scaleY },
+    {
+      x: (local.x - pivotLocal.x) * transform.scaleX,
+      y: (local.y - pivotLocal.y) * transform.scaleY,
+    },
     transform.rotation,
   );
   return { x: transform.x + offset.x, y: transform.y + offset.y };
@@ -55,7 +86,8 @@ export function SelectionOverlay() {
     </>
   );
 
-  if (selectedNodes.length === 0) return <div className="pointer-events-none absolute inset-0">{extras}</div>;
+  if (selectedNodes.length === 0)
+    return <div className="pointer-events-none absolute inset-0">{extras}</div>;
   if (selectedNodes.length > 1) {
     return (
       <>
@@ -68,7 +100,13 @@ export function SelectionOverlay() {
   const node = selectedNodes[0];
   if (node.locked) return <div className="pointer-events-none absolute inset-0">{extras}</div>;
   return (
-    <SingleSelectionOverlay node={node} activePageId={activePageId} camera={camera} viewport={viewport} extras={extras} />
+    <SingleSelectionOverlay
+      node={node}
+      activePageId={activePageId}
+      camera={camera}
+      viewport={viewport}
+      extras={extras}
+    />
   );
 }
 
@@ -99,12 +137,13 @@ function SingleSelectionOverlay({
   const isEditingText = node.type === 'text' && editingNodeId === node.id;
   const originX = node.transform.originX ?? 0;
   const originY = node.transform.originY ?? 0;
+  const box = selectionBox(node);
   // Un-rotated top-left corner in world space; CSS `transform: rotate()`
   // with transformOrigin does the visual rotation, so this only needs the
   // camera's zoom/pan applied, not the node's own rotation.
   const topLeftScreen = viewport.toScreen({
-    x: node.transform.x - originX * node.size.width,
-    y: node.transform.y - originY * node.size.height,
+    x: node.transform.x - originX * node.size.width + box.x,
+    y: node.transform.y - originY * node.size.height + box.y,
   });
   const rotationDeg = (node.transform.rotation * 180) / Math.PI;
 
@@ -210,8 +249,8 @@ function SingleSelectionOverlay({
         style={{
           left: topLeftScreen.x,
           top: topLeftScreen.y,
-          width: node.size.width * camera.zoom,
-          height: node.size.height * camera.zoom,
+          width: box.width * camera.zoom,
+          height: box.height * camera.zoom,
           transformOrigin: `${originX * 100}% ${originY * 100}%`,
           transform: `rotate(${rotationDeg}deg)`,
         }}
@@ -219,7 +258,9 @@ function SingleSelectionOverlay({
       {!isCropping &&
         node.type !== 'text' &&
         HANDLES.map((handle) => {
-          const pos = viewport.toScreen(worldPoint(node, localCorner(handle, node.size.width, node.size.height)));
+          const pos = viewport.toScreen(
+            worldPoint(node, localCorner(handle, node.size.width, node.size.height)),
+          );
           return (
             <div
               key={handle}
@@ -291,7 +332,15 @@ export function updateCropHandle(
 // node's bounding box (see isCropping in SingleSelectionOverlay). Reuses the
 // same toWorld/toScreen + rotateVector un-rotate/un-scale drag math the
 // resize handles above use, projected onto normalized 0..1 crop coordinates.
-function ImageCropHandles({ node, activePageId, viewport }: { node: ImageNode; activePageId: string; viewport: Viewport }) {
+function ImageCropHandles({
+  node,
+  activePageId,
+  viewport,
+}: {
+  node: ImageNode;
+  activePageId: string;
+  viewport: Viewport;
+}) {
   const store = useEditorStoreApi();
   const crop = node.crop ?? DEFAULT_CROP;
 
@@ -309,7 +358,14 @@ function ImageCropHandles({ node, activePageId, viewport }: { node: ImageNode; a
       const scaleY = node.transform.scaleY || 1;
       const duv = { x: local.x / scaleX / node.size.width, y: local.y / scaleY / node.size.height };
       const nextCrop = updateCropHandle(startCrop, handle, duv);
-      store.getState().dispatch({ type: 'UpdateProps', pageId: activePageId, nodeId: node.id, patch: { crop: nextCrop } });
+      store
+        .getState()
+        .dispatch({
+          type: 'UpdateProps',
+          pageId: activePageId,
+          nodeId: node.id,
+          patch: { crop: nextCrop },
+        });
     };
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
@@ -386,7 +442,10 @@ function MultiSelectionOverlay({ nodes, activePageId }: { nodes: Node[]; activeP
     window.addEventListener('pointerup', onUp);
   };
 
-  const rotateHandlePos = viewport.toScreen({ x: bounds.pivot.x, y: bounds.min.y - 24 / camera.zoom });
+  const rotateHandlePos = viewport.toScreen({
+    x: bounds.pivot.x,
+    y: bounds.min.y - 24 / camera.zoom,
+  });
 
   return (
     <div className="pointer-events-none absolute inset-0">
@@ -431,7 +490,9 @@ function SnapGuides({ guides, viewport }: { guides: SnapGuide[]; viewport: Viewp
   return (
     <>
       {guides.map((guide, i) => {
-        const a = viewport.toScreen(guide.axis === 'x' ? { x: guide.value, y: 0 } : { x: 0, y: guide.value });
+        const a = viewport.toScreen(
+          guide.axis === 'x' ? { x: guide.value, y: 0 } : { x: 0, y: guide.value },
+        );
         return (
           <div
             key={i}

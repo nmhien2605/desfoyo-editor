@@ -3,7 +3,7 @@ import opentype from 'opentype.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { TextNode } from '../../schema';
-import { measureText, resolveWarpPath, textGeometry } from '../textGeometry';
+import { measureText, resolveWarpPath, shapesBounds, textGeometry } from '../textGeometry';
 import { buildWavePath } from '../warp';
 
 let poppins: opentype.Font;
@@ -167,5 +167,30 @@ describe('text-on-path', () => {
       warp: { type: 'wave', intensity: 1, paths: [buildWavePath(0.5, 0.8)] },
     });
     expect(resolveWarpPath(stored, 0.8)?.fit).toBe(false);
+  });
+});
+
+describe('bounds', () => {
+  it('bat cuc tri nam ngoai bao loi cac diem on-curve', () => {
+    // Cung vong len tren y = 0 giua hai dau mut: cuc tri o t = 0.5 cho
+    // y = -0.75·100 = -75. Lay min/max cac diem on-curve se ra 0.
+    const bounds = shapesBounds([
+      { outer: [0, 0, 0, -100, 100, -100, 100, 0], holes: [], anchorX: 50, baselineY: 0 },
+    ]);
+    expect(bounds.minY).toBeCloseTo(-75, 6);
+    expect(bounds.maxY).toBeCloseTo(0, 6);
+    expect(bounds.minX).toBeCloseTo(0, 6);
+    expect(bounds.maxX).toBeCloseTo(100, 6);
+  });
+
+  it('mang rong tra ve hop 0', () => {
+    expect(shapesBounds([])).toEqual({ minX: 0, minY: 0, maxX: 0, maxY: 0 });
+  });
+
+  it('wave lam bounds cao hon hop layout nhung node.size giu nguyen', () => {
+    const node = textNode({ text: 'Headline', warp: { type: 'wave', intensity: 1 } });
+    const geometry = textGeometry(node, poppins);
+    expect(geometry.bounds.maxY - geometry.bounds.minY).toBeGreaterThan(geometry.height);
+    expect(measureText(node, poppins).height).toBeCloseTo(geometry.height, 9);
   });
 });

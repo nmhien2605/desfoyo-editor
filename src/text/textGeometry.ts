@@ -1,5 +1,6 @@
 import type { Font } from 'opentype.js';
 import type { TextNode, WarpPath } from '../schema';
+import { evalCubic } from './bezier';
 import type { GlyphShape } from './glyphOutlines';
 import type { TextLayout } from './layout';
 import { layoutText } from './layout';
@@ -16,10 +17,68 @@ export interface TextGeometry {
   shapes: GlyphShape[];
   // Kích thước text *chưa warp*. Đây cũng là mẫu số chuẩn hoá của warp path,
   // nên nó phải độc lập với warp — nếu lấy bbox sau warp thì path lại phụ
-  // thuộc chính kết quả của nó, thành vòng lặp phản hồi.
+  // thuộc chính kết quả của nó, thành vòng lặp phản hồi. Cũng là nguồn của
+  // node.size, tức pivot của applyTransform: đổi nó theo warp sẽ làm node đã
+  // xoay nhảy vị trí mỗi lần kéo slider.
   width: number;
   height: number;
   baselineY: number;
+  // Bbox thật của hình SAU warp. Chỉ để vẽ khung chọn — không đụng transform.
+  bounds: { minX: number; minY: number; maxX: number; maxY: number };
+}
+
+// Nghiệm của B'(t) = 0 trong (0,1), tức các cực trị của cung trên một trục.
+// B'(t)/3 = at² + bt + c.
+function extrema(p0: number, c1: number, c2: number, p3: number): number[] {
+  const a = -p0 + 3 * c1 - 3 * c2 + p3;
+  const b = 2 * (p0 - 2 * c1 + c2);
+  const c = c1 - p0;
+  const roots: number[] = [];
+  if (Math.abs(a) < 1e-12) {
+    if (Math.abs(b) > 1e-12) roots.push(-c / b);
+  } else {
+    const disc = b * b - 4 * a * c;
+    if (disc >= 0) {
+      const r = Math.sqrt(disc);
+      roots.push((-b + r) / (2 * a), (-b - r) / (2 * a));
+    }
+  }
+  return roots.filter((t) => t > 0 && t < 1);
+}
+
+// Bbox chính xác: lấy hai đầu mút cộng các cực trị giải tích. Không dùng bao
+// lồi của control point — nó nới rộng khung một cách không cần thiết.
+// Bỏ qua holes: lỗ luôn nằm trong outer của chính nó.
+export function shapesBounds(shapes: GlyphShape[]): TextGeometry['bounds'] {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const shape of shapes) {
+    const c = shape.outer;
+    for (let i = 0; i + 7 < c.length; i += 6) {
+      const xs = [c[i], c[i + 6]];
+      const ys = [c[i + 1], c[i + 7]];
+      for (const t of extrema(c[i], c[i + 2], c[i + 4], c[i + 6])) {
+        xs.push(evalCubic(c[i], c[i + 2], c[i + 4], c[i + 6], t));
+      }
+      for (const t of extrema(c[i + 1], c[i + 3], c[i + 5], c[i + 7])) {
+        ys.push(evalCubic(c[i + 1], c[i + 3], c[i + 5], c[i + 7], t));
+      }
+      for (const v of xs) {
+        if (v < minX) minX = v;
+        if (v > maxX) maxX = v;
+      }
+      for (const v of ys) {
+        if (v < minY) minY = v;
+        if (v > maxY) maxY = v;
+      }
+    }
+  }
+
+  if (!Number.isFinite(minX)) return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  return { minX, minY, maxX, maxY };
 }
 
 // paths đã lưu thắng preset. `fit` phân biệt hai chế độ đặt chữ: preset thì
@@ -70,8 +129,10 @@ export function textGeometry(node: TextNode, font: Font): TextGeometry {
   });
 
   const warped = resolveWarpGeometry(node, layout);
-  if (!warped) return layout;
-  return { ...layout, shapes: placeOnPath(layout.shapes, warped.sampler, layout.baselineY) };
+  const shapes = warped
+    ? placeOnPath(layout.shapes, warped.sampler, layout.baselineY)
+    : layout.shapes;
+  return { ...layout, shapes, bounds: shapesBounds(shapes) };
 }
 
 // Dùng bởi UI để giữ node.size khớp với nội dung sau khi sửa chữ/font —
