@@ -9,6 +9,7 @@ import type { Rect } from '../render/interactions/marquee';
 import type { SnapGuide } from '../render/interactions/snapping';
 import type { ImageNode, Node, Transform } from '../schema';
 import { TextEditOverlay } from './TextEditOverlay';
+import { WarpHandlesOverlay } from './WarpHandlesOverlay';
 
 const HANDLES: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
@@ -245,6 +246,9 @@ function SingleSelectionOverlay({
           activePageId={activePageId}
           onClose={() => setEditingNodeId(null)}
         />
+      )}
+      {!isEditingText && node.type === 'text' && node.warp && node.warp.type !== 'none' && (
+        <WarpHandlesOverlay node={node} activePageId={activePageId} viewport={viewport} />
       )}
       {extras}
     </div>
