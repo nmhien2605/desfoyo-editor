@@ -3,7 +3,7 @@ import { useEditorStoreApi } from './EditorContext';
 import type { Viewport } from '../render/viewport';
 import { rotateVector } from '../render/interactions/resizeMath';
 import { getLoadedFont } from '../text/fontService';
-import { resolveWarpPath, textGeometry } from '../text/textGeometry';
+import { resolveWarpGeometry, textGeometry } from '../text/textGeometry';
 import type { Node, TextNode, WarpAnchor, WarpPath } from '../schema';
 
 export type HandleRef = { anchor: number; kind: 'anchor' | 'in' | 'out' };
@@ -82,8 +82,11 @@ export function WarpHandlesOverlay({
 
   const geometry = textGeometry(node, font);
   if (geometry.height <= 0) return null;
-  const path = resolveWarpPath(node, geometry.baselineY / geometry.height)?.path;
-  if (!path) return null;
+  // Cùng nguồn với textGeometry: path ở đây đã bake hệ số co, nên handle
+  // nằm đúng trên đường mà chữ đang chạy.
+  const resolved = resolveWarpGeometry(node, geometry);
+  if (!resolved) return null;
+  const path = resolved.path;
 
   const box = { width: geometry.width, height: geometry.height };
   const originX = node.transform.originX ?? 0;
@@ -101,8 +104,9 @@ export function WarpHandlesOverlay({
   const startDrag = (ref: HandleRef) => (downEvent: ReactPointerEvent) => {
     downEvent.stopPropagation();
     const startWorld = viewport.toWorld({ x: downEvent.clientX, y: downEvent.clientY });
-    // Chốt path tại thời điểm bắt đầu kéo: nếu đang ở chế độ preset thì
-    // chính lần kéo này là lúc path được ghi cứng vào warp.paths (spec §4.2).
+    // Chốt path tại thời điểm bắt đầu kéo. Path này đã bake hệ số co, nên
+    // khi nó được ghi vào warp.paths (fit = false từ đó trở đi, k = 1) hình
+    // hiển thị không đổi — điều user thấy lúc thả tay chính là điều được lưu.
     const startPath = path;
     store.getState().beginGesture(`warp-handle:${node.id}`);
 

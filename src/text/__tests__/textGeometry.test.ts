@@ -3,8 +3,14 @@ import opentype from 'opentype.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { TextNode } from '../../schema';
-import { measureText, resolveWarpPath, shapesBounds, textGeometry } from '../textGeometry';
-import { buildWavePath } from '../warp';
+import {
+  measureText,
+  resolveWarpGeometry,
+  resolveWarpPath,
+  shapesBounds,
+  textGeometry,
+} from '../textGeometry';
+import { bakeScale, buildWavePath, placeOnPath, solveHorizontalScale } from '../warp';
 
 let poppins: opentype.Font;
 beforeAll(() => {
@@ -192,5 +198,47 @@ describe('bounds', () => {
     const geometry = textGeometry(node, poppins);
     expect(geometry.bounds.maxY - geometry.bounds.minY).toBeGreaterThan(geometry.height);
     expect(measureText(node, poppins).height).toBeCloseTo(geometry.height, 9);
+  });
+});
+
+describe('bake he so co', () => {
+  const layout = {
+    shapes: [],
+    width: 400,
+    height: 100,
+    baselineY: 80,
+    bounds: { minX: 0, minY: 0, maxX: 400, maxY: 100 },
+  };
+
+  it('resolveWarpGeometry tra ve path DA bake voi preset', () => {
+    const resolved = resolveWarpGeometry(
+      textNode({ warp: { type: 'wave', intensity: 1 } }),
+      layout,
+    )!;
+    const raw = buildWavePath(1, 0.8);
+    const k = solveHorizontalScale(raw, { width: 400, height: 100 }, 400);
+
+    expect(k).toBeLessThan(1);
+    expect(resolved.path.anchors[0].x).toBeCloseTo(bakeScale(raw, k).anchors[0].x, 9);
+    expect(resolved.sampler.length).toBeCloseTo(400, 1);
+  });
+
+  it('luu path da bake roi render lai cho hinh trung khit', () => {
+    const shapes = [{ outer: [10, 40, 30, 60], holes: [], anchorX: 20, baselineY: 80 }];
+    const withShapes = { ...layout, shapes };
+    const before = resolveWarpGeometry(
+      textNode({ warp: { type: 'wave', intensity: 1 } }),
+      withShapes,
+    )!;
+
+    // Mo phong lan keo dau tien: ghi path dang hien thi vao warp.paths.
+    const after = resolveWarpGeometry(
+      textNode({ warp: { type: 'wave', intensity: 1, paths: [before.path] } }),
+      withShapes,
+    )!;
+
+    const a = placeOnPath(shapes, before.sampler, 80)[0].outer;
+    const b = placeOnPath(shapes, after.sampler, 80)[0].outer;
+    a.forEach((value, i) => expect(b[i]).toBeCloseTo(value, 9));
   });
 });

@@ -159,3 +159,19 @@ v1 dùng overlay `<textarea>` — trình duyệt lo caret và IME tiếng Việt
 - **SVG.** v1 đã ra `<path>` vector thật vì đã có contour sẵn. Một hướng khác đẹp hơn cho file nhẹ và text còn chọn/copy được: dùng `<textPath>` native của SVG — nhưng chỉ áp dụng được cho baseline follow, không dùng được khi có envelope.
 - **PDF.** `pdf-lib` theo [03-tech-stack.md](./03-tech-stack.md). Contour vector map thẳng sang path của PDF được.
 - **"Effect vẫn editable sau export" (FR-04).** Chỉ đúng với format `.json` của chính document. PNG/SVG/PDF thì hiệu ứng đã bị bake. Nếu muốn đúng chữ trong FR-04 thì phải nhúng model JSON vào metadata của file export — chưa nghĩ tới.
+
+## Trần của warp geometry (2026-08-16)
+
+- Offset curve của dòng thứ 2 trở đi tự cắt khi bán kính cong của path nhỏ
+  hơn khoảng cách dòng. Cố hữu của mô hình text-on-path; Illustrator cũng vậy.
+- Pixi tessellate bezier theo `smoothness` mặc định, không theo camera zoom.
+  Zoom rất sâu có thể thấy cạnh gãy. Nâng cấp: truyền `smoothness` theo zoom
+  và vẽ lại khi zoom đổi.
+- `containsPoint` trong `glyphOutlines.ts` ray-cast trên các điểm on-curve,
+  bỏ qua phần phình của cung. Chính xác hẳn thì phải đếm giao điểm tia với
+  từng cubic (giải phương trình bậc 3).
+- `solveHorizontalScale` chỉ co theo trục x. Nếu có preset với biên độ dọc
+  lớn tới mức `L(0.05) > W`, glyph cuối sẽ bị bỏ. Cần kẹp `intensity` hoặc
+  đổi sang co đều hai trục.
+- Envelope warp (hành vi per-point cũ) vẫn là mode tương lai — schema `Warp`
+  đã chừa chỗ.
