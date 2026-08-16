@@ -36,7 +36,7 @@ TextNode ──► font ──► layout ──► warp ──► Contour[]
           drop · line · block · 3d                        trên cùng Contour[]
 ```
 
-Nên **foundation chính là hàm thuần `textContours(node, font) → Contour[]`**. Transformation là bước cuối bên trong hàm đó; shadow và decoration là các lớp vẽ đọc kết quả của nó.
+Nên **foundation chính là hàm thuần `textGeometry(node, font) → GlyphShape[]`**. Transformation là bước cuối bên trong hàm đó; shadow và decoration là các lớp vẽ đọc kết quả của nó. (`GlyphShape` = `{ outer, holes }` — xem §5.1 để biết vì sao không phải là `Contour[]` phẳng.)
 
 Hệ quả: **shadow kiểu line/block/3D không thuộc `buildFilters.ts`**. Chúng là hình học — vẽ lại contour lệch đi nhiều lớp — không phải WebGL filter. Chỉ `drop shadow` mới map được vào `DropShadowFilter` sẵn có. Đây là điểm khác so với cách `effects[]` đang phục vụ shape/image.
 
@@ -116,10 +116,16 @@ Hai lựa chọn kỹ thuật đáng ghi lại:
 
 ### 5.1 Render / UI
 
-- **`src/render/renderers/textRenderer.ts`** — cùng pattern `shapeRenderer.ts`: `create` / `update` + `applyTransform`. Vẽ toàn bộ contour bằng `Graphics.poly()` rồi `fill()` **một lần**; winding ngược của opentype tự cho ra lỗ đúng ở `o`, `a`, `8` dưới quy tắc non-zero của Pixi — không cần xử lý lỗ thủ công.
+- **`src/render/renderers/textRenderer.ts`** — cùng pattern `shapeRenderer.ts`: `create` / `update` + `applyTransform`.
+
+  **Lỗ trong chữ (`o`, `a`, `8`) phải xử lý tường minh.** Đã kiểm tra source Pixi v8 (`GraphicsContext.cut()` và `buildContextBatches.js`): Pixi **không** áp dụng quy tắc winding non-zero cho nhiều `poly()` trong cùng một `fill()` — mỗi polygon được tam giác hoá riêng, nên ruột chữ `o` sẽ bị tô đặc. Cách duy nhất tạo lỗ là `cut()`, và nó gắn lỗ vào **shape cuối cùng** của lệnh `fill`/`stroke` ngay trước đó.
+
+  Nên dữ liệu hình học không phải là `Contour[]` phẳng mà là **`GlyphShape[]`**, mỗi shape gồm `{ outer, holes }`. Renderer vẽ theo từng shape: `poly(outer).fill(style)` rồi mỗi `poly(hole).cut()`.
+
+  Phân loại outer/hole làm trong `glyphOutlines.ts`, **trước** khi warp (rẻ hơn và an toàn hơn, warp không đổi quan hệ bao nhau): lấy contour có `|diện tích có dấu|` lớn nhất trong glyph làm mốc — cùng dấu với nó là outer, ngược dấu là hole. Cách này đúng cho cả TrueType (outer CW) lẫn CFF/OTF (outer CCW) mà không cần biết font thuộc loại nào. Glyph nhiều outer (`%`, `i`) thì gán mỗi hole cho outer chứa nó bằng point-in-polygon, mặc định về outer đầu tiên.
 - **`src/ui/TextEditOverlay.tsx`** — double-click node text → `<textarea>` định vị bằng `viewport.toScreen`, style theo `font`/`fill` của node, dùng `FontFace` do `fontService` đăng ký. Blur hoặc Escape → `dispatch(UpdateProps)`. Trong lúc sửa, node trên canvas ẩn đi để không chồng hình.
 - **`src/ui/WarpHandlesOverlay.tsx`** — SVG overlay vẽ path xanh + 3 anchor + 4 handle + đoạn nối anchor–handle, kéo được. Dùng lại nguyên `viewport.toScreen/toWorld` và `beginGesture/endGesture` mà `ImageCropHandles` trong `SelectionOverlay.tsx` đang dùng (coalesce history khi kéo liên tục).
-- **Sửa nhẹ:** `SceneReconciler.ts` (thêm case `'text'`), `svgSerializer.ts` (text → `<path>` vector thật, vì đã có contour), `PropertiesPanel.tsx` (khối text + khối Transformation), `Toolbar.tsx` (nút thêm text), `core/actions.ts` (tạo text node).
+- **Sửa nhẹ:** `SceneReconciler.ts` (thêm case `'text'`), `svgSerializer.ts` (text → `<path>` vector thật, vì đã có contour), `PropertiesPanel.tsx` (khối text + khối Transformation), `Toolbar.tsx` (nút thêm text + `defaultTextNode`, đặt cạnh `defaultImageNode`/`defaultSvgNode` đang nằm sẵn ở đó — `core/actions.ts` chỉ chứa hành động gộp nhiều dispatch, không phải factory node).
 - **`SelectionOverlay.tsx`**: node `type === 'text'` không hiện 8 handle resize (quyết định #5). Handle rotate vẫn còn.
 
 ## 6. Wave
@@ -186,7 +192,7 @@ UI slider/handle ──dispatch(UpdateProps)──► store ──lastCommand─
 
 | Tình huống | Hành vi |
 |---|---|
-| Font chưa load xong khi render | `CanvasHost` preload mọi font mà document tham chiếu **trước** `reconciler.mount()`. Trường hợp còn lọt (thêm node mới với font lạ): renderer vẽ rỗng và đăng ký callback vẽ lại khi font xong. |
+| Font chưa load xong khi render | Renderer vẽ rỗng, kích hoạt `loadFont()` rồi vẽ lại qua callback `onFontLoaded`. Một callback phủ được cả lần render đầu lẫn node thêm sau với font lạ, nên không cần bước preload riêng trong `CanvasHost` — đổi lại là có thể nháy một frame trống lúc mở document. |
 | File font hỏng / parse fail | `fontService` log lỗi, fallback về font bundle mặc định. Không throw ra render loop. |
 | `text` rỗng | `contours` rỗng, node vẫn tồn tại với bbox tối thiểu để còn chọn/xoá được. |
 | Ký tự không có trong font | opentype trả `.notdef` (glyph 0), vẽ bình thường — không cần xử lý riêng. |
@@ -204,7 +210,7 @@ Toàn bộ phần khó đều thuần nên test được không cần canvas:
 - Arc-length của một path thẳng = khoảng cách hai đầu mút.
 - `layout` với `letterSpacing = 0` → tổng chiều rộng = tổng advance của các glyph.
 - `layout` align `center`/`right` → dịch đúng lượng so với `left`.
-- `textContours` với font bundle: chữ `"o"` sinh ra ≥ 2 contour (lỗ bên trong).
+- `getGlyphOutlines('o')` với font bundle → đúng **1 shape, 1 hole**; `getGlyphOutlines('i')` → **2 shape, 0 hole**. Đây là test bảo vệ phần phân loại outer/hole ở §5.1.
 
 ## 10. Cố tình cắt bỏ
 
