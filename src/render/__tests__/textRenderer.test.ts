@@ -18,8 +18,16 @@ function readFontBuffer(fileName: string): ArrayBuffer {
 function fakeTarget() {
   const calls: string[] = [];
   const target: TextDrawTarget = {
-    poly() {
-      calls.push('poly');
+    moveTo() {
+      calls.push('moveTo');
+      return target;
+    },
+    bezierCurveTo() {
+      calls.push('bezierCurveTo');
+      return target;
+    },
+    closePath() {
+      calls.push('closePath');
       return target;
     },
     fill() {
@@ -56,19 +64,26 @@ beforeAll(async () => {
 });
 
 describe('drawTextShapes', () => {
-  it('chu "o": fill outer roi cut lo, dung thu tu', () => {
+  it('chu "o": fill outer roi cut lo, dung thu tu (khong hardcode so cung)', () => {
     const { target, calls } = fakeTarget();
     const font = getLoadedFont('Poppins')!.font;
     drawTextShapes(target, textGeometry(node, font).shapes, node.fill);
-    // poly(outer) -> fill -> poly(hole) -> cut
-    expect(calls).toEqual(['poly', 'fill', 'poly', 'cut']);
+    // moveTo, [bezierCurveTo]+, closePath, fill  ->  moveTo, [bezierCurveTo]+, closePath, cut
+    expect(calls.join(',')).toMatch(
+      /^moveTo(,bezierCurveTo)+,closePath,fill,moveTo(,bezierCurveTo)+,closePath,cut$/,
+    );
+    expect(calls.filter((c) => c === 'fill')).toHaveLength(1);
+    expect(calls.filter((c) => c === 'cut')).toHaveLength(1);
   });
 
   it('chu khong lo chi fill, khong cut', () => {
     const { target, calls } = fakeTarget();
     const font = getLoadedFont('Poppins')!.font;
     drawTextShapes(target, textGeometry({ ...node, text: 'l' }, font).shapes, node.fill);
-    expect(calls).toEqual(['poly', 'fill']);
+    expect(calls[0]).toBe('moveTo');
+    expect(calls[calls.length - 1]).toBe('fill');
+    expect(calls.filter((c) => c === 'cut')).toHaveLength(0);
+    expect(calls.filter((c) => c === 'fill')).toHaveLength(1);
   });
 
   it('text rong khong ve gi', () => {
@@ -76,5 +91,38 @@ describe('drawTextShapes', () => {
     const font = getLoadedFont('Poppins')!.font;
     drawTextShapes(target, textGeometry({ ...node, text: '' }, font).shapes, node.fill);
     expect(calls).toEqual([]);
+  });
+
+  it('ve outer bang moveTo + bezierCurveTo + closePath roi fill, hole thi cut', () => {
+    const calls: string[] = [];
+    const target = {
+      moveTo: () => (calls.push('moveTo'), target),
+      bezierCurveTo: () => (calls.push('bezierCurveTo'), target),
+      closePath: () => (calls.push('closePath'), target),
+      fill: () => (calls.push('fill'), target),
+      cut: () => (calls.push('cut'), target),
+    };
+    drawTextShapes(
+      target,
+      [
+        {
+          outer: [0, 0, 1, 0, 2, 0, 3, 0],
+          holes: [[0, 0, 1, 0, 2, 0, 3, 0]],
+          anchorX: 0,
+          baselineY: 0,
+        },
+      ],
+      { type: 'solid', color: '#000000' },
+    );
+    expect(calls).toEqual([
+      'moveTo',
+      'bezierCurveTo',
+      'closePath',
+      'fill',
+      'moveTo',
+      'bezierCurveTo',
+      'closePath',
+      'cut',
+    ]);
   });
 });

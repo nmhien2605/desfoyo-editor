@@ -41,15 +41,20 @@ function loadFontBuffer(relativePath: string): ArrayBuffer {
 // Parser + winding-number check độc lập với production code (không import từ
 // svgSerializer.ts/glyphOutlines.ts) — để test này thực sự là một phép kiểm
 // tra chéo, không phải suy ra công thức rồi tự khớp với chính nó.
+//
+// Contour giờ là polybezier (lệnh C), nhưng winding-number chỉ cần đa giác xấp
+// xỉ bằng các điểm on-curve — bỏ qua độ phình của cung so với dây cung là đủ
+// chính xác cho test này (không phải điểm biên giáp ranh giữa hai contour).
 function parseSubpaths(d: string): Array<Array<[number, number]>> {
   const subpaths: Array<Array<[number, number]>> = [];
-  const re = /M ([-\d.]+) ([-\d.]+)((?:\s+L\s+[-\d.]+\s+[-\d.]+)*)\s+Z/g;
+  const re =
+    /M ([-\d.]+) ([-\d.]+)((?:\s+C\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+)*)\s+Z/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(d))) {
     const pts: Array<[number, number]> = [[parseFloat(m[1]), parseFloat(m[2])]];
-    const lre = /L ([-\d.]+) ([-\d.]+)/g;
-    let lm: RegExpExecArray | null;
-    while ((lm = lre.exec(m[3]))) pts.push([parseFloat(lm[1]), parseFloat(lm[2])]);
+    const cre = /C\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+([-\d.]+)\s+([-\d.]+)/g;
+    let cm: RegExpExecArray | null;
+    while ((cm = cre.exec(m[3]))) pts.push([parseFloat(cm[1]), parseFloat(cm[2])]);
     subpaths.push(pts);
   }
   return subpaths;
@@ -127,12 +132,17 @@ describe('serializeNode cho text', () => {
 
   // Font script "Lobster" khien glyph 'b' va 's' trong tu "Lobster" chong
   // outer-outer len nhau thuc su (khong phai quan he outer/hole). Da xac
-  // minh bang khao sat hinh hoc: tai diem (182.74, 94.87) trong khong gian
+  // minh bang khao sat hinh hoc: tai diem (183, 93.75) trong khong gian
   // local cua text, outer cua 'b' VA outer cua 's' deu chua diem nay, ca hai
   // cuon cung chieu (cung la outer trong font nay) nen winding cong don
   // thanh +-2 (khac 0) — nonzero to dung (khop canvas, ve tung glyph doc
   // lap), con evenodd dem duoc 2 lan cat (chan) nen KHONG to — sinh lo gia
   // khong ton tai. Day chinh la bug ma fix #2 sua.
+  //
+  // Toa do da doi tu (182.74, 94.87) sang (183, 93.75) o Task 5: contour gio
+  // la polybezier, parseSubpaths chi lay diem on-curve (bo qua do phinh cua
+  // cung) nen da giac xap xi thay doi hinh dang chut it — quet lai bang
+  // script doc lap de tim diem con thoa dieu kien, khong sua cong thuc.
   it('overlap outer-outer that giua 2 glyph (font Lobster) van duoc to dung duoi nonzero, se sai duoi evenodd', () => {
     const overlapNode: TextNode = {
       ...node,
@@ -149,8 +159,8 @@ describe('serializeNode cho text', () => {
     // 7 chu cai, 3 co lo (o, b, e) => 10 subpath.
     expect(subpaths.length).toBeGreaterThan(7);
 
-    const px = 182.74;
-    const py = 94.87;
+    const px = 183;
+    const py = 93.75;
     // Day la khang dinh cot loi: diem nam trong vung "b" va "s" chong len
     // nhau (khong phai lo) phai duoc to duoi nonzero...
     expect(nonzeroFilled(subpaths, px, py)).toBe(true);

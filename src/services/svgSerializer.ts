@@ -30,7 +30,10 @@ function fillAttr(fill: Fill, defs: string[]): string {
 
   const id = `grad-${gradientCounter++}`;
   const stops = fill.stops
-    .map((s) => `<stop offset="${s.offset}" stop-color="${s.color}"${s.alpha !== undefined ? ` stop-opacity="${s.alpha}"` : ''}/>`)
+    .map(
+      (s) =>
+        `<stop offset="${s.offset}" stop-color="${s.color}"${s.alpha !== undefined ? ` stop-opacity="${s.alpha}"` : ''}/>`,
+    )
     .join('');
   if (fill.type === 'linear-gradient') {
     const rad = fill.angle;
@@ -38,7 +41,9 @@ function fillAttr(fill: Fill, defs: string[]): string {
     const y2 = 0.5 + Math.sin(rad) * 0.5;
     const x1 = 0.5 - Math.cos(rad) * 0.5;
     const y1 = 0.5 - Math.sin(rad) * 0.5;
-    defs.push(`<linearGradient id="${id}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">${stops}</linearGradient>`);
+    defs.push(
+      `<linearGradient id="${id}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">${stops}</linearGradient>`,
+    );
   } else {
     defs.push(`<radialGradient id="${id}">${stops}</radialGradient>`);
   }
@@ -109,13 +114,20 @@ function transformAttr(node: Node): string {
 
 function groupAttrs(node: Node): string {
   const opacity = node.opacity !== 1 ? ` opacity="${node.opacity}"` : '';
-  const blend = node.blendMode && node.blendMode !== 'normal' ? ` style="mix-blend-mode:${node.blendMode}"` : '';
+  const blend =
+    node.blendMode && node.blendMode !== 'normal'
+      ? ` style="mix-blend-mode:${node.blendMode}"`
+      : '';
   return ` transform="${transformAttr(node)}"${opacity}${blend}`;
 }
 
 function contourToPathData(contour: number[]): string {
-  const parts: string[] = [`M ${contour[0]} ${contour[1]}`];
-  for (let i = 2; i < contour.length; i += 2) parts.push(`L ${contour[i]} ${contour[i + 1]}`);
+  const parts = [`M ${contour[0]} ${contour[1]}`];
+  for (let i = 2; i + 5 < contour.length; i += 6) {
+    parts.push(
+      `C ${contour[i]} ${contour[i + 1]} ${contour[i + 2]} ${contour[i + 3]} ${contour[i + 4]} ${contour[i + 5]}`,
+    );
+  }
   parts.push('Z');
   return parts.join(' ');
 }
@@ -143,7 +155,12 @@ function textElement(node: TextNode, defs: string[]): string {
   return `<path d="${data}" fill-rule="nonzero" ${fillAttr(node.fill, defs)}/>`;
 }
 
-export function serializeNode(node: Node, doc: Document, defs: string[], rasterized?: RasterizedMap): string {
+export function serializeNode(
+  node: Node,
+  doc: Document,
+  defs: string[],
+  rasterized?: RasterizedMap,
+): string {
   if (!node.visible) return '';
 
   if (node.type === 'svg') {

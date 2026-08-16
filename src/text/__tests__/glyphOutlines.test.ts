@@ -89,6 +89,51 @@ describe('getGlyphOutlines', () => {
   });
 });
 
+// Đường tròn xấp xỉ bằng 4 cung cubic, hằng số kappa quen thuộc.
+function circleContour(r: number): number[] {
+  const k = 0.5522847498307936 * r;
+  return [r, 0, r, k, k, r, 0, r, -k, r, -r, k, -r, 0, -r, -k, -k, -r, 0, -r, k, -r, r, -k, r, 0];
+}
+
+describe('contour polybezier', () => {
+  it('do dai contour la 2 + 6n', () => {
+    const [glyph] = getGlyphOutlines('o', poppins, 100);
+    for (const shape of glyph.shapes) {
+      expect((shape.outer.length - 2) % 6).toBe(0);
+      for (const hole of shape.holes) expect((hole.length - 2) % 6).toBe(0);
+    }
+  });
+
+  it('contour kin: diem on-curve cuoi trung diem dau', () => {
+    const [glyph] = getGlyphOutlines('o', poppins, 100);
+    const c = glyph.shapes[0].outer;
+    expect(c[c.length - 2]).toBeCloseTo(c[0], 6);
+    expect(c[c.length - 1]).toBeCloseTo(c[1], 6);
+  });
+
+  it('signedArea chinh xac tren cung, khong phai xap xi da giac', () => {
+    // Hình xấp xỉ 4-cubic có diện tích lệch πr² khoảng 0.028% (~8.8 don vi
+    // tren r=100, xac minh bang tich phan shoelace day mau doc lap) — sai so
+    // cua chinh phep xap xi hinh hoc, khong phai cua phep tinh dien tich.
+    // precision -2 (dung sai 50) du long de bao dung sai xap xi that (~8.8)
+    // ma van chat de bat loi neu signedArea quay lai tinh tren day polygon.
+    expect(Math.abs(signedArea(circleContour(100)))).toBeCloseTo(Math.PI * 1e4, -2);
+  });
+
+  it('signedArea doi dau khi dao chieu contour', () => {
+    const forward = circleContour(100);
+    const reversed: number[] = [];
+    for (let i = forward.length - 2; i >= 0; i -= 2) reversed.push(forward[i], forward[i + 1]);
+    expect(Math.sign(signedArea(reversed))).toBe(-Math.sign(signedArea(forward)));
+  });
+
+  it("glyph 'o' co dung mot outer va mot hole", () => {
+    const [glyph] = getGlyphOutlines('o', poppins, 100);
+    expect(glyph.shapes).toHaveLength(1);
+    expect(glyph.shapes[0].holes).toHaveLength(1);
+  });
+});
+
 describe('neo glyph', () => {
   it('anchorX la trung diem advance, baselineY = 0 trong toa do glyph-local', () => {
     const [glyph] = getGlyphOutlines('H', poppins, 100);
