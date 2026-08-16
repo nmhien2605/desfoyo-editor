@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
 import { customShaders } from '../effects/shaders/customShaders';
 import { decodeSvgText, listFillableIds } from '../render/renderers/svgRenderer';
-import type { BlendMode, Effect, Fill, ImageNode, Node, Stroke, SvgNode } from '../schema';
+import { getLoadedFont, registeredFamilies } from '../text/fontService';
+import { measureText } from '../text/textGeometry';
+import type { BlendMode, Effect, Fill, ImageNode, Node, Stroke, SvgNode, TextNode } from '../schema';
 
 const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten'];
 const STROKE_ALIGNS: Stroke['align'][] = ['inside', 'center', 'outside'];
@@ -31,7 +33,7 @@ function defaultEffect(type: Effect['type']): Effect {
 }
 
 function hasFill(node: Node): node is Node & { fill: Fill } {
-  return node.type === 'shape';
+  return node.type === 'shape' || node.type === 'text';
 }
 
 function stopColor(fill: Fill, index: number): string {
@@ -103,6 +105,10 @@ export function PropertiesPanel() {
           stroke={node.stroke}
           onChange={(stroke) => updateProps({ stroke } as Partial<Node>)}
         />
+      )}
+
+      {node.type === 'text' && (
+        <TextControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />
       )}
 
       {node.type === 'image' && (
@@ -529,5 +535,98 @@ function StrokeControls({ stroke, onChange }: { stroke: Stroke | undefined; onCh
         + Layer
       </button>
     </fieldset>
+  );
+}
+
+// Mọi thay đổi ảnh hưởng tới hình chữ (nội dung, font, size, spacing, line
+// height, align) đều phải đo lại node.size cùng lúc — size là kết quả của
+// layout, và cả pivot lẫn khung chọn đều đọc nó.
+function TextControls({ node, onChange }: { node: TextNode; onChange: (patch: Partial<TextNode>) => void }) {
+  const families = registeredFamilies();
+
+  const applyWithMeasure = (patch: Partial<TextNode>) => {
+    const next = { ...node, ...patch } as TextNode;
+    const font = getLoadedFont(next.font.family)?.font;
+    onChange(font ? { ...patch, size: measureText(next, font) } : patch);
+  };
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-gray-200 pt-2">
+      <span className="font-medium">Text</span>
+
+      <label className="flex flex-col gap-1">
+        Content
+        <textarea
+          value={node.text}
+          rows={2}
+          onChange={(e) => applyWithMeasure({ text: e.target.value })}
+          className="resize-none rounded border border-gray-300 px-1 py-0.5"
+        />
+      </label>
+
+      <label className="flex flex-col gap-1">
+        Font
+        <select
+          value={node.font.family}
+          onChange={(e) => applyWithMeasure({ font: { ...node.font, family: e.target.value } })}
+          className="rounded border border-gray-300 px-1 py-0.5"
+        >
+          {families.map((family) => (
+            <option key={family} value={family}>
+              {family}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="flex flex-col gap-1">
+        Size
+        <input
+          type="number"
+          min={1}
+          value={node.font.size}
+          onChange={(e) => applyWithMeasure({ font: { ...node.font, size: Math.max(1, Number(e.target.value)) } })}
+          className="rounded border border-gray-300 px-1 py-0.5"
+        />
+      </label>
+
+      <label className="flex flex-col gap-1">
+        Align
+        <select
+          value={node.align}
+          onChange={(e) => applyWithMeasure({ align: e.target.value as TextNode['align'] })}
+          className="rounded border border-gray-300 px-1 py-0.5"
+        >
+          {(['left', 'center', 'right'] as const).map((align) => (
+            <option key={align} value={align}>
+              {align}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="flex flex-col gap-1">
+        Letter Spacing
+        <input
+          type="number"
+          step={0.5}
+          value={node.letterSpacing}
+          onChange={(e) => applyWithMeasure({ letterSpacing: Number(e.target.value) })}
+          className="rounded border border-gray-300 px-1 py-0.5"
+        />
+      </label>
+
+      <label className="flex flex-col gap-1">
+        Line Height
+        <input
+          type="number"
+          min={0.1}
+          step={0.1}
+          value={node.lineHeight}
+          onChange={(e) => applyWithMeasure({ lineHeight: Math.max(0.1, Number(e.target.value)) })}
+          className="rounded border border-gray-300 px-1 py-0.5"
+        />
+      </label>
+    </div>
   );
 }
