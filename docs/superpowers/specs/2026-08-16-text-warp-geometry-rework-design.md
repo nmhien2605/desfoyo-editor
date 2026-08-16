@@ -313,16 +313,24 @@ export function resolveWarpPath(
 
 Sampler được dựng qua **một hàm dùng chung** — `WarpHandlesOverlay` phải vẽ handle trên đúng path mà chữ đang chạy, nên không được tự dựng lại:
 
+`k` được áp bằng `bakeScale(path, k)` — một `WarpPath` mới đã co sẵn — chứ không phải một tham số của `buildPathSampler`. Nhờ vậy hàm dùng chung trả được **cả path lẫn sampler**, và overlay vẽ handle trên đúng toạ độ chữ đang chạy mà không phải tự nhân lại hệ số.
+
 ```ts
 // Nguồn duy nhất của "path thật sự đang dùng". textGeometry và
 // WarpHandlesOverlay đều gọi hàm này, không hàm nào tự ghép lại các bước.
-export function warpSamplerFor(node: TextNode, layout: TextLayout): PathSampler | null {
-  if (layout.height <= 0) return null;
+export function resolveWarpGeometry(
+  node: TextNode,
+  layout: TextLayout,
+): { path: WarpPath; sampler: PathSampler } | null {
+  if (layout.height <= 0 || layout.width <= 0) return null;
   const resolved = resolveWarpPath(node, layout.baselineY / layout.height);
   if (!resolved) return null;
+
   const size = { width: layout.width, height: layout.height };
-  const k = resolved.fit ? solveHorizontalScale(resolved.path, size, layout.width) : 1;
-  return buildPathSampler(resolved.path, size, k);
+  const path = resolved.fit
+    ? bakeScale(resolved.path, solveHorizontalScale(resolved.path, size, layout.width))
+    : resolved.path;
+  return { path, sampler: buildPathSampler(path, size) };
 }
 
 export function textGeometry(node: TextNode, font: Font): TextGeometry {
@@ -334,9 +342,9 @@ export function textGeometry(node: TextNode, font: Font): TextGeometry {
     lineHeight: node.lineHeight,
     align: node.align,
   });
-  const sampler = warpSamplerFor(node, layout);
-  const shapes = sampler
-    ? placeOnPath(layout.shapes, sampler, layout.baselineY)
+  const warped = resolveWarpGeometry(node, layout);
+  const shapes = warped
+    ? placeOnPath(layout.shapes, warped.sampler, layout.baselineY)
     : layout.shapes;
 
   return { ...layout, shapes, bounds: shapesBounds(shapes) };
@@ -390,15 +398,11 @@ Font chưa nạp → không có geometry → lùi về `node.size`, cùng quy ư
 
 #### `src/ui/WarpHandlesOverlay.tsx`
 
-Path preset nay bị co ngang hệ số `k`, nên **handle phải vẽ trên path đã co** để trùng với chữ. Overlay lấy path qua `warpSamplerFor` (§5.4), không tự ghép `resolveWarpPath` + `buildPathSampler`.
+Path preset nay bị co ngang hệ số `k`, nên **handle phải vẽ trên path đã co** để trùng với chữ. Overlay lấy `path` qua `resolveWarpGeometry` (§5.4), không tự ghép `resolveWarpPath` + `buildPathSampler`.
 
-**Bake `k` khi lưu.** Quy tắc "paths đã lưu thắng preset" đặt `fit = false` cho path đã lưu, nghĩa là lần render sau `k` sẽ là 1. Nếu ghi toạ độ chuẩn hoá gốc thì chữ **nhảy** ngay khi user chạm handle đầu tiên. Vậy lúc `movePathPoint` ghi lần đầu, mọi điểm phải được bake:
+**Bake `k` giải quyết luôn việc lưu.** Quy tắc "paths đã lưu thắng preset" đặt `fit = false` cho path đã lưu, nghĩa là lần render sau `k` sẽ là 1. Nếu overlay giữ toạ độ chuẩn hoá gốc thì chữ **nhảy** ngay khi user chạm handle đầu tiên.
 
-```
-x_stored = (x_preset − 0.5) · k + 0.5          y_stored = y_preset
-```
-
-Sau khi bake, render với `k = 1` cho ra đúng hình đang hiển thị. Bất biến: **điều user thấy lúc thả tay chính là điều được lưu.**
+Vì `resolveWarpGeometry` trả về path đã bake, `startPath` trong `startDrag` đã là toạ độ hiển thị — `movePathPoint` ghi thẳng nó vào `warp.paths` là đúng, không cần bước chuyển đổi riêng. Bất biến: **điều user thấy lúc thả tay chính là điều được lưu.**
 
 ---
 
