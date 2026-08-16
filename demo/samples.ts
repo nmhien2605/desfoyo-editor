@@ -144,7 +144,9 @@ export const textWaveSample: Document = baseDoc({
             originX: 0.5,
             originY: 0.5,
           },
-          size: { width: 420, height: 130 },
+          // measureText(node, Anton@110) cho "Desfoyo" align=center — xem
+          // finding #4 cua final-review-fix-report.md, khong doan tay.
+          size: { width: 350.947265625, height: 165.5908203125 },
           opacity: 1,
           visible: true,
           locked: false,
@@ -167,7 +169,9 @@ export const textWaveSample: Document = baseDoc({
             originX: 0.5,
             originY: 0.5,
           },
-          size: { width: 420, height: 130 },
+          // measureText(node, Anton@110) cho "Desfoyo" align=center — xem
+          // finding #4 cua final-review-fix-report.md, khong doan tay.
+          size: { width: 350.947265625, height: 165.5908203125 },
           opacity: 1,
           visible: true,
           locked: false,
