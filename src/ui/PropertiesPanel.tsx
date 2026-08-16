@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
 import { customShaders } from '../effects/shaders/customShaders';
 import { decodeSvgText, listFillableIds } from '../render/renderers/svgRenderer';
-import { getLoadedFont, registeredFamilies } from '../text/fontService';
+import { getLoadedFont, onFontLoaded, registeredFamilies } from '../text/fontService';
 import { measureText } from '../text/textGeometry';
 import type { BlendMode, Effect, Fill, ImageNode, Node, Stroke, SvgNode, TextNode } from '../schema';
 
@@ -542,6 +542,7 @@ function StrokeControls({ stroke, onChange }: { stroke: Stroke | undefined; onCh
 // height, align) đều phải đo lại node.size cùng lúc — size là kết quả của
 // layout, và cả pivot lẫn khung chọn đều đọc nó.
 function TextControls({ node, onChange }: { node: TextNode; onChange: (patch: Partial<TextNode>) => void }) {
+  const store = useEditorStoreApi();
   const families = registeredFamilies();
 
   const applyWithMeasure = (patch: Partial<TextNode>) => {
@@ -549,6 +550,33 @@ function TextControls({ node, onChange }: { node: TextNode; onChange: (patch: Pa
     const font = getLoadedFont(next.font.family)?.font;
     onChange(font ? { ...patch, size: measureText(next, font) } : patch);
   };
+
+  // applyWithMeasure above skips the size update when the target font isn't
+  // loaded yet (getLoadedFont returns null) — the load itself is already
+  // kicked off as a side effect of textRenderer.ts's draw() on the next
+  // canvas render. Once it lands, correct node.size here so the selection
+  // box (SelectionOverlay.tsx) doesn't stay stale. Reads the node fresh
+  // from the store at fire time, not the `node` prop closed over when this
+  // effect was set up — that prop is stale by the time an async font
+  // resolves (same onFontLoaded/cleanup pattern as textRenderer.ts).
+  useEffect(() => {
+    const nodeId = node.id;
+    return onFontLoaded((family) => {
+      const state = store.getState();
+      const current = state.document.pages
+        .find((p) => p.id === state.activePageId)
+        ?.children.find((n) => n.id === nodeId);
+      if (!current || current.type !== 'text' || current.font.family !== family) return;
+      const font = getLoadedFont(family)?.font;
+      if (!font) return;
+      state.dispatch({
+        type: 'UpdateProps',
+        pageId: state.activePageId,
+        nodeId,
+        patch: { size: measureText(current, font) },
+      });
+    });
+  }, [node.id, store]);
 
   return (
     <div className="flex flex-col gap-2 border-t border-gray-200 pt-2">
