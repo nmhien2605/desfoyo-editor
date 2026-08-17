@@ -188,12 +188,13 @@ Thay `sampleSegment` hiện tại. Với mỗi đoạn cubic của warp path, ch
 cho tới khi dây cung xấp xỉ cung trong `LUT_TOL` trên **cả hai** trục:
 
 ```text
-flat  ⟺  ∀ t ∈ {¼, ½, ¾}:  |Bx(t) − chordX(t)| ≤ LUT_TOL
-                       và  |By(t) − chordY(t)| ≤ LUT_TOL
+flat  ⟺  ∀ t ∈ {¼, ½, ¾}:  khoảng cách vuông góc từ P(t) tới đường thẳng
+                            qua hai đầu mút  ≤  LUT_TOL
 ```
 
-(Tiêu chí cũ chỉ đo lệch **dọc** so với dây cung theo `x`; giờ bảng được đánh chỉ
-số theo độ dài cung nên cả hai trục đều phải đủ phẳng.)
+So sánh theo tham số `t` với dây cung sẽ coi một đoạn **thẳng** có tham số hoá
+không đều là "cong", chia nhỏ tới hết độ sâu mà không được gì; khoảng cách vuông
+góc thì độc lập với tham số hoá.
 
 Bảng gồm ba mảng song song: `us[]` (độ dài cung tích luỹ), `xs[]`, `ys[]`.
 `us[0] = 0`, `us[i] = us[i−1] + |p_i − p_{i−1}|`. `L = us[last]`.
@@ -369,8 +370,4 @@ khả thi về mặt toán học; giờ nó chỉ còn đúng nhờ tính đơn 
    riêng, ngoài phạm vi spec này.
 2. **Số segment đầu ra tăng** ⇒ export SVG dài hơn. Không có ngưỡng cứng.
 3. **Migration hình ảnh** cho tài liệu chế độ preset (§5.3).
-4. **`MAX_DEPTH = 10` có thể không còn đủ** khi tiêu chí sai số áp cho hai trục,
-   và dải slider mới lên tới `curveHeight = 4` làm path dốc hơn nhiều so với mọi
-   trường hợp đã test. Phải đo lại đúng cách đã làm hồi trước (dò độ sâu hội tụ
-   thật ở `curveHeight = 4` rồi cộng biên một mức), không mặc định chép lại con
-   số cũ.
+4. **Đã đo ở `curveHeight = 4`**: thuật toán tự hội tụ ở depth `8`; `MAX_DEPTH` đặt `9`.

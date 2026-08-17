@@ -89,6 +89,11 @@ UI cũng phải đổi: 2 đường cong nghĩa là gấp đôi số anchor/hand
 | **Distort** | khung bao 4 góc kéo tự do | Bắt buộc có envelope |
 | **Custom** | lưới mesh N×M kéo từng điểm | Bắt buộc có envelope + UI lưới |
 
+Bảng control point chuẩn hoá của cả bốn preset đã trích xuất sẵn từ Kittl —
+xem [kittl-warp-reverse-engineered.md](./kittl-warp-reverse-engineered.md) §4.3.
+Engine `buildWarpMap` + `warpContours` đã dùng chung được, nên thêm một preset
+chỉ là thêm bảng số vào `buildWavePath` cùng test.
+
 Panel đã dựng sẵn lưới 8 nút, bật thêm nút nào thì chỉ cần viết hàm sinh path tương ứng trong `warp.ts`.
 
 ---
@@ -170,8 +175,9 @@ v1 dùng overlay `<textarea>` — trình duyệt lo caret và IME tiếng Việt
 - `containsPoint` trong `glyphOutlines.ts` ray-cast trên các điểm on-curve,
   bỏ qua phần phình của cung. Chính xác hẳn thì phải đếm giao điểm tia với
   từng cubic (giải phương trình bậc 3).
-- `solveHorizontalScale` chỉ co theo trục x. Nếu có preset với biên độ dọc
-  lớn tới mức `L(0.05) > W`, glyph cuối sẽ bị bỏ. Cần kẹp `intensity` hoặc
-  đổi sang co đều hai trục.
-- Envelope warp (hành vi per-point cũ) vẫn là mode tương lai — schema `Warp`
+- Bù độ dài bằng hệ số `k = L/W` (`buildWarpMap`) chỉ co theo trục x. Ở
+  `curveHeight` lớn, chỗ path dốc có `cos θ` gần 0 nên glyph ở đó bị bóp gần
+  như thành vệt dọc. Đó là hành vi của mô hình arc length, Kittl y hệt — không
+  phải lỗi. Nếu muốn tránh thì phải co đều hai trục, tức đổi mô hình.
+- Envelope warp (hai path `top`/`bottom`) vẫn là mode tương lai — schema `Warp`
   đã chừa chỗ.

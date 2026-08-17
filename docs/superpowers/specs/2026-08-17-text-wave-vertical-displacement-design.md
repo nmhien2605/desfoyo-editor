@@ -1,5 +1,11 @@
 # Text Wave — Vertical Displacement Design Spec
 
+> **ĐÃ BỊ THAY THẾ (2026-08-17)** bởi
+> `2026-08-17-text-warp-arclength-design.md`. Mô hình dịch chuyển dọc thuần
+> `(x,y) → (x, y+f(x))` không tạo được hiệu ứng nén/giãn cục bộ của Kittl.
+> Giữ lại vì phần chứng minh §2.3 (đơn điệu của Bx) và §5.1.2 (affine-exactness)
+> vẫn còn hiệu lực và được mô hình mới dùng lại.
+
 **Ngày:** 2026-08-17
 **Thay thế:** `2026-08-16-text-warp-geometry-rework-design.md` (§2.1, §2.2, §2.3, §5.3) và phần warp geometry của spec gốc. Các quyết định khác của hai spec trước giữ nguyên trừ khi nói rõ ở đây.
 
