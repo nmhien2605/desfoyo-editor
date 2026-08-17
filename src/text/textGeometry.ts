@@ -1,6 +1,6 @@
 import type { Font } from 'opentype.js';
 import type { TextNode, WarpPath } from '../schema';
-import { evalCubic } from './bezier';
+import { evalCubic, extrema } from './bezier';
 import type { GlyphShape } from './glyphOutlines';
 import type { TextLayout } from './layout';
 import { layoutText } from './layout';
@@ -25,25 +25,6 @@ export interface TextGeometry {
   baselineY: number;
   // Bbox thật của hình SAU warp. Chỉ để vẽ khung chọn — không đụng transform.
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
-}
-
-// Nghiệm của B'(t) = 0 trong (0,1), tức các cực trị của cung trên một trục.
-// B'(t)/3 = at² + bt + c.
-function extrema(p0: number, c1: number, c2: number, p3: number): number[] {
-  const a = -p0 + 3 * c1 - 3 * c2 + p3;
-  const b = 2 * (p0 - 2 * c1 + c2);
-  const c = c1 - p0;
-  const roots: number[] = [];
-  if (Math.abs(a) < 1e-12) {
-    if (Math.abs(b) > 1e-12) roots.push(-c / b);
-  } else {
-    const disc = b * b - 4 * a * c;
-    if (disc >= 0) {
-      const r = Math.sqrt(disc);
-      roots.push((-b + r) / (2 * a), (-b - r) / (2 * a));
-    }
-  }
-  return roots.filter((t) => t > 0 && t < 1);
 }
 
 // Bbox chính xác: lấy hai đầu mút cộng các cực trị giải tích. Không dùng bao
