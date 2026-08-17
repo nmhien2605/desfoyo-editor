@@ -72,6 +72,42 @@ describe('movePathPoint', () => {
     movePathPoint(path, { anchor: 0, kind: 'anchor' }, { x: 1, y: 1 });
     expect(JSON.stringify(path)).toBe(before);
   });
+
+  // anchor 1 la anchor duy nhat trong fixture co ca hai handle — chi o day
+  // moi co gi de mirror qua.
+  const collinear = (
+    a: { x: number; y: number },
+    b: { x: number; y: number },
+    c: { x: number; y: number },
+  ) => Math.abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x));
+
+  it('keo in cua anchor giua: out doi huong theo, giu nguyen do dai cu', () => {
+    const anchor = path.anchors[1];
+    const outDistBefore = Math.hypot(anchor.out!.x - anchor.x, anchor.out!.y - anchor.y);
+    const next = movePathPoint(path, { anchor: 1, kind: 'in' }, { x: 0.1, y: -0.2 });
+    const a = next.anchors[1];
+    const outDistAfter = Math.hypot(a.out!.x - a.x, a.out!.y - a.y);
+    expect(outDistAfter).toBeCloseTo(outDistBefore, 10);
+    expect(collinear(a.in!, a, a.out!)).toBeLessThan(1e-9);
+    // out phai o PHIA DOI DIEN voi in qua anchor, khong phai trung huong.
+    expect((a.out!.x - a.x) * (a.in!.x - a.x) + (a.out!.y - a.y) * (a.in!.y - a.y)).toBeLessThan(0);
+  });
+
+  it('keo out cua anchor giua: in doi huong theo, giu nguyen do dai cu', () => {
+    const anchor = path.anchors[1];
+    const inDistBefore = Math.hypot(anchor.in!.x - anchor.x, anchor.in!.y - anchor.y);
+    const next = movePathPoint(path, { anchor: 1, kind: 'out' }, { x: -0.05, y: 0.3 });
+    const a = next.anchors[1];
+    const inDistAfter = Math.hypot(a.in!.x - a.x, a.in!.y - a.y);
+    expect(inDistAfter).toBeCloseTo(inDistBefore, 10);
+    expect(collinear(a.in!, a, a.out!)).toBeLessThan(1e-9);
+    expect((a.out!.x - a.x) * (a.in!.x - a.x) + (a.out!.y - a.y) * (a.in!.y - a.y)).toBeLessThan(0);
+  });
+
+  it('anchor chi co mot handle: keo khong sinh ra handle doi dien', () => {
+    const next = movePathPoint(path, { anchor: 0, kind: 'out' }, { x: 0.1, y: -0.05 });
+    expect(next.anchors[0].in).toBeUndefined();
+  });
 });
 
 // projectLocalPoint la phep chieu pivot -> scale -> rotate -> translate ->

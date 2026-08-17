@@ -41,6 +41,28 @@ function shift(point: { x: number; y: number }, delta: { x: number; y: number })
   return { x: point.x + delta.x, y: point.y + delta.y };
 }
 
+const EPSILON = 1e-9;
+
+// Handle đối diện phải nằm trên đường thẳng qua anchor, hướng ngược lại handle
+// vừa kéo — "smooth node" (mirror góc, KHÔNG mirror độ dài) giống các trình
+// vector chuẩn (Figma/Illustrator). Nếu handle đối diện trùng anchor (độ dài
+// 0) thì không có gì để giữ hướng, và nếu handle vừa kéo trùng anchor thì
+// không có hướng nào để mirror theo — cả hai trường hợp giữ nguyên handle đối
+// diện thay vì suy ra một hướng tuỳ tiện.
+function mirrorOpposite(
+  anchor: { x: number; y: number },
+  moved: { x: number; y: number },
+  opposite: { x: number; y: number } | undefined,
+): { x: number; y: number } | undefined {
+  if (!opposite) return opposite;
+  const dist = Math.hypot(opposite.x - anchor.x, opposite.y - anchor.y);
+  const dx = anchor.x - moved.x;
+  const dy = anchor.y - moved.y;
+  const len = Math.hypot(dx, dy);
+  if (dist < EPSILON || len < EPSILON) return opposite;
+  return { x: anchor.x + (dx / len) * dist, y: anchor.y + (dy / len) * dist };
+}
+
 // Kéo anchor thì hai handle của nó đi theo — nếu không, đoạn cong quanh anchor
 // sẽ giật hình dạng ngay khi anchor nhích một chút (tài liệu §8).
 export function movePathPoint(
@@ -59,8 +81,16 @@ export function movePathPoint(
     }
     // Viết tách hai nhánh thay vì dùng computed key `[ref.kind]`: TypeScript
     // nới lỏng kiểu khi key là union, làm mất tính đúng đắn của WarpAnchor.
-    if (ref.kind === 'in') return anchor.in ? { ...anchor, in: shift(anchor.in, delta) } : anchor;
-    return anchor.out ? { ...anchor, out: shift(anchor.out, delta) } : anchor;
+    // Kéo một handle thì handle đối diện cũng xoay theo (mirrorOpposite) để
+    // đường cong luôn mượt qua anchor, không gãy góc.
+    if (ref.kind === 'in') {
+      if (!anchor.in) return anchor;
+      const next = shift(anchor.in, delta);
+      return { ...anchor, in: next, out: mirrorOpposite(anchor, next, anchor.out) };
+    }
+    if (!anchor.out) return anchor;
+    const next = shift(anchor.out, delta);
+    return { ...anchor, out: next, in: mirrorOpposite(anchor, next, anchor.in) };
   });
   return { ...path, anchors };
 }
