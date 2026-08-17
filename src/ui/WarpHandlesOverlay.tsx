@@ -66,8 +66,8 @@ export function movePathPoint(
 
 // f(x) chi xac dinh khi path la ham cua x. Dieu kien du: hoanh do anchor khong
 // giam, va hai handle cua moi segment nam trong khoang hoanh do cua segment do
-// — khi ay Bx'(t)/3 la dang Bernstein bac hai voi ca ba he so thoa a, c >= 0 va
-// b² <= ac, nen Bx' >= 0 (spec §2.3).
+// — khi ay Bx'(t)/3 la dang Bernstein bac hai voi ca ba he so thoa a, c >= 0
+// va (b >= 0 hoac b² <= ac), nen Bx' >= 0 (spec §2.3).
 //
 // Chay tren TOAN path moi lan keo, nen keo mot anchor cung tu dong kep lai
 // handle ke cua hai anchor lan can.
