@@ -302,24 +302,29 @@ trọng hơn: `W` là mẫu số của `k`, nếu lấy bbox sau warp thì thàn
 ```ts
 export const WarpSchema = z.object({
   type: WarpTypeSchema,
-  curveHeight: z.number().min(-2).max(2),
+  curveHeight: z.number().min(-1).max(4),
   paths: z.array(WarpPathSchema).optional(),
 });
 ```
 
 `intensity` bị xoá. Tài liệu cũ: nhận `intensity` như bí danh đọc-vào của
-`curveHeight` (cùng con số, kẹp về `[-2, 2]`). Với tài liệu ở chế độ preset,
+`curveHeight` (cùng con số, kẹp về `[-1, 4]`). Với tài liệu ở chế độ preset,
 hình sẽ **đổi nhẹ** — chấp nhận được vì repo chưa phát hành. Tài liệu đã có
 `paths` thì path thắng, không đổi gì.
 
 ### 5.4 `src/ui/TransformationControls.tsx`
 
 - `DEFAULT_WARP_INTENSITY` → `DEFAULT_WARP_CURVE_HEIGHT` (giá trị `0.5`).
-- `setWarpIntensity` → `setWarpCurveHeight`, kẹp `[-2, 2]`.
-- Slider: `min={-2} max={2} step={0.01}`, nhãn `{Math.round(curveHeight * 100)}%`.
+- `setWarpCurveHeight` thay `setWarpIntensity`, kẹp `[-1, 4]`.
+- Slider: `min={-1} max={4} step={0.01}`, nhãn `{Math.round(curveHeight * 100)}%`.
 
 Ghi chú: slider của Kittl là **−100 %…+100 %** (đã quan sát giá trị −61 %); vượt
-±100 % chỉ đạt được bằng cách kéo handle. Ta cho slider rộng hơn theo yêu cầu.
+±100 % chỉ đạt được bằng cách kéo handle. Ta mở dải lên **−100 %…400 %** theo
+yêu cầu — dải dương rộng hơn vì đó là chiều dùng thật, chiều âm chỉ để lật cong.
+
+Ở `curveHeight = 4`, biên độ dọc bằng 4× fontSize ⇒ path rất dốc ⇒ `cos θ` nhỏ ở
+hai đầu ⇒ glyph hai mép bị bóp rất hẹp. Đây là hành vi đúng của mô hình, không
+phải lỗi; nhưng nó đẩy `MAX_DEPTH` và độ chính xác LUT tới hạn — xem §7.4.
 
 ### 5.5 `src/ui/WarpHandlesOverlay.tsx`
 
@@ -340,7 +345,7 @@ Không đổi — nó chỉ tiêu thụ `textGeometry(...).shapes`.
 |---|---|---|
 | I1 | `curveHeight = 0` ⇒ shapes **y hệt** bản chưa warp | so sánh sâu, không dung sai |
 | I2 | `X(0) = 0` và `\|X(W) − W\| < 0.1` px | gọi thẳng `WarpMap` |
-| I3 | Bề ngang bbox sau warp lệch < 0.5 px so với trước warp, ở `curveHeight ∈ {0.25, 1, 2}` | `shapesBounds` |
+| I3 | Bề ngang bbox sau warp lệch < 0.5 px so với trước warp, ở `curveHeight ∈ {0.25, 1, 2, 4}` | `shapesBounds` |
 | I4 | Không xoay: hai điểm cùng `x` ⇒ cùng `x'`, và hiệu `y` giữ nguyên chính xác | dựng contour thử |
 | I5 | Contour kín vẫn kín sau warp (điểm đầu ≡ điểm cuối, 1e-9) | glyph `o` |
 | I6 | Sai số hình ≤ `WARP_TOL`: lấy 20 mẫu/cubic, so ảnh thật của cung với cubic đã map | so với `map` áp trực tiếp |
@@ -364,6 +369,8 @@ khả thi về mặt toán học; giờ nó chỉ còn đúng nhờ tính đơn 
    riêng, ngoài phạm vi spec này.
 2. **Số segment đầu ra tăng** ⇒ export SVG dài hơn. Không có ngưỡng cứng.
 3. **Migration hình ảnh** cho tài liệu chế độ preset (§5.3).
-4. **`MAX_DEPTH = 10` có thể không còn đủ** khi tiêu chí sai số áp cho hai trục.
-   Phải đo lại đúng cách đã làm hồi trước (dò độ sâu hội tụ thật rồi cộng biên),
-   không mặc định chép lại con số cũ.
+4. **`MAX_DEPTH = 10` có thể không còn đủ** khi tiêu chí sai số áp cho hai trục,
+   và dải slider mới lên tới `curveHeight = 4` làm path dốc hơn nhiều so với mọi
+   trường hợp đã test. Phải đo lại đúng cách đã làm hồi trước (dò độ sâu hội tụ
+   thật ở `curveHeight = 4` rồi cộng biên một mức), không mặc định chép lại con
+   số cũ.
