@@ -302,7 +302,7 @@ export function solveHorizontalScale(path: WarpPath, size: Size, target: number)
 }
 
 const LUT_TOL = 0.01; // px — sai lech DOC toi da giua cung va day cung theo x
-const MAX_DEPTH = 8;
+const MAX_DEPTH = 10;
 
 // Day mau cuoi cua mot cung vao bang, chia doi cho toi khi day cung du sat.
 // Chi day dau mut PHAI: dau mut trai da nam trong bang tu buoc truoc.
