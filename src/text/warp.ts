@@ -302,6 +302,9 @@ export function solveHorizontalScale(path: WarpPath, size: Size, target: number)
 }
 
 const LUT_TOL = 0.01; // px — sai lech DOC toi da giua cung va day cung theo x
+// Depth 9 la noi thuat toan tu hoi tu dung theo tieu chi flatness dung cho
+// duong cong doc nhat da test (khong nho tran). Depth 10 la bien an toan 1
+// muc: thap hon 9 co the am tham cat bot do chinh xac duoi LUT_TOL.
 const MAX_DEPTH = 10;
 
 // Day mau cuoi cua mot cung vao bang, chia doi cho toi khi day cung du sat.
