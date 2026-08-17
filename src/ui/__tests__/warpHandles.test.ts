@@ -3,7 +3,7 @@ import type { WarpPath } from '../../schema';
 import { listHandles, movePathPoint, projectLocalPoint } from '../WarpHandlesOverlay';
 import type { Viewport } from '../../render/viewport';
 import { evalD1 } from '../../text/bezier';
-import { buildWavePath, clampPathX } from '../../text/warp';
+import { buildWavePath, clampPathX, curveHeightOf } from '../../text/warp';
 
 const path: WarpPath = {
   role: 'baseline',
@@ -212,5 +212,18 @@ describe('clampPathX', () => {
       expect(after.anchors[i].in?.y).toBe(anchor.in?.y);
       expect(after.anchors[i].out?.y).toBe(anchor.out?.y);
     });
+  });
+});
+
+describe('dong bo curveHeight khi keo handle', () => {
+  it('curveHeightOf tra ve dung bien do cua path sau khi keo', () => {
+    const path = clampPathX(buildWavePath(1, 0.5, 100, 120));
+    const dragged = clampPathX(
+      movePathPoint(path, { anchor: 1, kind: 'anchor' }, { x: 0, y: -0.25 }),
+    );
+    const before = curveHeightOf(path, 120, 100);
+    const after = curveHeightOf(dragged, 120, 100);
+    expect(after).not.toBeCloseTo(before, 3);
+    expect(after).toBeGreaterThan(before);
   });
 });

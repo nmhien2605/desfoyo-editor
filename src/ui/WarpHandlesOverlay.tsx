@@ -4,7 +4,7 @@ import type { Viewport } from '../render/viewport';
 import { rotateVector } from '../render/interactions/resizeMath';
 import { getLoadedFont } from '../text/fontService';
 import { resolveWarpPath, textGeometry } from '../text/textGeometry';
-import { clampPathX } from '../text/warp';
+import { clampPathX, curveHeightOf } from '../text/warp';
 import type { Node, TextNode, WarpAnchor, WarpPath } from '../schema';
 
 export type HandleRef = { anchor: number; kind: 'anchor' | 'in' | 'out' };
@@ -83,8 +83,8 @@ export function WarpHandlesOverlay({
 
   const geometry = textGeometry(node, font);
   if (geometry.height <= 0) return null;
-  // Cùng nguồn với textGeometry: path ở đây chính là path đang dùng để warp,
-  // nên handle nằm đúng trên đường mà chữ đang chạy.
+  // Cung nguon voi textGeometry: path o day chinh la path dang dung de warp,
+  // nen handle nam dung tren duong ma chu dang chay.
   const path = resolveWarpPath(node, geometry.baselineY / geometry.height, geometry.height);
   if (!path) return null;
 
@@ -126,7 +126,9 @@ export function WarpHandlesOverlay({
         patch: {
           warp: {
             type: node.warp?.type ?? 'wave',
-            curveHeight: node.warp?.curveHeight ?? 0.5,
+            // Slider phai theo kip path vua keo, neu khong lan keo slider ke
+            // tiep se sinh lai preset tu con so cu va hinh nhay.
+            curveHeight: curveHeightOf(nextPath, box.height, node.font.size),
             paths: [nextPath],
           },
         } as Partial<Node>,

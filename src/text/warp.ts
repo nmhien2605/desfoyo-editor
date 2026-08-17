@@ -32,14 +32,14 @@ function segmentsOf(path: WarpPath, size: Size): Segment[] {
   return segments;
 }
 
-// Đúng cấu trúc docs/wave-transformation.md mô tả: 1 path mở, 3 anchor,
-// 4 handle, tổng 7 point hiển thị. baselineRatio = baselineY / height, nên
-// curveHeight = 0 cho ra một đường ngang đúng ngay tại baseline — tức warp
-// trở thành phép đồng nhất.
+// Dung cau truc docs/wave-transformation.md mo ta: 1 path mo, 3 anchor,
+// 4 handle, tong 7 point hien thi. baselineRatio = baselineY / height, nen
+// curveHeight = 0 cho ra mot duong ngang dung ngay tai baseline — tuc warp
+// tro thanh phep dong nhat.
 //
-// curveHeight đo bằng bội số của fontSize, giống Kittl: khoảng dao động dọc
-// của path bằng đúng |curveHeight| * fontSize. Hình gốc dao động từ -0.4a tới
-// +a, tức 1.4a, nên chia 1.4 để quy về đúng biên độ yêu cầu. Dấu âm lật cong.
+// curveHeight do bang boi so cua fontSize, giong Kittl: khoang dao dong doc
+// cua path bang dung |curveHeight| * fontSize. Hinh goc dao dong tu -0.4a toi
+// +a, tuc 1.4a, nen chia 1.4 de quy ve dung bien do yeu cau. Dau am lat cong.
 export function buildWavePath(
   curveHeight: number,
   baselineRatio: number,
@@ -52,17 +52,39 @@ export function buildWavePath(
     role: 'baseline',
     closed: false,
     anchors: [
-      // Xuất phát thấp bên trái, handle nằm ngang: đoạn đầu gần như thẳng
-      // rồi mới cong lên (tài liệu §6, đoạn 1).
+      // Xuat phat thap ben trai, handle nam ngang: doan dau gan nhu thang
+      // roi moi cong len (tai lieu §6, doan 1).
       { x: 0, y: b + a, out: { x: 0.2, y: b + a } },
-      // Hai handle đối xứng qua anchor giữa ⇒ thẳng hàng, chuyển tiếp mượt
-      // giữa hai đoạn cong (tài liệu §2).
+      // Hai handle doi xung qua anchor giua ⇒ thang hang, chuyen tiep muot
+      // giua hai doan cong (tai lieu §2).
       { x: 0.5, y: b, in: { x: 0.35, y: b + 0.15 * a }, out: { x: 0.65, y: b - 0.15 * a } },
-      // Handle vào nằm *trên* anchor cuối ⇒ cung lớn vồng lên ở khoảng
-      // giữa-phải rồi hạ xuống điểm kết thúc (tài liệu §6, đoạn 2).
+      // Handle vao nam *tren* anchor cuoi ⇒ cung lon vong len o khoang
+      // giua-phai roi ha xuong diem ket thuc (tai lieu §6, doan 2).
       { x: 1, y: b + 0.6 * a, in: { x: 0.75, y: b - 0.4 * a } },
     ],
   };
+}
+
+// Doc nguoc curveHeight tu mot path bat ky — nghich dao cua buildWavePath ve
+// mat bien do. Can khi user keo handle: slider phai theo kip hinh, neu khong
+// lan keo slider ke tiep se lam hinh nhay. Kittl lam dung viec nay trong
+// setPoints.
+//
+// Dau lay theo chieu diem dau so voi diem cuoi, dung quy uoc cua buildWavePath
+// (a > 0 dat anchor dau CAO hon anchor cuoi theo he toa do y-xuong).
+export function curveHeightOf(path: WarpPath, boxHeight: number, fontSize: number): number {
+  if (fontSize <= 0 || path.anchors.length < 2) return 0;
+  const ys: number[] = [];
+  for (const anchor of path.anchors) {
+    ys.push(anchor.y);
+    if (anchor.in) ys.push(anchor.in.y);
+    if (anchor.out) ys.push(anchor.out.y);
+  }
+  const spread = ((Math.max(...ys) - Math.min(...ys)) * boxHeight) / fontSize;
+  const first = path.anchors[0].y;
+  const last = path.anchors[path.anchors.length - 1].y;
+  const signed = first >= last ? spread : -spread;
+  return Math.min(4, Math.max(-1, signed));
 }
 
 // f(x) chi xac dinh khi path la ham cua x. Dieu kien du: hoanh do anchor khong

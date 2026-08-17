@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { WarpPath } from '../../schema';
-import { buildWarpMap, buildWavePath, clampPathX, warpContours, type WarpMap } from '../warp';
+import {
+  buildWarpMap,
+  buildWavePath,
+  clampPathX,
+  curveHeightOf,
+  warpContours,
+  type WarpMap,
+} from '../warp';
 import { evalCubic } from '../bezier';
 import type { GlyphShape } from '../glyphOutlines';
 
@@ -335,5 +342,40 @@ describe('warpContours', () => {
     const identity: WarpMap = { L: 0, k: 1, X: (x) => x, D: () => 0 };
     const box = rect(10, 20, 60, 80);
     expect(warpContours([shape(box)], identity)[0].outer).toEqual(box);
+  });
+});
+
+describe('curveHeightOf', () => {
+  it('doc nguoc dung con so da dung de sinh path', () => {
+    for (const curve of [0.25, 1, 2.5, 4]) {
+      const path = buildWavePath(curve, 0.5, FONT_SIZE, SIZE.height);
+      expect(curveHeightOf(path, SIZE.height, FONT_SIZE)).toBeCloseTo(curve, 9);
+    }
+  });
+
+  it('path phang cho 0', () => {
+    const flat = buildWavePath(0, 0.5, FONT_SIZE, SIZE.height);
+    expect(curveHeightOf(flat, SIZE.height, FONT_SIZE)).toBe(0);
+  });
+
+  it('lay dau theo chieu: diem dau cao hon diem cuoi la duong', () => {
+    const up = buildWavePath(1, 0.5, FONT_SIZE, SIZE.height);
+    const down = buildWavePath(-1, 0.5, FONT_SIZE, SIZE.height);
+    expect(curveHeightOf(up, SIZE.height, FONT_SIZE)).toBeGreaterThan(0);
+    expect(curveHeightOf(down, SIZE.height, FONT_SIZE)).toBeLessThan(0);
+  });
+
+  it('kep ve khoang slider [-1, 4]', () => {
+    const huge = buildWavePath(4, 0.5, FONT_SIZE, SIZE.height);
+    const scaled: WarpPath = {
+      ...huge,
+      anchors: huge.anchors.map((a) => ({
+        ...a,
+        y: 0.5 + (a.y - 0.5) * 10,
+        in: a.in ? { ...a.in, y: 0.5 + (a.in.y - 0.5) * 10 } : undefined,
+        out: a.out ? { ...a.out, y: 0.5 + (a.out.y - 0.5) * 10 } : undefined,
+      })),
+    };
+    expect(curveHeightOf(scaled, SIZE.height, FONT_SIZE)).toBe(4);
   });
 });
