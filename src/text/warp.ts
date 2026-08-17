@@ -1,6 +1,6 @@
 import type { Size, WarpPath } from '../schema';
 import type { Contour, GlyphShape } from './glyphOutlines';
-import { type Cubic, evalCubic, evalD1, evalD2, evalD3, splitCubic } from './bezier';
+import { type Cubic, evalCubic, evalD1, evalD2, evalD3, extrema, splitCubic } from './bezier';
 
 export interface Point {
   x: number;
@@ -348,13 +348,7 @@ export function buildDisplacement(
       xs.push(s.p0.x);
       ys.push(s.p0.y);
     }
-    sampleSegment(
-      xs,
-      ys,
-      [s.p0.x, s.c1.x, s.c2.x, s.p3.x],
-      [s.p0.y, s.c1.y, s.c2.y, s.p3.y],
-      0,
-    );
+    sampleSegment(xs, ys, [s.p0.x, s.c1.x, s.c2.x, s.p3.x], [s.p0.y, s.c1.y, s.c2.y, s.p3.y], 0);
   });
   if (xs.length === 0) return () => 0;
 
@@ -391,4 +385,98 @@ export function buildDisplacement(
     const k = span < EPSILON ? 0 : (x - xs[low]) / span;
     return ys[low] + (ys[high] - ys[low]) * k - baselineY;
   };
+}
+
+const DISPLACE_TOL = 0.05; // px
+// Duoi nguong nay, (f(x3) - f(x0))/dx bi nhieu cua bang LUT nuot chung — he
+// so goc thanh rac. Dung hang so f(p0.x) thay the: van khop moi noi vi hai
+// dau mut cach nhau duoi MIN_DX nen f o hai ben lech khong dang ke.
+const MIN_DX = 1e-6;
+
+// Ap phep affine L(x) = alpha + beta·x len ca 4 control point. Chinh xac
+// TUYET DOI khi L affine: co so Bernstein co tong bang 1 nen hang so alpha co
+// control point deu bang alpha, con beta·Bx co control point beta·(cp x). Vay
+// By + L(Bx) co control point thu i dung bang c_i.y + L(c_i.x).
+//
+// Chi day 3 diem (c1, c2, p3): diem mo dau da do nguoi goi ghi.
+function pushDisplaced(out: number[], bx: Cubic, by: Cubic, alpha: number, beta: number): void {
+  for (let i = 1; i < 4; i++) out.push(bx[i], by[i] + alpha + beta * bx[i]);
+}
+
+function displaceSegment(
+  out: number[],
+  bx: Cubic,
+  by: Cubic,
+  f: (x: number) => number,
+  depth: number,
+): void {
+  // Khoang hoanh do THAT cua segment: hai dau mut cong cac cuc tri cua Bx.
+  // Rong hon [p0.x, p3.x] o nhung segment vong lai — do chinh la cho L phai
+  // ngoai suy, nen phai do sai so o day chu khong chi giua hai dau mut.
+  let xa = Math.min(bx[0], bx[3]);
+  let xb = Math.max(bx[0], bx[3]);
+  for (const t of extrema(bx[0], bx[1], bx[2], bx[3])) {
+    const x = evalCubic(bx[0], bx[1], bx[2], bx[3], t);
+    if (x < xa) xa = x;
+    if (x > xb) xb = x;
+  }
+
+  const dx = bx[3] - bx[0];
+  // L NOI SUY f tai hai dau mut on-curve (khong phai day cung tren [xa, xb]):
+  // diem noi hai segment ke nhau duoc luu MOT lan trong Contour, hai ben phai
+  // cho cung mot gia tri tai hoanh do do thi contour moi kin va khong gay khuc.
+  let beta: number;
+  let alpha: number;
+  if (Math.abs(dx) < MIN_DX) {
+    beta = 0;
+    alpha = f(bx[0]);
+  } else {
+    beta = (f(bx[3]) - f(bx[0])) / dx;
+    alpha = f(bx[0]) - beta * bx[0];
+  }
+
+  if (depth < MAX_DEPTH) {
+    let worst = 0;
+    for (let k = 0; k <= 4; k++) {
+      const x = xa + ((xb - xa) * k) / 4;
+      const d = Math.abs(f(x) - (alpha + beta * x));
+      if (d > worst) worst = d;
+    }
+    if (worst > DISPLACE_TOL) {
+      const lx = splitCubic(bx[0], bx[1], bx[2], bx[3], 0.5);
+      const ly = splitCubic(by[0], by[1], by[2], by[3], 0.5);
+      displaceSegment(out, lx.left, ly.left, f, depth + 1);
+      displaceSegment(out, lx.right, ly.right, f, depth + 1);
+      return;
+    }
+  }
+  pushDisplaced(out, bx, by, alpha, beta);
+}
+
+function displaceContour(contour: Contour, f: (x: number) => number): Contour {
+  const out: number[] = [contour[0], contour[1] + f(contour[0])];
+  for (let i = 0; i + 7 < contour.length; i += 6) {
+    displaceSegment(
+      out,
+      [contour[i], contour[i + 2], contour[i + 4], contour[i + 6]],
+      [contour[i + 1], contour[i + 3], contour[i + 5], contour[i + 7]],
+      f,
+      0,
+    );
+  }
+  return out;
+}
+
+// Phep bien doi duy nhat cua warp: (x, y) -> (x, y + f(x)). Ap cho TUNG DIEM
+// chu khong tung glyph — net doc (x hang) dich deu nen van thang dung va giu
+// nguyen do dai, net ngang uon theo duong cong.
+//
+// Hoanh do khong bao gio bi ghi, nen khoang cach ngang giua hai glyph luon
+// dung advance tu nhien => va cham glyph bat kha thi ve mat toan hoc.
+export function displaceContours(shapes: GlyphShape[], f: (x: number) => number): GlyphShape[] {
+  return shapes.map((shape) => ({
+    ...shape,
+    outer: displaceContour(shape.outer, f),
+    holes: shape.holes.map((hole) => displaceContour(hole, f)),
+  }));
 }
