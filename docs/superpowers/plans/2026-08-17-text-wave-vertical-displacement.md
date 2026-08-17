@@ -16,7 +16,7 @@
 - KHÔNG dùng `git stash` trần — stack stash dùng chung với worktree khác.
 - Mỗi task phải xanh cả ba: `pnpm test`, `pnpm exec tsc --noEmit -p tsconfig.build.json`, `pnpm lint`. Vitest transpile-only nên test xanh KHÔNG chứng minh type đúng — luôn chạy `tsc`.
 - Comment trong code viết tiếng Việt không dấu **hoặc** có dấu theo đúng file đang sửa (bám phong cách file hiện có). Giải thích *tại sao*, không mô tả lại code.
-- Hằng số dùng đúng giá trị trong plan này: `LUT_TOL = 0.01`, `DISPLACE_TOL = 0.05`, `MAX_DEPTH = 8`, `MIN_DX = 1e-6`.
+- Hằng số dùng đúng giá trị trong plan này: `LUT_TOL = 0.01`, `DISPLACE_TOL = 0.05`, `MAX_DEPTH = 10`, `MIN_DX = 1e-6`. (`MAX_DEPTH` sửa từ 8 lên 10 sau khi phát hiện lỗi thật trong Task 2: đo trên path dốc cực đoan — cùng anchor cách nhau `Δx ≈ 8px` nhưng `Δy ≈ 90px` — 84/151 mẫu chạm trần độ sâu 8 và bị chấp nhận "phẳng" dù chưa đạt `LUT_TOL`, không liên quan đến số điểm kiểm tra flatness. Đo thực nghiệm: độ sâu 9 đã đủ để thuật toán tự hội tụ đúng theo tiêu chí của chính nó — không nhờ trần; chọn 10 làm biên an toàn, chi phí thêm không đáng kể vì đệ quy dừng sớm hơn trần.)
 - Không thêm dependency mới.
 
 ---
@@ -312,7 +312,7 @@ Thêm khối sau vào cuối file:
 
 ```ts
 const LUT_TOL = 0.01; // px — sai lech DOC toi da giua cung va day cung theo x
-const MAX_DEPTH = 8;
+const MAX_DEPTH = 10;
 
 // Day mau cuoi cua mot cung vao bang, chia doi cho toi khi day cung du sat.
 // Chi day dau mut PHAI: dau mut trai da nam trong bang tu buoc truoc.
