@@ -6,6 +6,8 @@ import {
   buildWavePath,
   clampPathX,
   displaceContours,
+  warpContours,
+  type WarpMap,
 } from '../warp';
 import { evalCubic } from '../bezier';
 import type { GlyphShape } from '../glyphOutlines';
@@ -396,5 +398,107 @@ describe('buildWarpMap', () => {
       expect(m2.D(x)).toBeCloseTo(m1.D(x), 9);
       expect(m2.X(x)).toBeCloseTo(m1.X(x), 9);
     }
+  });
+});
+
+// Map giai tich, khong qua bang tra: test nay do RIENG phan chia nho + ap
+// affine, khong keo theo sai so cua buildWarpMap.
+// He so 8/30 < 1 nen X don dieu tang; 0 <= X' <= 1.27.
+const analytic: WarpMap = {
+  L: 0,
+  k: 1,
+  X: (x) => x + 8 * Math.sin(x / 30),
+  D: (x) => 12 * Math.sin(x / 25),
+};
+
+// Nghich dao cua analytic.X bang chia doi — X don dieu nen chia doi hoi tu.
+function inverseX(target: number): number {
+  let lo = -200;
+  let hi = 400;
+  for (let i = 0; i < 200; i++) {
+    const mid = (lo + hi) / 2;
+    if (analytic.X(mid) < target) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+describe('warpContours', () => {
+  it('I4 — khong xoay: hai diem cung x cho cung x moi, hieu y giu nguyen', () => {
+    // Canh phai cua hop: x = 60 co dinh, y chay tu 20 xuong 80.
+    const box = rect(10, 20, 60, 80);
+    const out = warpContours([shape(box)], analytic)[0].outer;
+    const xRight = analytic.X(60);
+    const onRightEdge: number[] = [];
+    for (let i = 0; i < out.length; i += 2) {
+      if (Math.abs(out[i] - xRight) < 1e-9) onRightEdge.push(out[i + 1]);
+    }
+    expect(onRightEdge.length).toBeGreaterThanOrEqual(2);
+    expect(Math.max(...onRightEdge) - Math.min(...onRightEdge)).toBeCloseTo(60, 9);
+  });
+
+  it('I5 — dinh dang 2 + 6n va contour kin TUYET DOI', () => {
+    const out = warpContours([shape(rect(10, 20, 60, 80))], analytic)[0].outer;
+    expect((out.length - 2) % 6).toBe(0);
+    expect(out[out.length - 2]).toBe(out[0]);
+    expect(out[out.length - 1]).toBe(out[1]);
+  });
+
+  it('I5 — segment co cuc tri hoanh do van khop chinh xac o moi noi', () => {
+    // Segment cuoi vong sang phai toi x ~ 15 roi quay ve x = 0, tuc p0.x = 10
+    // nam han trong (xa, xb). Day cung tren [xa, xb] se lam diem dong lech
+    // khoi diem mo; noi suy dau mut thi khong.
+    const c = [0, 0];
+    lineSeg(c, 0, 0, 10, 0);
+    lineSeg(c, 10, 0, 10, 20);
+    c.push(30, 25, -15, 5, 0, 0);
+    const out = warpContours([shape(c)], analytic)[0].outer;
+    expect(out[0]).toBeCloseTo(analytic.X(0), 12);
+    expect(out[1]).toBeCloseTo(analytic.D(0), 12);
+    expect(out[out.length - 2]).toBe(out[0]);
+    expect(out[out.length - 1]).toBe(out[1]);
+  });
+
+  it('I6 — sai so hinh bi chan boi WARP_TOL tren ca hai truc', () => {
+    // Nghich dao tung diem dau ra: x goc = X^-1(x'), y goc = y' - D(x goc).
+    // Diem goc phai roi ve dung mot canh ngang cua hop (y = 20 hoac y = 80).
+    //
+    // Nguong 0.12 chu khong phai 0.05: hai sai so cong lai. Lech X toi WARP_TOL
+    // lam X^-1 lech 0.05/min(X') = 0.068, nhan do doc cua D (12/25) ra them
+    // 0.033; cong lech cua chinh D (0.05) la ~0.15 truong hop xau nhat. Lay
+    // 0.12 vi hai sai so hiem khi cung dau va cung cuc dai.
+    const out = warpContours([shape(rect(10, 20, 60, 80))], analytic)[0].outer;
+    for (let i = 0; i + 7 < out.length; i += 6) {
+      // Canh doc: x goc hang nen anh cung hang, khong nam tren canh ngang nao.
+      if (Math.abs(out[i + 6] - out[i]) < 1e-9) continue;
+      for (let k = 0; k <= 20; k++) {
+        const t = k / 20;
+        const x = evalCubic(out[i], out[i + 2], out[i + 4], out[i + 6], t);
+        const y = evalCubic(out[i + 1], out[i + 3], out[i + 5], out[i + 7], t);
+        const ySrc = y - analytic.D(inverseX(x));
+        expect(Math.min(Math.abs(ySrc - 20), Math.abs(ySrc - 80))).toBeLessThan(0.12);
+      }
+    }
+  });
+
+  it('chia nho lam tang so segment', () => {
+    const box = rect(10, 20, 60, 80);
+    const out = warpContours([shape(box)], analytic)[0].outer;
+    expect(out.length).toBeGreaterThan(box.length);
+  });
+
+  it('ap ca cho holes', () => {
+    const outer = rect(0, 0, 100, 100);
+    const hole = rect(30, 30, 70, 70);
+    const [out] = warpContours([{ outer, holes: [hole] }], analytic);
+    expect(out.holes).toHaveLength(1);
+    expect(out.holes[0]).not.toEqual(hole);
+    expect(out.holes[0][0]).toBeCloseTo(analytic.X(30), 12);
+  });
+
+  it('map dong nhat cho lai dung contour goc', () => {
+    const identity: WarpMap = { L: 0, k: 1, X: (x) => x, D: () => 0 };
+    const box = rect(10, 20, 60, 80);
+    expect(warpContours([shape(box)], identity)[0].outer).toEqual(box);
   });
 });
