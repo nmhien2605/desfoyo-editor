@@ -188,11 +188,12 @@ describe('buildWarpMap', () => {
     const path = WAVE();
     const map = buildWarpMap(path, SIZE, 50)!;
     const ref = walkPath(path, SIZE);
-    const y0 = ref.at(0).y;
     for (let x = 0; x <= SIZE.width; x += 2) {
       const p = ref.at(map.k * x);
       expect(Math.abs(map.X(x) - p.x)).toBeLessThan(0.05);
-      expect(Math.abs(map.D(x) - (p.y - y0))).toBeLessThan(0.05);
+      // D neo vao baselineY (50, tham so thu 3 cua buildWarpMap o tren), khong
+      // phai diem dau path — xem comment tren buildWarpMap.
+      expect(Math.abs(map.D(x) - (p.y - 50))).toBeLessThan(0.05);
     }
   });
 
@@ -205,11 +206,10 @@ describe('buildWarpMap', () => {
     const path = clampPathX(buildWavePath(4, 0.5, FONT_SIZE, SIZE.height));
     const map = buildWarpMap(path, SIZE, 50)!;
     const ref = walkPath(path, SIZE);
-    const y0 = ref.at(0).y;
     for (let x = 0; x <= SIZE.width; x += 2) {
       const p = ref.at(map.k * x);
       expect(Math.abs(map.X(x) - p.x)).toBeLessThan(0.05);
-      expect(Math.abs(map.D(x) - (p.y - y0))).toBeLessThan(0.05);
+      expect(Math.abs(map.D(x) - (p.y - 50))).toBeLessThan(0.05);
     }
   });
 
@@ -221,9 +221,11 @@ describe('buildWarpMap', () => {
     expect(map.D(900)).toBe(map.D(SIZE.width));
   });
 
-  it('D neo o diem DAU path, khong phai baseline: tinh tien path doc khong doi ket qua', () => {
-    // P_y va y0 cung dich mot luong => D khong doi. Day la ly do vi tri doc
-    // tuyet doi cua path khong anh huong hinh, chi hinh dang moi anh huong.
+  it('D neo o baselineY: tinh tien path doc keo D theo dung luong da tinh', () => {
+    // Dich ca path len 0.1 (normalized) thi moi diem tren path dich len dung
+    // 0.1*height px, con baselineY (mocc neo cua D) giu nguyen — nen D phai
+    // tang dung luong do tai moi x. Day la hanh vi NGUOC voi truoc: baseline
+    // phai bam theo path khi path bi dich, khong duoc dung yen (spec §2.2).
     const base = WAVE();
     const shifted: WarpPath = {
       ...base,
@@ -236,8 +238,9 @@ describe('buildWarpMap', () => {
     };
     const m1 = buildWarpMap(base, SIZE, 50)!;
     const m2 = buildWarpMap(shifted, SIZE, 50)!;
+    const shiftPx = 0.1 * SIZE.height;
     for (let x = 0; x <= SIZE.width; x += 20) {
-      expect(m2.D(x)).toBeCloseTo(m1.D(x), 9);
+      expect(m2.D(x)).toBeCloseTo(m1.D(x) + shiftPx, 9);
       expect(m2.X(x)).toBeCloseTo(m1.X(x), 9);
     }
   });

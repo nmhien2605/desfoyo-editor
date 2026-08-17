@@ -30,14 +30,14 @@ Không thêm dependency. Không đụng `freeForm`/`circle`.
 
 Tất cả trong không gian layout (px, gốc góc trên-trái hộp text, `y` hướng xuống):
 
-| | |
-|---|---|
-| `W`, `H` | `layout.width`, `layout.height` — hộp text **chưa** warp |
-| `path` | warp path chuẩn hoá theo `{W, H}`, đã qua `clampPathX` |
-| `P(s)` | điểm trên path tại **độ dài cung** `s`, `s ∈ [0, L]` |
-| `L` | tổng độ dài cung của path |
-| `y₀` | `P(0).y` — tung độ điểm đầu path |
-| `k` | `L / W` — hệ số kéo giãn ngang |
+|             |                                                          |
+| ----------- | -------------------------------------------------------- |
+| `W`, `H`    | `layout.width`, `layout.height` — hộp text **chưa** warp |
+| `path`      | warp path chuẩn hoá theo `{W, H}`, đã qua `clampPathX`   |
+| `P(s)`      | điểm trên path tại **độ dài cung** `s`, `s ∈ [0, L]`     |
+| `L`         | tổng độ dài cung của path                                |
+| `baselineY` | tung độ baseline thật của layout (px), độc lập với path  |
+| `k`         | `L / W` — hệ số kéo giãn ngang                           |
 
 `clampPathX` đã bảo đảm anchor đầu ở `x = 0`, anchor cuối ở `x = 1`, và `Bx'(t) ≥ 0`
 trên mọi đoạn (chứng minh ở spec cũ §2.3). Suy ra `P(0).x = 0`, `P(L).x = W`, và
@@ -47,17 +47,24 @@ trên mọi đoạn (chứng minh ở spec cũ §2.3). Suy ra `P(0).x = 0`, `P(L
 
 ```text
 s      = clamp(k·x, 0, L)
-(x, y) ↦ ( P(s).x ,  P(s).y + (y − y₀) )
+(x, y) ↦ ( P(s).x ,  P(s).y + (y − baselineY) )
 ```
 
 Viết lại thành hai hàm một biến — đây là dạng dùng để cài đặt:
 
 ```text
-X(x) = P(clamp(k·x, 0, L)).x          // hoành độ mới
-D(x) = P(clamp(k·x, 0, L)).y − y₀     // độ dời dọc
+X(x) = P(clamp(k·x, 0, L)).x                 // hoành độ mới
+D(x) = P(clamp(k·x, 0, L)).y − baselineY     // độ dời dọc
 
 (x, y) ↦ ( X(x), y + D(x) )
 ```
+
+`D` neo vào `baselineY` (baseline thật của layout), không phải `P(0).y` (điểm
+đầu path). Lý do: baseline phải **trùng đúng** giá trị `y` của path tại vị trí
+tương ứng — nếu neo vào `P(0).y`, dịch cả path lên/xuống sẽ không đổi kết quả
+gì (`D` bất biến theo tịnh tiến dọc của path), khiến đường path vẽ trên canvas
+và baseline chữ thực tế lệch nhau một khoảng cố định, không "dính" vào nhau.
+Neo vào `baselineY` thì kéo path lên/xuống sẽ kéo chữ theo đúng như vậy.
 
 So với mô hình cũ `(x, y) ↦ (x, y + f(x))`: `D` đóng đúng vai trò của `f`, và
 `X` là phần **mới**. Mô hình cũ là trường hợp riêng `X(x) = x`.
@@ -234,18 +241,14 @@ mỗi đoạn phẳng cỡ `O(tol²/chord)`, tổng dưới 0.05 px trên path c
 
 ```ts
 export interface WarpMap {
-  X(x: number): number;   // hoành độ mới
-  D(x: number): number;   // độ dời dọc
-  L: number;              // độ dài cung
-  k: number;              // L / W
+  X(x: number): number; // hoành độ mới
+  D(x: number): number; // độ dời dọc
+  L: number; // độ dài cung
+  k: number; // L / W
 }
 
 // null = path phẳng tại baseline ⇒ caller bỏ qua warp (§2.5)
-export function buildWarpMap(
-  path: WarpPath,
-  size: Size,
-  baselineY: number,
-): WarpMap | null;
+export function buildWarpMap(path: WarpPath, size: Size, baselineY: number): WarpMap | null;
 
 export function warpContours(shapes: GlyphShape[], map: WarpMap): GlyphShape[];
 ```
@@ -289,8 +292,11 @@ export function resolveWarpPath(
 `textGeometry` đổi thành:
 
 ```ts
-const path = layout.height > 0 ? resolveWarpPath(node, layout.baselineY / layout.height, layout.height) : null;
-const map = path ? buildWarpMap(path, { width: layout.width, height: layout.height }, layout.baselineY) : null;
+const path =
+  layout.height > 0 ? resolveWarpPath(node, layout.baselineY / layout.height, layout.height) : null;
+const map = path
+  ? buildWarpMap(path, { width: layout.width, height: layout.height }, layout.baselineY)
+  : null;
 const shapes = map ? warpContours(layout.shapes, map) : layout.shapes;
 ```
 
@@ -342,17 +348,17 @@ Không đổi — nó chỉ tiêu thụ `textGeometry(...).shapes`.
 
 ## 6. Bất biến nghiệm thu
 
-| # | Bất biến | Cách kiểm |
-|---|---|---|
-| I1 | `curveHeight = 0` ⇒ shapes **y hệt** bản chưa warp | so sánh sâu, không dung sai |
-| I2 | `X(0) = 0` và `\|X(W) − W\| < 0.1` px | gọi thẳng `WarpMap` |
-| I3 | Bề ngang bbox sau warp lệch < 0.5 px so với trước warp, ở `curveHeight ∈ {0.25, 1, 2, 4}` | `shapesBounds` |
-| I4 | Không xoay: hai điểm cùng `x` ⇒ cùng `x'`, và hiệu `y` giữ nguyên chính xác | dựng contour thử |
-| I5 | Contour kín vẫn kín sau warp (điểm đầu ≡ điểm cuối, 1e-9) | glyph `o` |
-| I6 | Sai số hình ≤ `WARP_TOL`: lấy 20 mẫu/cubic, so ảnh thật của cung với cubic đã map | so với `map` áp trực tiếp |
-| I7 | `X` không giảm trên `[0, W]` (1000 mẫu) | `WarpMap` |
-| I8 | Nén cục bộ: ở `curveHeight = 1`, glyph gần mép hẹp hơn cùng glyph đó ở giữa | text `HHHHHHHHH` |
-| I9 | Không glyph nào chồng lên glyph kề: `X` đơn điệu ⇒ thứ tự hoành độ giữ nguyên | suy ra từ I7, cần test hồi quy |
+| #   | Bất biến                                                                                  | Cách kiểm                      |
+| --- | ----------------------------------------------------------------------------------------- | ------------------------------ |
+| I1  | `curveHeight = 0` ⇒ shapes **y hệt** bản chưa warp                                        | so sánh sâu, không dung sai    |
+| I2  | `X(0) = 0` và `\|X(W) − W\| < 0.1` px                                                     | gọi thẳng `WarpMap`            |
+| I3  | Bề ngang bbox sau warp lệch < 0.5 px so với trước warp, ở `curveHeight ∈ {0.25, 1, 2, 4}` | `shapesBounds`                 |
+| I4  | Không xoay: hai điểm cùng `x` ⇒ cùng `x'`, và hiệu `y` giữ nguyên chính xác               | dựng contour thử               |
+| I5  | Contour kín vẫn kín sau warp (điểm đầu ≡ điểm cuối, 1e-9)                                 | glyph `o`                      |
+| I6  | Sai số hình ≤ `WARP_TOL`: lấy 20 mẫu/cubic, so ảnh thật của cung với cubic đã map         | so với `map` áp trực tiếp      |
+| I7  | `X` không giảm trên `[0, W]` (1000 mẫu)                                                   | `WarpMap`                      |
+| I8  | Nén cục bộ: ở `curveHeight = 1`, glyph gần mép hẹp hơn cùng glyph đó ở giữa               | text `HHHHHHHHH`               |
+| I9  | Không glyph nào chồng lên glyph kề: `X` đơn điệu ⇒ thứ tự hoành độ giữ nguyên             | suy ra từ I7, cần test hồi quy |
 
 I8 và I3 là hai bất biến **mới** đặc trưng cho mô hình arc length — chúng chính
 là cái mô hình cũ không có. I9 là bảo đảm cũ (comment cuối `displaceContours`)

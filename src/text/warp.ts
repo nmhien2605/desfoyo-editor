@@ -195,9 +195,16 @@ function isFlatAtBaseline(path: WarpPath, size: Size, baselineY: number): boolea
 }
 
 // Bang tra theo DO DAI CUNG cho phep bien doi warp (spec §2.2):
-//   s = clamp(k*x, 0, L),  (x, y) -> (P(s).x, P(s).y + y - y0)
+//   s = clamp(k*x, 0, L),  (x, y) -> (P(s).x, P(s).y + y - baselineY)
 // He so k = L/W la dang dong cua co che Kittl dat lai chieu rong layout bang L
 // moi lan path doi — nho no ma be ngang chu khong doi khi tang do cong.
+//
+// D neo vao baselineY (khong phai diem dau path): baseline phai TRUNG dung gia
+// tri y cua path tai vi tri tuong ung, khong chi theo hinh dang tuong doi cua
+// path. Neu neo vao diem dau path, dich ca path len/xuong se khong doi ket
+// qua gi — path ve tren canvas va chu thuc te se lech nhau, dung bang khoang
+// diem dau path lech khoi baseline. Neo vao baselineY thi keo path len/xuong
+// se keo chu theo dung nhu vay, dung ky vong WYSIWYG cua nguoi dung.
 export function buildWarpMap(path: WarpPath, size: Size, baselineY: number): WarpMap | null {
   if (size.width <= 0 || size.height <= 0) return null;
   if (path.anchors.length < 2) return null;
@@ -218,7 +225,6 @@ export function buildWarpMap(path: WarpPath, size: Size, baselineY: number): War
 
   const L = us[us.length - 1];
   if (!(L > EPSILON)) return null;
-  const y0 = ys[0];
   const k = L / size.width;
 
   const lookup = (x: number): { x: number; y: number } => {
@@ -244,7 +250,7 @@ export function buildWarpMap(path: WarpPath, size: Size, baselineY: number): War
     L,
     k,
     X: (x) => lookup(x).x,
-    D: (x) => lookup(x).y - y0,
+    D: (x) => lookup(x).y - baselineY,
   };
 }
 
