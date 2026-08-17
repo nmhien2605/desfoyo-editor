@@ -45,8 +45,8 @@ describe('buildWavePath', () => {
   });
 });
 
-function shape(points: number[], anchorX: number, baselineY: number): GlyphShape {
-  return { outer: points, holes: [], anchorX, baselineY };
+function shape(points: number[]): GlyphShape {
+  return { outer: points, holes: [] };
 }
 
 // Nghich dao doc lap: tim t sao cho Bx(t) = x bang chia doi, roi tra By(t).
@@ -156,7 +156,7 @@ const wavy = (x: number) => 12 * Math.sin(x / 25);
 describe('displaceContours', () => {
   it('f = 0 la phep dong nhat, khong chia nho gi', () => {
     const box = rect(10, 20, 60, 80);
-    const [out] = displaceContours([shape(box, 35, 80)], () => 0);
+    const [out] = displaceContours([shape(box)], () => 0);
     expect(out.outer).toEqual(box);
   });
 
@@ -165,8 +165,8 @@ describe('displaceContours', () => {
     // beta giu nguyen) => hai lan chay chia nho y HET nhau. Vay hoanh do phai
     // trung dung bit, con tung do lech dung bang hang so do.
     const box = rect(10, 20, 60, 80);
-    const a = displaceContours([shape(box, 35, 80)], wavy)[0].outer;
-    const b = displaceContours([shape(box, 35, 80)], (x) => wavy(x) + 1000)[0].outer;
+    const a = displaceContours([shape(box)], wavy)[0].outer;
+    const b = displaceContours([shape(box)], (x) => wavy(x) + 1000)[0].outer;
     expect(b.length).toBe(a.length);
     for (let i = 0; i < a.length; i += 2) {
       expect(b[i]).toBe(a[i]);
@@ -177,7 +177,7 @@ describe('displaceContours', () => {
   it('B3 — net doc van doc va giu nguyen do dai', () => {
     // Canh phai cua hop: x = 60 co dinh, y chay tu 20 xuong 80.
     const box = rect(10, 20, 60, 80);
-    const out = displaceContours([shape(box, 35, 80)], wavy)[0].outer;
+    const out = displaceContours([shape(box)], wavy)[0].outer;
     const onRightEdge = [];
     for (let i = 0; i < out.length; i += 2) {
       if (Math.abs(out[i] - 60) < 1e-9) onRightEdge.push(out[i + 1]);
@@ -189,7 +189,7 @@ describe('displaceContours', () => {
 
   it('B7 — dinh dang 2 + 6n va contour kin TUYET DOI', () => {
     const box = rect(10, 20, 60, 80);
-    const out = displaceContours([shape(box, 35, 80)], wavy)[0].outer;
+    const out = displaceContours([shape(box)], wavy)[0].outer;
     expect((out.length - 2) % 6).toBe(0);
     expect(out[out.length - 2]).toBe(out[0]);
     expect(out[out.length - 1]).toBe(out[1]);
@@ -203,7 +203,7 @@ describe('displaceContours', () => {
     lineSeg(c, 0, 0, 10, 0);
     lineSeg(c, 10, 0, 10, 20);
     c.push(30, 25, -15, 5, 0, 0);
-    const out = displaceContours([shape(c, 5, 20)], wavy)[0].outer;
+    const out = displaceContours([shape(c)], wavy)[0].outer;
     expect(out[0]).toBe(0);
     expect(out[1]).toBeCloseTo(wavy(0), 12);
     expect(out[out.length - 2]).toBe(out[0]);
@@ -215,7 +215,7 @@ describe('displaceContours', () => {
     // canh ngang cua hop goc (y = 20 hoac y = 80) trong pham vi DISPLACE_TOL.
     // Canh doc thi x hang nen bo qua.
     const box = rect(10, 20, 60, 80);
-    const out = displaceContours([shape(box, 35, 80)], wavy)[0].outer;
+    const out = displaceContours([shape(box)], wavy)[0].outer;
     for (let i = 0; i + 7 < out.length; i += 6) {
       const vertical = Math.abs(out[i + 6] - out[i]) < 1e-9;
       if (vertical) continue;
@@ -231,14 +231,14 @@ describe('displaceContours', () => {
 
   it('chia nho lam tang so segment tren f cong manh', () => {
     const box = rect(10, 20, 60, 80);
-    const out = displaceContours([shape(box, 35, 80)], wavy)[0].outer;
+    const out = displaceContours([shape(box)], wavy)[0].outer;
     expect(out.length).toBeGreaterThan(box.length);
   });
 
   it('ap ca cho holes', () => {
     const outer = rect(0, 0, 100, 100);
     const hole = rect(30, 30, 70, 70);
-    const [out] = displaceContours([{ outer, holes: [hole], anchorX: 50, baselineY: 100 }], wavy);
+    const [out] = displaceContours([{ outer, holes: [hole] }], wavy);
     expect(out.holes).toHaveLength(1);
     expect(out.holes[0]).not.toEqual(hole);
     expect(out.holes[0][0]).toBe(30);

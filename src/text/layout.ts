@@ -51,8 +51,6 @@ export function layoutText(options: LayoutOptions): TextLayout {
         shapes.push({
           outer: translateContour(shape.outer, penX, baseline),
           holes: shape.holes.map((hole) => translateContour(hole, penX, baseline)),
-          anchorX: shape.anchorX + penX,
-          baselineY: baseline,
         });
       }
       penX += glyph.advance + letterSpacing;

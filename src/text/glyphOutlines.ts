@@ -13,13 +13,6 @@ export type Contour = number[];
 export interface GlyphShape {
   outer: Contour;
   holes: Contour[];
-  // Trung điểm advance của glyph. Đây là điểm mà glyph được neo lên path
-  // (ngữ nghĩa SVG <textPath>), nên nó phải bám advance *tự nhiên* — kerning
-  // dịch glyph kế tiếp, không làm mực chữ này hẹp lại.
-  anchorX: number;
-  // Baseline của dòng chứa glyph. Cần cho warp nhiều dòng: mỗi dòng chạy
-  // trên một offset curve riêng của path.
-  baselineY: number;
 }
 
 export interface GlyphOutline {
@@ -160,7 +153,7 @@ function containsPoint(contour: Contour, px: number, py: number): boolean {
 // Contour có |diện tích| lớn nhất chắc chắn là một outer. Cùng dấu với nó là
 // outer, ngược dấu là lỗ — đúng cho cả TrueType lẫn CFF mà không cần biết
 // font thuộc loại nào.
-function groupIntoShapes(contours: Contour[], anchorX: number): GlyphShape[] {
+function groupIntoShapes(contours: Contour[]): GlyphShape[] {
   if (contours.length === 0) return [];
   const areas = contours.map(signedArea);
   let largest = 0;
@@ -172,8 +165,7 @@ function groupIntoShapes(contours: Contour[], anchorX: number): GlyphShape[] {
   const shapes: GlyphShape[] = [];
   const holes: Contour[] = [];
   contours.forEach((contour, i) => {
-    if (Math.sign(areas[i]) === outerSign)
-      shapes.push({ outer: contour, holes: [], anchorX, baselineY: 0 });
+    if (Math.sign(areas[i]) === outerSign) shapes.push({ outer: contour, holes: [] });
     else holes.push(contour);
   });
 
@@ -199,10 +191,7 @@ export function getGlyphOutlines(text: string, font: Font, fontSize: number): Gl
     const advance = (glyph.advanceWidth ?? 0) * scale;
     return {
       advance,
-      shapes: groupIntoShapes(
-        commandsToContours(glyph.getPath(0, 0, fontSize).commands),
-        advance / 2,
-      ),
+      shapes: groupIntoShapes(commandsToContours(glyph.getPath(0, 0, fontSize).commands)),
     };
   });
   // GPOS/kern cho từng cặp liền kề — cộng thêm vào advance của glyph đứng

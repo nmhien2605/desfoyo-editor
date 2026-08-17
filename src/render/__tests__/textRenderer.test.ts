@@ -108,8 +108,6 @@ describe('drawTextShapes', () => {
         {
           outer: [0, 0, 1, 0, 2, 0, 3, 0],
           holes: [[0, 0, 1, 0, 2, 0, 3, 0]],
-          anchorX: 0,
-          baselineY: 0,
         },
       ],
       { type: 'solid', color: '#000000' },

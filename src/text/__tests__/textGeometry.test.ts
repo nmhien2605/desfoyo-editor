@@ -146,9 +146,7 @@ describe('bounds', () => {
   it('bat cuc tri nam ngoai bao loi cac diem on-curve', () => {
     // Cung vong len tren y = 0 giua hai dau mut: cuc tri o t = 0.5 cho
     // y = -0.75·100 = -75. Lay min/max cac diem on-curve se ra 0.
-    const bounds = shapesBounds([
-      { outer: [0, 0, 0, -100, 100, -100, 100, 0], holes: [], anchorX: 50, baselineY: 0 },
-    ]);
+    const bounds = shapesBounds([{ outer: [0, 0, 0, -100, 100, -100, 100, 0], holes: [] }]);
     expect(bounds.minY).toBeCloseTo(-75, 6);
     expect(bounds.maxY).toBeCloseTo(0, 6);
     expect(bounds.minX).toBeCloseTo(0, 6);

@@ -230,7 +230,6 @@ function displaceContour(contour: Contour, f: (x: number) => number): Contour {
 // dung advance tu nhien => va cham glyph bat kha thi ve mat toan hoc.
 export function displaceContours(shapes: GlyphShape[], f: (x: number) => number): GlyphShape[] {
   return shapes.map((shape) => ({
-    ...shape,
     outer: displaceContour(shape.outer, f),
     holes: shape.holes.map((hole) => displaceContour(hole, f)),
   }));

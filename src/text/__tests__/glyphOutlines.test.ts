@@ -133,23 +133,3 @@ describe('contour polybezier', () => {
     expect(glyph.shapes[0].holes).toHaveLength(1);
   });
 });
-
-describe('neo glyph', () => {
-  it('anchorX la trung diem advance, baselineY = 0 trong toa do glyph-local', () => {
-    const [glyph] = getGlyphOutlines('H', poppins, 100);
-    expect(glyph.shapes.length).toBeGreaterThan(0);
-    for (const shape of glyph.shapes) {
-      expect(shape.anchorX).toBeCloseTo(glyph.advance / 2, 9);
-      expect(shape.baselineY).toBe(0);
-    }
-  });
-
-  it('anchorX dung advance TU NHIEN, khong cong kerning', () => {
-    // 'AV' co kerning am trong Anton: advance cua 'A' bi tru bot, nhung
-    // ban than muc chu 'A' khong hep lai — anchorX phai bam advance goc.
-    const pair = getGlyphOutlines('AV', anton, 100);
-    const solo = getGlyphOutlines('A', anton, 100);
-    expect(pair[0].advance).not.toBeCloseTo(solo[0].advance, 6);
-    expect(pair[0].shapes[0].anchorX).toBeCloseTo(solo[0].shapes[0].anchorX, 9);
-  });
-});
