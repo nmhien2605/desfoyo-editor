@@ -3,11 +3,13 @@ import type { WarpPath } from '../../schema';
 import {
   arcLength,
   bakeScale,
+  buildDisplacement,
   buildPathSampler,
   buildWavePath,
   placeOnPath,
   solveHorizontalScale,
 } from '../warp';
+import { evalCubic } from '../bezier';
 import type { GlyphShape } from '../glyphOutlines';
 
 const SIZE = { width: 400, height: 100 };
@@ -241,5 +243,77 @@ describe('sampler chinh xac', () => {
       const { tangent } = sampler.at((sampler.length * i) / 10);
       expect(Math.hypot(tangent.x, tangent.y)).toBeCloseTo(1, 9);
     }
+  });
+});
+
+// Nghich dao doc lap: tim t sao cho Bx(t) = x bang chia doi, roi tra By(t).
+// Khong dung lai code cua buildDisplacement — day la ban doi chieu.
+function curveYAt(path: WarpPath, size: { width: number; height: number }, x: number): number {
+  for (let i = 0; i < path.anchors.length - 1; i++) {
+    const from = path.anchors[i];
+    const to = path.anchors[i + 1];
+    const px = [from.x, (from.out ?? from).x, (to.in ?? to).x, to.x].map((v) => v * size.width);
+    const py = [from.y, (from.out ?? from).y, (to.in ?? to).y, to.y].map((v) => v * size.height);
+    if (x < px[0] || x > px[3]) continue;
+    let lo = 0;
+    let hi = 1;
+    for (let k = 0; k < 80; k++) {
+      const m = (lo + hi) / 2;
+      if (evalCubic(px[0], px[1], px[2], px[3], m) < x) lo = m;
+      else hi = m;
+    }
+    return evalCubic(py[0], py[1], py[2], py[3], (lo + hi) / 2);
+  }
+  throw new Error(`x = ${x} nam ngoai path`);
+}
+
+describe('buildDisplacement', () => {
+  it('path phang dung tai baseline cho f = 0 TUYET DOI', () => {
+    const f = buildDisplacement(buildWavePath(0, 0.5), SIZE, 50);
+    for (let x = -50; x <= 450; x += 25) expect(f(x)).toBe(0);
+  });
+
+  it('path phang lech baseline cho hang so dung bang do lech', () => {
+    const f = buildDisplacement(flatPath(0.8), SIZE, 50);
+    expect(f(0)).toBeCloseTo(30, 9);
+    expect(f(123.4)).toBeCloseTo(30, 9);
+    expect(f(400)).toBeCloseTo(30, 9);
+  });
+
+  it('kep ve gia tri dau mut khi x ra ngoai khoang', () => {
+    const f = buildDisplacement(buildWavePath(1, 0.5), SIZE, 50);
+    expect(f(-100)).toBe(f(0));
+    expect(f(900)).toBe(f(400));
+  });
+
+  it('khop duong cong that duoi 0.011px tren preset wave', () => {
+    const path = buildWavePath(1, 0.5);
+    const f = buildDisplacement(path, SIZE, 50);
+    for (let x = 0; x <= 400; x += 4) {
+      expect(Math.abs(f(x) - (curveYAt(path, SIZE, x) - 50))).toBeLessThan(0.011);
+    }
+  });
+
+  it('path DOC: sai so do theo phuong DOC van duoi nguong', () => {
+    // Handle keo gan het bien do dung trong mot doan x rat hep => cung cuc doc.
+    // Day la truong hop can vuong goc noi doi tra: no van bao 0.01px trong khi
+    // sai so doc lon hon nhieu lan.
+    const steep: WarpPath = {
+      role: 'baseline',
+      closed: false,
+      anchors: [
+        { x: 0, y: 0.05, out: { x: 0.02, y: 0.95 } },
+        { x: 1, y: 0.95, in: { x: 0.98, y: 0.05 } },
+      ],
+    };
+    const f = buildDisplacement(steep, SIZE, 50);
+    for (let x = 0; x <= 400; x += 2) {
+      expect(Math.abs(f(x) - (curveYAt(steep, SIZE, x) - 50))).toBeLessThan(0.011);
+    }
+  });
+
+  it('path duoi 2 anchor cho f = 0', () => {
+    const single: WarpPath = { role: 'baseline', closed: false, anchors: [{ x: 0, y: 0.5 }] };
+    expect(buildDisplacement(single, SIZE, 50)(100)).toBe(0);
   });
 });

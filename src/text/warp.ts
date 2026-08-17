@@ -1,6 +1,6 @@
 import type { Size, WarpPath } from '../schema';
 import type { Contour, GlyphShape } from './glyphOutlines';
-import { evalCubic, evalD1, evalD2, evalD3 } from './bezier';
+import { type Cubic, evalCubic, evalD1, evalD2, evalD3, splitCubic } from './bezier';
 
 export interface Point {
   x: number;
@@ -299,4 +299,93 @@ export function solveHorizontalScale(path: WarpPath, size: Size, target: number)
     else low = mid;
   }
   return (low + high) / 2;
+}
+
+const LUT_TOL = 0.01; // px — sai lech DOC toi da giua cung va day cung theo x
+const MAX_DEPTH = 8;
+
+// Day mau cuoi cua mot cung vao bang, chia doi cho toi khi day cung du sat.
+// Chi day dau mut PHAI: dau mut trai da nam trong bang tu buoc truoc.
+function sampleSegment(xs: number[], ys: number[], bx: Cubic, by: Cubic, depth: number): void {
+  const dx = bx[3] - bx[0];
+  let flat = true;
+  if (depth < MAX_DEPTH && Math.abs(dx) > EPSILON) {
+    const slope = (by[3] - by[0]) / dx;
+    for (let k = 1; k < 4 && flat; k++) {
+      const t = k / 4;
+      const x = evalCubic(bx[0], bx[1], bx[2], bx[3], t);
+      const y = evalCubic(by[0], by[1], by[2], by[3], t);
+      if (Math.abs(y - (by[0] + slope * (x - bx[0]))) > LUT_TOL) flat = false;
+    }
+  }
+  if (flat) {
+    xs.push(bx[3]);
+    ys.push(by[3]);
+    return;
+  }
+  const lx = splitCubic(bx[0], bx[1], bx[2], bx[3], 0.5);
+  const ly = splitCubic(by[0], by[1], by[2], by[3], 0.5);
+  sampleSegment(xs, ys, lx.left, ly.left, depth + 1);
+  sampleSegment(xs, ys, lx.right, ly.right, depth + 1);
+}
+
+// f(x) = do lech doc cua warp path tai hoanh do x, tinh tu baseline phang.
+// intensity = 0 cho path nam dung tai baseline nen f = 0 tuyet doi — warp
+// tro thanh phep dong nhat, khong con sai so lam tron nao.
+export function buildDisplacement(
+  path: WarpPath,
+  size: Size,
+  baselineY: number,
+): (x: number) => number {
+  const xs: number[] = [];
+  const ys: number[] = [];
+  const segments = segmentsOf(path, size);
+  segments.forEach((s, i) => {
+    if (i === 0) {
+      xs.push(s.p0.x);
+      ys.push(s.p0.y);
+    }
+    sampleSegment(
+      xs,
+      ys,
+      [s.p0.x, s.c1.x, s.c2.x, s.p3.x],
+      [s.p0.y, s.c1.y, s.c2.y, s.p3.y],
+      0,
+    );
+  });
+  if (xs.length === 0) return () => 0;
+
+  // Phong thu: path quat nguoc (le ra da bi UI chan, xem spec §2.3) lam bang
+  // het don dieu, nhi phan mat nghia. Suy giam muot bang cach quet tim mau co
+  // x gan nhat, thay vi tra ra rac.
+  let monotone = true;
+  for (let i = 1; i < xs.length; i++) {
+    if (xs[i] < xs[i - 1]) {
+      monotone = false;
+      break;
+    }
+  }
+
+  return (x: number): number => {
+    if (!monotone) {
+      let best = 0;
+      for (let i = 1; i < xs.length; i++) {
+        if (Math.abs(xs[i] - x) < Math.abs(xs[best] - x)) best = i;
+      }
+      return ys[best] - baselineY;
+    }
+    if (x <= xs[0]) return ys[0] - baselineY;
+    if (x >= xs[xs.length - 1]) return ys[ys.length - 1] - baselineY;
+
+    let low = 0;
+    let high = xs.length - 1;
+    while (high - low > 1) {
+      const mid = (low + high) >> 1;
+      if (xs[mid] <= x) low = mid;
+      else high = mid;
+    }
+    const span = xs[high] - xs[low];
+    const k = span < EPSILON ? 0 : (x - xs[low]) / span;
+    return ys[low] + (ys[high] - ys[low]) * k - baselineY;
+  };
 }
