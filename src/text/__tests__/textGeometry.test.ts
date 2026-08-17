@@ -35,12 +35,14 @@ function textNode(overrides: Partial<TextNode> = {}): TextNode {
 
 describe('resolveWarpPath', () => {
   it('tra null khi khong co warp hoac warp type none', () => {
-    expect(resolveWarpPath(textNode(), 0.8)).toBeNull();
-    expect(resolveWarpPath(textNode({ warp: { type: 'none', intensity: 0.5 } }), 0.8)).toBeNull();
+    expect(resolveWarpPath(textNode(), 0.8, 120)).toBeNull();
+    expect(
+      resolveWarpPath(textNode({ warp: { type: 'none', curveHeight: 0.5 } }), 0.8, 120),
+    ).toBeNull();
   });
 
   it('sinh path preset cho wave khi chua co paths', () => {
-    const path = resolveWarpPath(textNode({ warp: { type: 'wave', intensity: 0.5 } }), 0.8);
+    const path = resolveWarpPath(textNode({ warp: { type: 'wave', curveHeight: 0.5 } }), 0.8, 120);
     expect(path?.anchors).toHaveLength(3);
   });
 
@@ -54,8 +56,9 @@ describe('resolveWarpPath', () => {
       ],
     };
     const path = resolveWarpPath(
-      textNode({ warp: { type: 'wave', intensity: 0.5, paths: [stored] } }),
+      textNode({ warp: { type: 'wave', curveHeight: 0.5, paths: [stored] } }),
       0.8,
+      120,
     );
     expect(path).toEqual(stored);
   });
@@ -73,8 +76,9 @@ describe('resolveWarpPath', () => {
       ],
     };
     const path = resolveWarpPath(
-      textNode({ warp: { type: 'wave', intensity: 0.5, paths: [stored] } }),
+      textNode({ warp: { type: 'wave', curveHeight: 0.5, paths: [stored] } }),
       0.8,
+      120,
     );
     expect(path).not.toBeNull();
     expect(path?.anchors[0].x).toBe(0);
@@ -84,40 +88,46 @@ describe('resolveWarpPath', () => {
   it('bo qua paths co duoi 2 anchor', () => {
     const broken = { role: 'baseline' as const, closed: false, anchors: [{ x: 0, y: 0.5 }] };
     expect(
-      resolveWarpPath(textNode({ warp: { type: 'wave', intensity: 0.5, paths: [broken] } }), 0.8),
+      resolveWarpPath(
+        textNode({ warp: { type: 'wave', curveHeight: 0.5, paths: [broken] } }),
+        0.8,
+        120,
+      ),
     ).toBeNull();
   });
 
   it('tra null cho transformation chua co preset', () => {
-    expect(resolveWarpPath(textNode({ warp: { type: 'arch', intensity: 0.5 } }), 0.8)).toBeNull();
+    expect(
+      resolveWarpPath(textNode({ warp: { type: 'arch', curveHeight: 0.5 } }), 0.8, 120),
+    ).toBeNull();
   });
 });
 
 describe('textGeometry', () => {
   it('khong warp thi giong het layout thuan', () => {
     const plain = textGeometry(textNode(), poppins);
-    const noneWarp = textGeometry(textNode({ warp: { type: 'none', intensity: 0.5 } }), poppins);
+    const noneWarp = textGeometry(textNode({ warp: { type: 'none', curveHeight: 0.5 } }), poppins);
     expect(noneWarp.shapes[0].outer).toEqual(plain.shapes[0].outer);
   });
 
-  it('wave voi intensity = 0 la phep dong nhat', () => {
+  it('wave voi curveHeight = 0 la phep dong nhat', () => {
     const plain = textGeometry(textNode(), poppins);
-    const flat = textGeometry(textNode({ warp: { type: 'wave', intensity: 0 } }), poppins);
+    const flat = textGeometry(textNode({ warp: { type: 'wave', curveHeight: 0 } }), poppins);
     plain.shapes[0].outer.forEach((value, i) =>
       expect(flat.shapes[0].outer[i]).toBeCloseTo(value, 4),
     );
   });
 
-  it('wave voi intensity > 0 lam doi hinh hoc', () => {
+  it('wave voi curveHeight > 0 lam doi hinh hoc', () => {
     const plain = textGeometry(textNode(), poppins);
-    const waved = textGeometry(textNode({ warp: { type: 'wave', intensity: 0.8 } }), poppins);
+    const waved = textGeometry(textNode({ warp: { type: 'wave', curveHeight: 0.8 } }), poppins);
     expect(waved.shapes[0].outer).not.toEqual(plain.shapes[0].outer);
     expect(waved.shapes[0].outer.every(Number.isFinite)).toBe(true);
   });
 
   it('width/height khong doi khi warp — do la kich thuoc chua warp', () => {
     const plain = textGeometry(textNode(), poppins);
-    const waved = textGeometry(textNode({ warp: { type: 'wave', intensity: 0.8 } }), poppins);
+    const waved = textGeometry(textNode({ warp: { type: 'wave', curveHeight: 0.8 } }), poppins);
     expect(waved.width).toBeCloseTo(plain.width, 6);
     expect(waved.height).toBeCloseTo(plain.height, 6);
   });
@@ -130,7 +140,7 @@ describe('textGeometry', () => {
 
   it('text rong khong throw', () => {
     const geometry = textGeometry(
-      textNode({ text: '', warp: { type: 'wave', intensity: 0.8 } }),
+      textNode({ text: '', warp: { type: 'wave', curveHeight: 0.8 } }),
       poppins,
     );
     expect(geometry.shapes).toEqual([]);
@@ -144,8 +154,8 @@ describe('textGeometry', () => {
 });
 
 describe('text-on-path', () => {
-  it('intensity = 0 cho hinh hoc trung khit layout, moi dong', () => {
-    const node = textNode({ text: 'Hi\nHi', warp: { type: 'wave', intensity: 0 } });
+  it('curveHeight = 0 cho hinh hoc trung khit layout, moi dong', () => {
+    const node = textNode({ text: 'Hi\nHi', warp: { type: 'wave', curveHeight: 0 } });
     const geometry = textGeometry(node, poppins);
     const plain = textGeometry({ ...node, warp: undefined }, poppins);
     geometry.shapes.forEach((shape, i) => {
@@ -155,10 +165,10 @@ describe('text-on-path', () => {
     });
   });
 
-  it('node.size khong doi khi intensity doi', () => {
+  it('node.size khong doi khi curveHeight doi', () => {
     const base = textNode({ text: 'Headline' });
-    const flat = measureText({ ...base, warp: { type: 'wave', intensity: 0 } }, poppins);
-    const curved = measureText({ ...base, warp: { type: 'wave', intensity: 1 } }, poppins);
+    const flat = measureText({ ...base, warp: { type: 'wave', curveHeight: 0 } }, poppins);
+    const curved = measureText({ ...base, warp: { type: 'wave', curveHeight: 1 } }, poppins);
     expect(curved).toEqual(flat);
   });
 });
@@ -179,12 +189,12 @@ describe('bounds', () => {
   });
 
   it('wave lam bounds cao hon hop layout nhung node.size giu nguyen', () => {
-    const node = textNode({ text: 'Headline', warp: { type: 'wave', intensity: 1 } });
+    const node = textNode({ text: 'Headline', warp: { type: 'wave', curveHeight: 1 } });
     const geometry = textGeometry(node, poppins);
     // geometry.height (hop metric font) KHONG con la moc dang tin: no gom ca
     // khoang descender ma "Headline" khong dung toi, va truong dich chuyen doc
     // chi lech deu theo bien do duong cong — khong khuech dai theo do cao
-    // glyph nhu xoay cung tung lam — nen o intensity toi da (= 1, tran cua
+    // glyph nhu xoay cung tung lam — nen o curveHeight toi da (= 4, tran cua
     // WarpSchema), bounds do thuc te KHONG BAO GIO vuot geometry.height nua
     // (do thuc nghiem tren nhieu text: 'Headline' 139.86/140, 'HEADLINE'
     // 133.4/140, 'Hi' 130.8/140 — luon hut). Day la khac biet THAT so voi
@@ -204,9 +214,9 @@ describe('bounds', () => {
 });
 
 describe('truong dich chuyen doc', () => {
-  it('B2 — hoanh do cua moi glyph khong doi khi intensity doi', () => {
-    const plain = textGeometry(textNode({ warp: { type: 'wave', intensity: 0 } }), poppins);
-    const warped = textGeometry(textNode({ warp: { type: 'wave', intensity: 1 } }), poppins);
+  it('B2 — hoanh do cua moi glyph khong doi khi curveHeight doi', () => {
+    const plain = textGeometry(textNode({ warp: { type: 'wave', curveHeight: 0 } }), poppins);
+    const warped = textGeometry(textNode({ warp: { type: 'wave', curveHeight: 1 } }), poppins);
     expect(warped.shapes).toHaveLength(plain.shapes.length);
     warped.shapes.forEach((shape, i) => {
       const xsA = shape.outer.filter((_, k) => k % 2 === 0);
@@ -221,7 +231,7 @@ describe('truong dich chuyen doc', () => {
     const extreme = textNode({
       warp: {
         type: 'wave',
-        intensity: 1,
+        curveHeight: 1,
         paths: [
           {
             role: 'baseline',
@@ -246,7 +256,7 @@ describe('truong dich chuyen doc', () => {
   });
 
   it('B8 — hai dong giu song song: hieu y tai cung hoanh do dung bang lineStep', () => {
-    const node = textNode({ text: 'no\nno', warp: { type: 'wave', intensity: 1 } });
+    const node = textNode({ text: 'no\nno', warp: { type: 'wave', curveHeight: 1 } });
     const geometry = textGeometry(node, poppins);
     const half = geometry.shapes.length / 2;
     const lineStep = node.font.size * node.lineHeight;
@@ -262,7 +272,7 @@ describe('truong dich chuyen doc', () => {
   });
 
   it('B7 — contour sau warp van kin va dung dinh dang', () => {
-    const geometry = textGeometry(textNode({ warp: { type: 'wave', intensity: 1 } }), poppins);
+    const geometry = textGeometry(textNode({ warp: { type: 'wave', curveHeight: 1 } }), poppins);
     for (const shape of geometry.shapes) {
       for (const contour of [shape.outer, ...shape.holes]) {
         expect((contour.length - 2) % 6).toBe(0);

@@ -35,13 +35,26 @@ export const WarpTypeSchema = z.enum([
 ]);
 export type WarpType = z.infer<typeof WarpTypeSchema>;
 
-// paths vắng mặt = đang ở chế độ preset, path được sinh từ type + intensity.
+// paths vắng mặt = đang ở chế độ preset, path được sinh từ type + curveHeight.
 // Ngay khi user kéo một handle, path sinh ra được ghi vào paths và từ đó paths
 // là nguồn sự thật. Reset xoá paths. Nhờ vậy slider và handle không tranh nhau
 // một nguồn dữ liệu.
-export const WarpSchema = z.object({
+const WarpBodySchema = z.object({
   type: WarpTypeSchema,
-  intensity: z.number().min(0).max(1),
+  // Biên độ dao động dọc của path, tính bằng bội số của fontSize, có dấu — âm
+  // là lật ngược đường cong. Cùng đơn vị với `curveHeight` của Kittl.
+  curveHeight: z.number().min(-1).max(4),
   paths: z.array(WarpPathSchema).optional(),
 });
-export type Warp = z.infer<typeof WarpSchema>;
+
+// Tài liệu ghi trước 2026-08-17 dùng `intensity` 0..1. Đọc thẳng con số đó vào
+// curveHeight thay vì bỏ tài liệu: ở chế độ preset hình sẽ lệch nhẹ vì công
+// thức biên độ đổi, còn tài liệu đã có `paths` thì path thắng nên không đổi gì.
+export const WarpSchema = z.preprocess((value) => {
+  if (value && typeof value === 'object' && !('curveHeight' in value) && 'intensity' in value) {
+    const { intensity, ...rest } = value as Record<string, unknown>;
+    return { ...rest, curveHeight: intensity };
+  }
+  return value;
+}, WarpBodySchema);
+export type Warp = z.infer<typeof WarpBodySchema>;

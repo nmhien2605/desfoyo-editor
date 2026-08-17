@@ -34,10 +34,19 @@ function segmentsOf(path: WarpPath, size: Size): Segment[] {
 
 // Đúng cấu trúc docs/wave-transformation.md mô tả: 1 path mở, 3 anchor,
 // 4 handle, tổng 7 point hiển thị. baselineRatio = baselineY / height, nên
-// intensity = 0 cho ra một đường ngang đúng ngay tại baseline — tức warp
+// curveHeight = 0 cho ra một đường ngang đúng ngay tại baseline — tức warp
 // trở thành phép đồng nhất.
-export function buildWavePath(intensity: number, baselineRatio: number): WarpPath {
-  const a = intensity * 0.4;
+//
+// curveHeight đo bằng bội số của fontSize, giống Kittl: khoảng dao động dọc
+// của path bằng đúng |curveHeight| * fontSize. Hình gốc dao động từ -0.4a tới
+// +a, tức 1.4a, nên chia 1.4 để quy về đúng biên độ yêu cầu. Dấu âm lật cong.
+export function buildWavePath(
+  curveHeight: number,
+  baselineRatio: number,
+  fontSize: number,
+  boxHeight: number,
+): WarpPath {
+  const a = boxHeight > 0 ? (curveHeight * fontSize) / (1.4 * boxHeight) : 0;
   const b = baselineRatio;
   return {
     role: 'baseline',

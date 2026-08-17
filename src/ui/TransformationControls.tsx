@@ -1,7 +1,7 @@
 import type { TextNode, Warp, WarpType } from '../schema';
 import { useEditorStoreApi } from './EditorContext';
 
-export const DEFAULT_WARP_INTENSITY = 0.5;
+export const DEFAULT_WARP_CURVE_HEIGHT = 0.5;
 
 // Đúng lưới 4 cột x 2 hàng của panel Transformation trong docs/text-effect.md.
 export const WARP_TYPES: WarpType[] = [
@@ -22,20 +22,20 @@ export const ENABLED_WARP_TYPES: WarpType[] = ['wave'];
 export function setWarpType(warp: Warp | undefined, type: WarpType): Warp {
   // paths bị xoá khi đổi kiểu: một path do user chỉnh cho Wave không còn ý
   // nghĩa gì với Arch hay Circle.
-  return { type, intensity: warp?.intensity ?? DEFAULT_WARP_INTENSITY };
+  return { type, curveHeight: warp?.curveHeight ?? DEFAULT_WARP_CURVE_HEIGHT };
 }
 
 // Kéo slider = quay về chế độ preset, nên paths bị xoá. Đây là cách slider và
 // handle không tranh nhau một nguồn dữ liệu (spec §4.2).
-export function setWarpIntensity(warp: Warp | undefined, intensity: number): Warp {
+export function setWarpCurveHeight(warp: Warp | undefined, curveHeight: number): Warp {
   return {
     type: warp?.type ?? 'wave',
-    intensity: Math.min(1, Math.max(0, intensity)),
+    curveHeight: Math.min(4, Math.max(-1, curveHeight)),
   };
 }
 
 export function resetWarp(warp: Warp | undefined): Warp {
-  return { type: warp?.type ?? 'none', intensity: DEFAULT_WARP_INTENSITY };
+  return { type: warp?.type ?? 'none', curveHeight: DEFAULT_WARP_CURVE_HEIGHT };
 }
 
 export function TransformationControls({
@@ -85,16 +85,16 @@ export function TransformationControls({
       {active !== 'none' && (
         <>
           <label className="flex flex-col gap-1 capitalize">
-            {active} Curve — {Math.round((warp?.intensity ?? 0) * 100)}%
+            {active} Curve — {Math.round((warp?.curveHeight ?? 0) * 100)}%
             <input
               type="range"
-              min={0}
-              max={1}
+              min={-1}
+              max={4}
               step={0.01}
-              value={warp?.intensity ?? 0}
-              onPointerDown={() => store.getState().beginGesture(`warp-intensity:${node.id}`)}
+              value={warp?.curveHeight ?? 0}
+              onPointerDown={() => store.getState().beginGesture(`warp-curve:${node.id}`)}
               onPointerUp={() => store.getState().endGesture()}
-              onChange={(e) => apply(setWarpIntensity(warp, Number(e.target.value)))}
+              onChange={(e) => apply(setWarpCurveHeight(warp, Number(e.target.value)))}
             />
           </label>
 

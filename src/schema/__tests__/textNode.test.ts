@@ -31,7 +31,7 @@ describe('TextNodeSchema', () => {
       ...validText,
       warp: {
         type: 'wave',
-        intensity: 0.5,
+        curveHeight: 0.5,
         paths: [
           {
             role: 'baseline',
@@ -47,9 +47,16 @@ describe('TextNodeSchema', () => {
     expect(TextNodeSchema.parse(withWarp)).toEqual(withWarp);
   });
 
-  it('tu choi intensity ngoai khoang 0..1', () => {
-    expect(WarpSchema.safeParse({ type: 'wave', intensity: 1.5 }).success).toBe(false);
-    expect(WarpSchema.safeParse({ type: 'wave', intensity: -0.1 }).success).toBe(false);
+  it('tu choi curveHeight ngoai khoang -1..4', () => {
+    expect(WarpSchema.safeParse({ type: 'wave', curveHeight: 4.1 }).success).toBe(false);
+    expect(WarpSchema.safeParse({ type: 'wave', curveHeight: -1.1 }).success).toBe(false);
+    expect(WarpSchema.safeParse({ type: 'wave', curveHeight: 4 }).success).toBe(true);
+    expect(WarpSchema.safeParse({ type: 'wave', curveHeight: -1 }).success).toBe(true);
+  });
+
+  it('doc `intensity` cua tai lieu cu nhu bi danh cua curveHeight', () => {
+    const parsed = WarpSchema.parse({ type: 'wave', intensity: 0.8 });
+    expect(parsed).toEqual({ type: 'wave', curveHeight: 0.8 });
   });
 
   it('tu choi fontSize <= 0', () => {

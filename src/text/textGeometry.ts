@@ -56,7 +56,11 @@ export function shapesBounds(shapes: GlyphShape[]): TextGeometry['bounds'] {
 
 // paths đã lưu thắng preset. Không còn có `fit`: chữ không chạy dọc theo cung
 // nữa mà đứng yên theo phương ngang, nên không bao giờ phải ép path vừa chữ.
-export function resolveWarpPath(node: TextNode, baselineRatio: number): WarpPath | null {
+export function resolveWarpPath(
+  node: TextNode,
+  baselineRatio: number,
+  boxHeight: number,
+): WarpPath | null {
   const warp = node.warp;
   if (!warp || warp.type === 'none') return null;
 
@@ -68,7 +72,9 @@ export function resolveWarpPath(node: TextNode, baselineRatio: number): WarpPath
   const stored = warp.paths?.find((path) => path.role === 'baseline');
   if (stored) return stored.anchors.length >= 2 ? clampPathX(stored) : null;
 
-  if (warp.type === 'wave') return clampPathX(buildWavePath(warp.intensity, baselineRatio));
+  if (warp.type === 'wave') {
+    return clampPathX(buildWavePath(warp.curveHeight, baselineRatio, node.font.size, boxHeight));
+  }
   return null;
 }
 
@@ -82,7 +88,10 @@ export function textGeometry(node: TextNode, font: Font): TextGeometry {
     align: node.align,
   });
 
-  const path = layout.height > 0 ? resolveWarpPath(node, layout.baselineY / layout.height) : null;
+  const path =
+    layout.height > 0
+      ? resolveWarpPath(node, layout.baselineY / layout.height, layout.height)
+      : null;
   const shapes = path
     ? displaceContours(
         layout.shapes,

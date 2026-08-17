@@ -5,17 +5,18 @@ import { evalCubic } from '../bezier';
 import type { GlyphShape } from '../glyphOutlines';
 
 const SIZE = { width: 400, height: 100 };
+const FONT_SIZE = 70;
 
 describe('buildWavePath', () => {
   it('dung 3 anchor va 4 handle', () => {
-    const path = buildWavePath(0.5, 0.8);
+    const path = buildWavePath(0.5, 0.8, FONT_SIZE, SIZE.height);
     expect(path.anchors).toHaveLength(3);
     const handles = path.anchors.flatMap((a) => [a.in, a.out]).filter(Boolean);
     expect(handles).toHaveLength(4);
   });
 
   it('anchor dau chi co out, anchor cuoi chi co in, anchor giua co ca hai', () => {
-    const [first, middle, last] = buildWavePath(0.5, 0.8).anchors;
+    const [first, middle, last] = buildWavePath(0.5, 0.8, FONT_SIZE, SIZE.height).anchors;
     expect(first.in).toBeUndefined();
     expect(first.out).toBeDefined();
     expect(middle.in).toBeDefined();
@@ -24,8 +25,8 @@ describe('buildWavePath', () => {
     expect(last.out).toBeUndefined();
   });
 
-  it('intensity = 0 cho duong nam ngang tuyet doi', () => {
-    const path = buildWavePath(0, 0.8);
+  it('curveHeight = 0 cho duong nam ngang tuyet doi', () => {
+    const path = buildWavePath(0, 0.8, FONT_SIZE, SIZE.height);
     const ys = path.anchors.flatMap((a) =>
       [a.y, a.in?.y, a.out?.y].filter((v): v is number => v !== undefined),
     );
@@ -33,15 +34,37 @@ describe('buildWavePath', () => {
   });
 
   it('anchor giua nam giua theo truc x, anchor dau va cuoi o hai mep', () => {
-    const path = buildWavePath(0.5, 0.8);
+    const path = buildWavePath(0.5, 0.8, FONT_SIZE, SIZE.height);
     expect(path.anchors.map((a) => a.x)).toEqual([0, 0.5, 1]);
   });
 
   it('handle vao anchor cuoi nam cao hon anchor cuoi, tao cung vong len', () => {
-    const path = buildWavePath(0.5, 0.8);
+    const path = buildWavePath(0.5, 0.8, FONT_SIZE, SIZE.height);
     const last = path.anchors[2];
     // y nhỏ hơn = cao hơn trên màn hình
     expect(last.in!.y).toBeLessThan(last.y);
+  });
+
+  it('khoang dao dong doc dung bang |curveHeight| * fontSize', () => {
+    for (const curve of [0.5, 1, 2.5, 4]) {
+      const path = buildWavePath(curve, 0.5, FONT_SIZE, SIZE.height);
+      const ys: number[] = [];
+      for (const anchor of path.anchors) {
+        ys.push(anchor.y);
+        if (anchor.in) ys.push(anchor.in.y);
+        if (anchor.out) ys.push(anchor.out.y);
+      }
+      const spreadPx = (Math.max(...ys) - Math.min(...ys)) * SIZE.height;
+      expect(spreadPx).toBeCloseTo(curve * FONT_SIZE, 9);
+    }
+  });
+
+  it('curveHeight am lat nguoc duong cong quanh baseline', () => {
+    const up = buildWavePath(1, 0.5, FONT_SIZE, SIZE.height);
+    const down = buildWavePath(-1, 0.5, FONT_SIZE, SIZE.height);
+    up.anchors.forEach((anchor, i) => {
+      expect(down.anchors[i].y - 0.5).toBeCloseTo(-(anchor.y - 0.5), 12);
+    });
   });
 });
 
@@ -72,7 +95,7 @@ function curveYAt(path: WarpPath, size: { width: number; height: number }, x: nu
 
 describe('buildDisplacement', () => {
   it('path phang dung tai baseline cho f = 0 TUYET DOI', () => {
-    const f = buildDisplacement(buildWavePath(0, 0.5), SIZE, 50);
+    const f = buildDisplacement(buildWavePath(0, 0.5, FONT_SIZE, SIZE.height), SIZE, 50);
     for (let x = -50; x <= 450; x += 25) expect(f(x)).toBe(0);
   });
 
@@ -92,13 +115,13 @@ describe('buildDisplacement', () => {
   });
 
   it('kep ve gia tri dau mut khi x ra ngoai khoang', () => {
-    const f = buildDisplacement(buildWavePath(1, 0.5), SIZE, 50);
+    const f = buildDisplacement(buildWavePath(1, 0.5, FONT_SIZE, SIZE.height), SIZE, 50);
     expect(f(-100)).toBe(f(0));
     expect(f(900)).toBe(f(400));
   });
 
   it('khop duong cong that duoi 0.011px tren preset wave', () => {
-    const path = buildWavePath(1, 0.5);
+    const path = buildWavePath(1, 0.5, FONT_SIZE, SIZE.height);
     const f = buildDisplacement(path, SIZE, 50);
     for (let x = 0; x <= 400; x += 4) {
       expect(Math.abs(f(x) - (curveYAt(path, SIZE, x) - 50))).toBeLessThan(0.011);

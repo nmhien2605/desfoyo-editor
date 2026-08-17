@@ -85,7 +85,7 @@ export function WarpHandlesOverlay({
   if (geometry.height <= 0) return null;
   // Cùng nguồn với textGeometry: path ở đây chính là path đang dùng để warp,
   // nên handle nằm đúng trên đường mà chữ đang chạy.
-  const path = resolveWarpPath(node, geometry.baselineY / geometry.height);
+  const path = resolveWarpPath(node, geometry.baselineY / geometry.height, geometry.height);
   if (!path) return null;
 
   const box = { width: geometry.width, height: geometry.height };
@@ -126,7 +126,7 @@ export function WarpHandlesOverlay({
         patch: {
           warp: {
             type: node.warp?.type ?? 'wave',
-            intensity: node.warp?.intensity ?? 0.5,
+            curveHeight: node.warp?.curveHeight ?? 0.5,
             paths: [nextPath],
           },
         } as Partial<Node>,
