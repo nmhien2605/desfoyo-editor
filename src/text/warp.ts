@@ -98,6 +98,134 @@ export function clampPathX(path: WarpPath): WarpPath {
   return { ...path, anchors };
 }
 
+export interface WarpMap {
+  X(x: number): number;
+  D(x: number): number;
+  L: number;
+  k: number;
+}
+
+// Khoang cach tu diem toi DUONG THANG qua hai dau mut day cung. Bang tra gio
+// duoc danh chi so theo do dai cung, tuc truy van la "cho s, tra diem" — mot
+// cau hoi HINH HOC. Nen tieu chi phang phai la khoang cach hinh hoc, khac han
+// tieu chi cu (sai lech DOC theo x) von phuc vu truy van "cho x, tra y".
+// Dung khoang cach vuong goc thay vi so sanh theo tham so t: mot doan THANG co
+// tham so hoa khong deu van phai duoc coi la phang, neu khong no bi chia toi
+// het do sau ma khong ich gi.
+function chordDistance(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = Math.hypot(dx, dy);
+  if (len < EPSILON) return Math.hypot(px - ax, py - ay);
+  return Math.abs((px - ax) * dy - (py - ay) * dx) / len;
+}
+
+// Day mau cuoi cua mot cung vao bang, chia doi cho toi khi day cung du sat.
+// Chi day dau mut PHAI: dau mut trai da nam trong bang tu buoc truoc.
+// Bo qua mau trung diem truoc do — `us` phai tang NGHIEM NGAT thi nhi phan
+// trong lookup() moi co nghia.
+function samplePath(
+  xs: number[],
+  ys: number[],
+  us: number[],
+  bx: Cubic,
+  by: Cubic,
+  depth: number,
+): void {
+  let flat = true;
+  if (depth < MAX_DEPTH) {
+    for (let k = 1; k < 4 && flat; k++) {
+      const t = k / 4;
+      const x = evalCubic(bx[0], bx[1], bx[2], bx[3], t);
+      const y = evalCubic(by[0], by[1], by[2], by[3], t);
+      if (chordDistance(x, y, bx[0], by[0], bx[3], by[3]) > LUT_TOL) flat = false;
+    }
+  }
+  if (flat) {
+    const lastX = xs[xs.length - 1];
+    const lastY = ys[ys.length - 1];
+    const step = Math.hypot(bx[3] - lastX, by[3] - lastY);
+    if (step < EPSILON) return;
+    xs.push(bx[3]);
+    ys.push(by[3]);
+    us.push(us[us.length - 1] + step);
+    return;
+  }
+  const lx = splitCubic(bx[0], bx[1], bx[2], bx[3], 0.5);
+  const ly = splitCubic(by[0], by[1], by[2], by[3], 0.5);
+  samplePath(xs, ys, us, lx.left, ly.left, depth + 1);
+  samplePath(xs, ys, us, lx.right, ly.right, depth + 1);
+}
+
+// Path phang dung tai baseline => phep dong nhat. Phai chan tuong minh: X(x)
+// duoc tra qua bang nen chi bang x trong sai so LUT, khong bang TUYET DOI nhu
+// mo hinh cu (spec §2.5).
+function isFlatAtBaseline(path: WarpPath, size: Size, baselineY: number): boolean {
+  const flatY = (p: { y: number }) => Math.abs(p.y * size.height - baselineY) <= EPSILON;
+  return path.anchors.every((a) => flatY(a) && (!a.in || flatY(a.in)) && (!a.out || flatY(a.out)));
+}
+
+// Bang tra theo DO DAI CUNG cho phep bien doi warp (spec §2.2):
+//   s = clamp(k*x, 0, L),  (x, y) -> (P(s).x, P(s).y + y - y0)
+// He so k = L/W la dang dong cua co che Kittl dat lai chieu rong layout bang L
+// moi lan path doi — nho no ma be ngang chu khong doi khi tang do cong.
+export function buildWarpMap(path: WarpPath, size: Size, baselineY: number): WarpMap | null {
+  if (size.width <= 0 || size.height <= 0) return null;
+  if (path.anchors.length < 2) return null;
+  if (isFlatAtBaseline(path, size, baselineY)) return null;
+
+  const xs: number[] = [];
+  const ys: number[] = [];
+  const us: number[] = [];
+  const segments = segmentsOf(path, size);
+  segments.forEach((s, i) => {
+    if (i === 0) {
+      xs.push(s.p0.x);
+      ys.push(s.p0.y);
+      us.push(0);
+    }
+    samplePath(xs, ys, us, [s.p0.x, s.c1.x, s.c2.x, s.p3.x], [s.p0.y, s.c1.y, s.c2.y, s.p3.y], 0);
+  });
+
+  const L = us[us.length - 1];
+  if (!(L > EPSILON)) return null;
+  const y0 = ys[0];
+  const k = L / size.width;
+
+  const lookup = (x: number): { x: number; y: number } => {
+    const s = Math.min(Math.max(k * x, 0), L);
+    if (s <= 0) return { x: xs[0], y: ys[0] };
+    if (s >= L) return { x: xs[xs.length - 1], y: ys[ys.length - 1] };
+    let low = 0;
+    let high = us.length - 1;
+    while (high - low > 1) {
+      const mid = (low + high) >> 1;
+      if (us[mid] <= s) low = mid;
+      else high = mid;
+    }
+    const span = us[high] - us[low];
+    const r = span < EPSILON ? 0 : (s - us[low]) / span;
+    return {
+      x: xs[low] + (xs[high] - xs[low]) * r,
+      y: ys[low] + (ys[high] - ys[low]) * r,
+    };
+  };
+
+  return {
+    L,
+    k,
+    X: (x) => lookup(x).x,
+    D: (x) => lookup(x).y - y0,
+  };
+}
+
 const LUT_TOL = 0.01; // px — sai lech DOC toi da giua cung va day cung theo x
 // Depth 9 la noi thuat toan tu hoi tu dung theo tieu chi flatness dung cho
 // duong cong doc nhat da test (khong nho tran). Depth 10 la bien an toan 1

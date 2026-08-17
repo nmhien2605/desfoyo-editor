@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { WarpPath } from '../../schema';
-import { buildDisplacement, buildWavePath, displaceContours } from '../warp';
+import {
+  buildDisplacement,
+  buildWarpMap,
+  buildWavePath,
+  clampPathX,
+  displaceContours,
+} from '../warp';
 import { evalCubic } from '../bezier';
 import type { GlyphShape } from '../glyphOutlines';
 
@@ -265,5 +271,130 @@ describe('displaceContours', () => {
     expect(out.holes).toHaveLength(1);
     expect(out.holes[0]).not.toEqual(hole);
     expect(out.holes[0][0]).toBe(30);
+  });
+});
+
+// Tham chieu doc lap: di doc polybezier bang buoc rat nho, cong don do dai
+// day cung. Cham nhung khong dung chung mot dong code nao voi buildWarpMap,
+// nen no bat duoc loi cua bang tra chu khong lap lai loi do.
+function walkPath(path: WarpPath, size: { width: number; height: number }) {
+  const pts: { x: number; y: number; u: number }[] = [];
+  const px = (p: { x: number; y: number }) => ({ x: p.x * size.width, y: p.y * size.height });
+  let u = 0;
+  let prev: { x: number; y: number } | null = null;
+  for (let i = 0; i < path.anchors.length - 1; i++) {
+    const from = path.anchors[i];
+    const to = path.anchors[i + 1];
+    const p0 = px(from);
+    const p3 = px(to);
+    const c1 = from.out ? px(from.out) : p0;
+    const c2 = to.in ? px(to.in) : p3;
+    const steps = 40000;
+    for (let s = 0; s <= steps; s++) {
+      if (i > 0 && s === 0) continue;
+      const t = s / steps;
+      const p = {
+        x: evalCubic(p0.x, c1.x, c2.x, p3.x, t),
+        y: evalCubic(p0.y, c1.y, c2.y, p3.y, t),
+      };
+      if (prev) u += Math.hypot(p.x - prev.x, p.y - prev.y);
+      pts.push({ ...p, u });
+      prev = p;
+    }
+  }
+  const total = u;
+  const at = (s: number) => {
+    const target = Math.min(Math.max(s, 0), total);
+    let lo = 0;
+    let hi = pts.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (pts[mid].u <= target) lo = mid;
+      else hi = mid;
+    }
+    return pts[lo];
+  };
+  return { total, at };
+}
+
+describe('buildWarpMap', () => {
+  const WAVE = () => clampPathX(buildWavePath(1, 0.5, FONT_SIZE, SIZE.height));
+
+  it('path phang dung tai baseline tra null — khong warp gi ca', () => {
+    expect(buildWarpMap(buildWavePath(0, 0.5, FONT_SIZE, SIZE.height), SIZE, 50)).toBeNull();
+  });
+
+  it('path duoi 2 anchor tra null', () => {
+    const single: WarpPath = { role: 'baseline', closed: false, anchors: [{ x: 0, y: 0.9 }] };
+    expect(buildWarpMap(single, SIZE, 50)).toBeNull();
+  });
+
+  it('X ghim dung hai mep hop: X(0) = 0 va X(W) = W', () => {
+    const map = buildWarpMap(WAVE(), SIZE, 50)!;
+    expect(map.X(0)).toBe(0);
+    expect(Math.abs(map.X(SIZE.width) - SIZE.width)).toBeLessThan(0.1);
+  });
+
+  it('X khong giam tren [0, W]', () => {
+    const map = buildWarpMap(WAVE(), SIZE, 50)!;
+    let prev = -Infinity;
+    for (let i = 0; i <= 1000; i++) {
+      const v = map.X((SIZE.width * i) / 1000);
+      expect(v).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = v;
+    }
+  });
+
+  it('L >= W va k = L / W', () => {
+    const map = buildWarpMap(WAVE(), SIZE, 50)!;
+    expect(map.L).toBeGreaterThan(SIZE.width);
+    expect(map.k).toBeCloseTo(map.L / SIZE.width, 12);
+  });
+
+  it('L khop tham chieu doc lap duoi 0.05px', () => {
+    const path = WAVE();
+    const map = buildWarpMap(path, SIZE, 50)!;
+    expect(Math.abs(map.L - walkPath(path, SIZE).total)).toBeLessThan(0.05);
+  });
+
+  it('X va D khop tham chieu doc lap duoi 0.05px tren toan hop', () => {
+    const path = WAVE();
+    const map = buildWarpMap(path, SIZE, 50)!;
+    const ref = walkPath(path, SIZE);
+    const y0 = ref.at(0).y;
+    for (let x = 0; x <= SIZE.width; x += 2) {
+      const p = ref.at(map.k * x);
+      expect(Math.abs(map.X(x) - p.x)).toBeLessThan(0.05);
+      expect(Math.abs(map.D(x) - (p.y - y0))).toBeLessThan(0.05);
+    }
+  });
+
+  it('kep ve dau mut khi x ra ngoai [0, W]', () => {
+    const map = buildWarpMap(WAVE(), SIZE, 50)!;
+    expect(map.X(-100)).toBe(map.X(0));
+    expect(map.D(-100)).toBe(map.D(0));
+    expect(map.X(900)).toBe(map.X(SIZE.width));
+    expect(map.D(900)).toBe(map.D(SIZE.width));
+  });
+
+  it('D neo o diem DAU path, khong phai baseline: tinh tien path doc khong doi ket qua', () => {
+    // P_y va y0 cung dich mot luong => D khong doi. Day la ly do vi tri doc
+    // tuyet doi cua path khong anh huong hinh, chi hinh dang moi anh huong.
+    const base = WAVE();
+    const shifted: WarpPath = {
+      ...base,
+      anchors: base.anchors.map((a) => ({
+        ...a,
+        y: a.y + 0.1,
+        in: a.in ? { ...a.in, y: a.in.y + 0.1 } : undefined,
+        out: a.out ? { ...a.out, y: a.out.y + 0.1 } : undefined,
+      })),
+    };
+    const m1 = buildWarpMap(base, SIZE, 50)!;
+    const m2 = buildWarpMap(shifted, SIZE, 50)!;
+    for (let x = 0; x <= SIZE.width; x += 20) {
+      expect(m2.D(x)).toBeCloseTo(m1.D(x), 9);
+      expect(m2.X(x)).toBeCloseTo(m1.X(x), 9);
+    }
   });
 });
