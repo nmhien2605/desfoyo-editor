@@ -16,7 +16,7 @@ export type Cubic = [number, number, number, number];
 
 // Nghiệm của B'(t) = 0 trong (0,1), tức các cực trị của cung trên một trục.
 // B'(t)/3 = at² + bt + c. Chuyển lên đây từ textGeometry.ts: giờ cả bbox lẫn
-// displaceContours (warp.ts) đều cần khoảng giá trị thực của một segment.
+// warpContours (warp.ts) đều cần khoảng giá trị thực của một segment.
 export function extrema(p0: number, c1: number, c2: number, p3: number): number[] {
   const a = -p0 + 3 * c1 - 3 * c2 + p3;
   const b = 2 * (p0 - 2 * c1 + c2);

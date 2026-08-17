@@ -192,9 +192,9 @@ describe('bounds', () => {
     const node = textNode({ text: 'Headline', warp: { type: 'wave', curveHeight: 1 } });
     const geometry = textGeometry(node, poppins);
     // geometry.height (hop metric font) KHONG con la moc dang tin: no gom ca
-    // khoang descender ma "Headline" khong dung toi, va truong dich chuyen doc
-    // chi lech deu theo bien do duong cong — khong khuech dai theo do cao
-    // glyph nhu xoay cung tung lam — nen o curveHeight toi da (= 4, tran cua
+    // khoang descender ma "Headline" khong dung toi, va warp arc-length chi
+    // lech deu theo bien do duong cong — khong khuech dai theo do cao glyph
+    // nhu xoay cung tung lam — nen o curveHeight toi da (= 4, tran cua
     // WarpSchema), bounds do thuc te KHONG BAO GIO vuot geometry.height nua
     // (do thuc nghiem tren nhieu text: 'Headline' 139.86/140, 'HEADLINE'
     // 133.4/140, 'Hi' 130.8/140 — luon hut). Day la khac biet THAT so voi
@@ -202,7 +202,7 @@ describe('bounds', () => {
     //
     // Moc dang tin duy nhat con lai la ink bbox CHUA warp (plain.bounds): warp
     // luon lam no cao han han — do o cung dieu kien (text 'Headline',
-    // intensity 1) la ~1.82x, va do tren nhieu text/intensity khac dao dong
+    // curveHeight 1) la ~1.82x, va do tren nhieu text/curveHeight khac dao dong
     // 1.38x-1.91x, khong bao gio duoi 1.3x. Neo cung 1.3x thay vi so sanh
     // tran trui `>` de test van bat duoc loi that (vd f() bi trieu tieu ve
     // gan 0) thay vi chi doi mot chenh lech vo cung nho.
