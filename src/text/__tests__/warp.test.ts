@@ -371,6 +371,23 @@ describe('buildWarpMap', () => {
     }
   });
 
+  it('X va D khop tham chieu doc lap duoi 0.05px o curveHeight = 4 (bien do lon nhat slider)', () => {
+    // MAX_DEPTH duoc do lai o Task 3 dua tren tieu chi affine hai truc cua
+    // warpSegment (WARP_TOL), khac tieu chi flatness cua samplePath (LUT_TOL)
+    // dung de dung bang tra cua chinh buildWarpMap. Test nay khoa rieng do
+    // chinh xac cua LUT o bien do doc nhat, de MAX_DEPTH giam trong tuong lai
+    // se bi bat neu no lam LUT hoi tu kem.
+    const path = clampPathX(buildWavePath(4, 0.5, FONT_SIZE, SIZE.height));
+    const map = buildWarpMap(path, SIZE, 50)!;
+    const ref = walkPath(path, SIZE);
+    const y0 = ref.at(0).y;
+    for (let x = 0; x <= SIZE.width; x += 2) {
+      const p = ref.at(map.k * x);
+      expect(Math.abs(map.X(x) - p.x)).toBeLessThan(0.05);
+      expect(Math.abs(map.D(x) - (p.y - y0))).toBeLessThan(0.05);
+    }
+  });
+
   it('kep ve dau mut khi x ra ngoai [0, W]', () => {
     const map = buildWarpMap(WAVE(), SIZE, 50)!;
     expect(map.X(-100)).toBe(map.X(0));
