@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import opentype from 'opentype.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import type { TextNode } from '../../schema';
+import type { TextNode, WarpPath } from '../../schema';
 import { measureText, resolveWarpPath, shapesBounds, textGeometry } from '../textGeometry';
 
 let poppins: opentype.Font;
@@ -213,46 +213,59 @@ describe('bounds', () => {
   });
 });
 
-describe('truong dich chuyen doc', () => {
-  it('B2 — hoanh do cua moi glyph khong doi khi curveHeight doi', () => {
-    const plain = textGeometry(textNode({ warp: { type: 'wave', curveHeight: 0 } }), poppins);
-    const warped = textGeometry(textNode({ warp: { type: 'wave', curveHeight: 1 } }), poppins);
-    expect(warped.shapes).toHaveLength(plain.shapes.length);
-    warped.shapes.forEach((shape, i) => {
-      const xsA = shape.outer.filter((_, k) => k % 2 === 0);
-      const xsB = plain.shapes[i].outer.filter((_, k) => k % 2 === 0);
-      expect(Math.min(...xsA)).toBeCloseTo(Math.min(...xsB), 9);
-      expect(Math.max(...xsA)).toBeCloseTo(Math.max(...xsB), 9);
+describe('bien doi theo do dai cung', () => {
+  it('I7/I9 — thu tu hoanh do cac glyph giu nguyen, khong chong lan', () => {
+    const node = textNode({ text: 'Wave', warp: { type: 'wave', curveHeight: 2 } });
+    const { shapes } = textGeometry(node, poppins);
+    const ranges = shapes.map((shape) => {
+      const xs = shape.outer.filter((_, i) => i % 2 === 0);
+      return { min: Math.min(...xs), max: Math.max(...xs) };
     });
+    for (let i = 1; i < ranges.length; i++) {
+      expect(ranges[i].min).toBeGreaterThanOrEqual(ranges[i - 1].max - 1e-6);
+    }
   });
 
-  it('B4 — khong sinh chong lan moi: bbox hoanh do tung glyph giu nguyen', () => {
-    // Path cuc doan: keo anchor dau xuong that sau.
-    const extreme = textNode({
-      warp: {
-        type: 'wave',
-        curveHeight: 1,
-        paths: [
-          {
-            role: 'baseline',
-            closed: false,
-            anchors: [
-              { x: 0, y: 1.63, out: { x: 0.2, y: 1.63 } },
-              { x: 0.5, y: 0.8, in: { x: 0.35, y: 1.2 }, out: { x: 0.65, y: 0.5 } },
-              { x: 1, y: 1.0, in: { x: 0.75, y: 0.3 } },
-            ],
-          },
-        ],
-      },
+  it('I3 — be ngang bbox khong doi khi curveHeight doi', () => {
+    // X chi duoc GHIM tuyet doi tai hai mep hop (X(0)=0, X(W)=W); tai cac
+    // hoanh do noi bo, X la phep noi suy theo do dai cung nen KHONG tuyen
+    // tinh — be ngang bbox chi xap xi bat bien, sai khac tang theo do cong.
+    // Do thuc nghiem tren 'Wave'/Poppins toi curveHeight = 4 (tran slider):
+    // toi da ~0.78px. Dat nguong 1px, ro rang tren muc do nhung van bat duoc
+    // loi that (vd he so k tinh sai lam bbox lech vai px).
+    const plain = textGeometry(textNode({ text: 'Wave' }), poppins).bounds;
+    const plainW = plain.maxX - plain.minX;
+    for (const curveHeight of [0.25, 1, 2, 4]) {
+      const b = textGeometry(
+        textNode({ text: 'Wave', warp: { type: 'wave', curveHeight } }),
+        poppins,
+      ).bounds;
+      expect(Math.abs(b.maxX - b.minX - plainW)).toBeLessThan(1);
+    }
+  });
+
+  it('I8 — glyph o vung path doc bi nen hep hon glyph o vung path phang', () => {
+    // Path phang nua trai, doc len o nua phai. Chu 'H' giong het nhau nen be
+    // ngang khac nhau chi co the do phep bien doi gay ra.
+    const steep: WarpPath = {
+      role: 'baseline',
+      closed: false,
+      anchors: [
+        { x: 0, y: 0.6, out: { x: 0.25, y: 0.6 } },
+        { x: 0.5, y: 0.6, in: { x: 0.4, y: 0.6 }, out: { x: 0.55, y: 0.6 } },
+        { x: 1, y: -0.9, in: { x: 0.6, y: -0.9 } },
+      ],
+    };
+    const node = textNode({
+      text: 'HHHHHHHHH',
+      warp: { type: 'wave', curveHeight: 1, paths: [steep] },
     });
-    const plain = textGeometry(textNode({}), poppins);
-    const warped = textGeometry(extreme, poppins);
-    warped.shapes.forEach((shape, i) => {
-      const xsA = shape.outer.filter((_, k) => k % 2 === 0);
-      const xsB = plain.shapes[i].outer.filter((_, k) => k % 2 === 0);
-      expect(Math.min(...xsA)).toBeCloseTo(Math.min(...xsB), 9);
-      expect(Math.max(...xsA)).toBeCloseTo(Math.max(...xsB), 9);
-    });
+    const { shapes } = textGeometry(node, poppins);
+    const widthOf = (i: number) => {
+      const xs = shapes[i].outer.filter((_, k) => k % 2 === 0);
+      return Math.max(...xs) - Math.min(...xs);
+    };
+    expect(widthOf(shapes.length - 1)).toBeLessThan(widthOf(0));
   });
 
   it('B8 — hai dong giu song song: hieu y tai cung hoanh do dung bang lineStep', () => {

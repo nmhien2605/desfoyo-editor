@@ -3,7 +3,7 @@ import type { TextNode, WarpPath } from '../schema';
 import { evalCubic, extrema } from './bezier';
 import type { GlyphShape } from './glyphOutlines';
 import { layoutText } from './layout';
-import { buildDisplacement, buildWavePath, clampPathX, displaceContours } from './warp';
+import { buildWarpMap, buildWavePath, clampPathX, warpContours } from './warp';
 
 export interface TextGeometry {
   shapes: GlyphShape[];
@@ -54,8 +54,9 @@ export function shapesBounds(shapes: GlyphShape[]): TextGeometry['bounds'] {
   return { minX, minY, maxX, maxY };
 }
 
-// paths đã lưu thắng preset. Không còn có `fit`: chữ không chạy dọc theo cung
-// nữa mà đứng yên theo phương ngang, nên không bao giờ phải ép path vừa chữ.
+// paths đã lưu thắng preset. Chữ chạy dọc theo cung theo độ dài cung, nhưng
+// hệ số k = L/W trong buildWarpMap đã bù lại nên không cần khái niệm `fit`:
+// hai mép chữ luôn rơi đúng hai mép hộp.
 export function resolveWarpPath(
   node: TextNode,
   baselineRatio: number,
@@ -67,8 +68,8 @@ export function resolveWarpPath(
   // clampPathX ap dung vo dieu kien cho ca hai nhanh: path tu buildWavePath da
   // full-span/don dieu san nen clamp la no-op, nhung path `stored` co the tu
   // tai lieu cu (span hep do co che fit-to-arc-length truoc day, hoac chua
-  // tung qua UI moi co clampPathX) — khong clamp thi buildDisplacement se
-  // nhan mot f() phang o hai dau hoac roi vao nhanh phong thu khong don dieu.
+  // tung qua UI moi co clampPathX) — khong clamp thi buildWarpMap se nhan mot
+  // bang tra khong phu tron [0, width] hoac khong don dieu.
   const stored = warp.paths?.find((path) => path.role === 'baseline');
   if (stored) return stored.anchors.length >= 2 ? clampPathX(stored) : null;
 
@@ -92,12 +93,13 @@ export function textGeometry(node: TextNode, font: Font): TextGeometry {
     layout.height > 0
       ? resolveWarpPath(node, layout.baselineY / layout.height, layout.height)
       : null;
-  const shapes = path
-    ? displaceContours(
-        layout.shapes,
-        buildDisplacement(path, { width: layout.width, height: layout.height }, layout.baselineY),
-      )
-    : layout.shapes;
+  // buildWarpMap tra null khi path phang dung tai baseline — khi ay bo qua warp
+  // hoan toan de curveHeight = 0 la phep dong nhat TUYET DOI, khong dinh sai so
+  // cua bang tra (spec §2.5).
+  const map = path
+    ? buildWarpMap(path, { width: layout.width, height: layout.height }, layout.baselineY)
+    : null;
+  const shapes = map ? warpContours(layout.shapes, map) : layout.shapes;
 
   return { ...layout, shapes, bounds: shapesBounds(shapes) };
 }

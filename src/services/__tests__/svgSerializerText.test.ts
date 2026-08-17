@@ -116,7 +116,7 @@ describe('serializeNode cho text', () => {
 
   it('warp lam doi path data', () => {
     const plain = serializeNode(node, doc, []);
-    const waved = serializeNode({ ...node, warp: { type: 'wave', intensity: 0.8 } }, doc, []);
+    const waved = serializeNode({ ...node, warp: { type: 'wave', curveHeight: 0.8 } }, doc, []);
     expect(waved).not.toBe(plain);
     expect(waved).toContain('<path');
   });
