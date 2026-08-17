@@ -3,14 +3,7 @@ import opentype from 'opentype.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { TextNode } from '../../schema';
-import {
-  measureText,
-  resolveWarpGeometry,
-  resolveWarpPath,
-  shapesBounds,
-  textGeometry,
-} from '../textGeometry';
-import { bakeScale, buildWavePath, placeOnPath, solveHorizontalScale } from '../warp';
+import { measureText, resolveWarpPath, shapesBounds, textGeometry } from '../textGeometry';
 
 let poppins: opentype.Font;
 beforeAll(() => {
@@ -47,7 +40,7 @@ describe('resolveWarpPath', () => {
   });
 
   it('sinh path preset cho wave khi chua co paths', () => {
-    const path = resolveWarpPath(textNode({ warp: { type: 'wave', intensity: 0.5 } }), 0.8)?.path;
+    const path = resolveWarpPath(textNode({ warp: { type: 'wave', intensity: 0.5 } }), 0.8);
     expect(path?.anchors).toHaveLength(3);
   });
 
@@ -63,7 +56,7 @@ describe('resolveWarpPath', () => {
     const path = resolveWarpPath(
       textNode({ warp: { type: 'wave', intensity: 0.5, paths: [stored] } }),
       0.8,
-    )?.path;
+    );
     expect(path).toEqual(stored);
   });
 
@@ -141,38 +134,11 @@ describe('text-on-path', () => {
     });
   });
 
-  it('wave bao toan hinh hoc tung glyph', () => {
-    const node = textNode({ text: 'Headline', warp: { type: 'wave', intensity: 1 } });
-    const warped = textGeometry(node, poppins);
-    const plain = textGeometry({ ...node, warp: undefined }, poppins);
-    expect(warped.shapes).toHaveLength(plain.shapes.length);
-    warped.shapes.forEach((shape, i) => {
-      const a = plain.shapes[i].outer;
-      const b = shape.outer;
-      for (let k = 2; k < a.length; k += 2) {
-        expect(Math.hypot(b[k] - b[0], b[k + 1] - b[1])).toBeCloseTo(
-          Math.hypot(a[k] - a[0], a[k + 1] - a[1]),
-          4,
-        );
-      }
-    });
-  });
-
   it('node.size khong doi khi intensity doi', () => {
     const base = textNode({ text: 'Headline' });
     const flat = measureText({ ...base, warp: { type: 'wave', intensity: 0 } }, poppins);
     const curved = measureText({ ...base, warp: { type: 'wave', intensity: 1 } }, poppins);
     expect(curved).toEqual(flat);
-  });
-
-  it('resolveWarpPath danh dau preset la fit, path da luu la khong fit', () => {
-    const preset = textNode({ warp: { type: 'wave', intensity: 1 } });
-    expect(resolveWarpPath(preset, 0.8)?.fit).toBe(true);
-
-    const stored = textNode({
-      warp: { type: 'wave', intensity: 1, paths: [buildWavePath(0.5, 0.8)] },
-    });
-    expect(resolveWarpPath(stored, 0.8)?.fit).toBe(false);
   });
 });
 
@@ -196,49 +162,89 @@ describe('bounds', () => {
   it('wave lam bounds cao hon hop layout nhung node.size giu nguyen', () => {
     const node = textNode({ text: 'Headline', warp: { type: 'wave', intensity: 1 } });
     const geometry = textGeometry(node, poppins);
-    expect(geometry.bounds.maxY - geometry.bounds.minY).toBeGreaterThan(geometry.height);
+    // So voi geometry.height (hop metric font, gom ca khoang descender ma
+    // "Headline" khong dung toi) thi truong dich chuyen doc — von chi lech deu
+    // theo bien do duong cong, khong khuech dai theo do cao glyph nhu xoay
+    // cung — co the khong vuot qua. So voi muc INK that su chua warp (bounds
+    // cua plain) moi la phep so sanh dung: wave luon lam no cao han han.
+    const plain = textGeometry({ ...node, warp: undefined }, poppins);
+    expect(geometry.bounds.maxY - geometry.bounds.minY).toBeGreaterThan(
+      plain.bounds.maxY - plain.bounds.minY,
+    );
     expect(measureText(node, poppins).height).toBeCloseTo(geometry.height, 9);
   });
 });
 
-describe('bake he so co', () => {
-  const layout = {
-    shapes: [],
-    width: 400,
-    height: 100,
-    baselineY: 80,
-    bounds: { minX: 0, minY: 0, maxX: 400, maxY: 100 },
-  };
-
-  it('resolveWarpGeometry tra ve path DA bake voi preset', () => {
-    const resolved = resolveWarpGeometry(
-      textNode({ warp: { type: 'wave', intensity: 1 } }),
-      layout,
-    )!;
-    const raw = buildWavePath(1, 0.8);
-    const k = solveHorizontalScale(raw, { width: 400, height: 100 }, 400);
-
-    expect(k).toBeLessThan(1);
-    expect(resolved.path.anchors[0].x).toBeCloseTo(bakeScale(raw, k).anchors[0].x, 9);
-    expect(resolved.sampler.length).toBeCloseTo(400, 1);
+describe('truong dich chuyen doc', () => {
+  it('B2 — hoanh do cua moi glyph khong doi khi intensity doi', () => {
+    const plain = textGeometry(textNode({ warp: { type: 'wave', intensity: 0 } }), poppins);
+    const warped = textGeometry(textNode({ warp: { type: 'wave', intensity: 1 } }), poppins);
+    expect(warped.shapes).toHaveLength(plain.shapes.length);
+    warped.shapes.forEach((shape, i) => {
+      const xsA = shape.outer.filter((_, k) => k % 2 === 0);
+      const xsB = plain.shapes[i].outer.filter((_, k) => k % 2 === 0);
+      expect(Math.min(...xsA)).toBeCloseTo(Math.min(...xsB), 9);
+      expect(Math.max(...xsA)).toBeCloseTo(Math.max(...xsB), 9);
+    });
   });
 
-  it('luu path da bake roi render lai cho hinh trung khit', () => {
-    const shapes = [{ outer: [10, 40, 30, 60], holes: [], anchorX: 20, baselineY: 80 }];
-    const withShapes = { ...layout, shapes };
-    const before = resolveWarpGeometry(
-      textNode({ warp: { type: 'wave', intensity: 1 } }),
-      withShapes,
-    )!;
+  it('B4 — khong sinh chong lan moi: bbox hoanh do tung glyph giu nguyen', () => {
+    // Path cuc doan: keo anchor dau xuong that sau.
+    const extreme = textNode({
+      warp: {
+        type: 'wave',
+        intensity: 1,
+        paths: [
+          {
+            role: 'baseline',
+            closed: false,
+            anchors: [
+              { x: 0, y: 1.63, out: { x: 0.2, y: 1.63 } },
+              { x: 0.5, y: 0.8, in: { x: 0.35, y: 1.2 }, out: { x: 0.65, y: 0.5 } },
+              { x: 1, y: 1.0, in: { x: 0.75, y: 0.3 } },
+            ],
+          },
+        ],
+      },
+    });
+    const plain = textGeometry(textNode({}), poppins);
+    const warped = textGeometry(extreme, poppins);
+    warped.shapes.forEach((shape, i) => {
+      const xsA = shape.outer.filter((_, k) => k % 2 === 0);
+      const xsB = plain.shapes[i].outer.filter((_, k) => k % 2 === 0);
+      expect(Math.min(...xsA)).toBeCloseTo(Math.min(...xsB), 9);
+      expect(Math.max(...xsA)).toBeCloseTo(Math.max(...xsB), 9);
+    });
+  });
 
-    // Mo phong lan keo dau tien: ghi path dang hien thi vao warp.paths.
-    const after = resolveWarpGeometry(
-      textNode({ warp: { type: 'wave', intensity: 1, paths: [before.path] } }),
-      withShapes,
-    )!;
+  it('B8 — hai dong giu song song: hieu y tai cung hoanh do dung bang lineStep', () => {
+    const node = textNode({ text: 'no\nno', warp: { type: 'wave', intensity: 1 } });
+    const geometry = textGeometry(node, poppins);
+    const half = geometry.shapes.length / 2;
+    const lineStep = node.font.size * node.lineHeight;
+    for (let i = 0; i < half; i++) {
+      const a = geometry.shapes[i].outer;
+      const b = geometry.shapes[i + half].outer;
+      expect(a.length).toBe(b.length);
+      for (let k = 0; k < a.length; k += 2) {
+        expect(a[k]).toBeCloseTo(b[k], 9);
+        expect(b[k + 1] - a[k + 1]).toBeCloseTo(lineStep, 6);
+      }
+    }
+  });
 
-    const a = placeOnPath(shapes, before.sampler, 80)[0].outer;
-    const b = placeOnPath(shapes, after.sampler, 80)[0].outer;
-    a.forEach((value, i) => expect(b[i]).toBeCloseTo(value, 9));
+  it('B7 — contour sau warp van kin va dung dinh dang', () => {
+    const geometry = textGeometry(textNode({ warp: { type: 'wave', intensity: 1 } }), poppins);
+    for (const shape of geometry.shapes) {
+      for (const contour of [shape.outer, ...shape.holes]) {
+        expect((contour.length - 2) % 6).toBe(0);
+        // Hoanh do bit-exact (splitCubic khong dung toi p3). Tung do thi chi
+        // exact khi doan dong la doan DOC (xem warp.test.ts, nhanh MIN_DX cua
+        // displaceSegment) — voi contour font that, doan dong thuong xien, nen
+        // alpha+beta*x chi khop f(x) toi may bit cuoi.
+        expect(contour[contour.length - 2]).toBe(contour[0]);
+        expect(contour[contour.length - 1]).toBeCloseTo(contour[1], 9);
+      }
+    }
   });
 });
