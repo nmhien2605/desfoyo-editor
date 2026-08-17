@@ -3,7 +3,7 @@ import type { TextNode, WarpPath } from '../schema';
 import { evalCubic, extrema } from './bezier';
 import type { GlyphShape } from './glyphOutlines';
 import { layoutText } from './layout';
-import { buildDisplacement, buildWavePath, displaceContours } from './warp';
+import { buildDisplacement, buildWavePath, clampPathX, displaceContours } from './warp';
 
 export interface TextGeometry {
   shapes: GlyphShape[];
@@ -60,10 +60,15 @@ export function resolveWarpPath(node: TextNode, baselineRatio: number): WarpPath
   const warp = node.warp;
   if (!warp || warp.type === 'none') return null;
 
+  // clampPathX ap dung vo dieu kien cho ca hai nhanh: path tu buildWavePath da
+  // full-span/don dieu san nen clamp la no-op, nhung path `stored` co the tu
+  // tai lieu cu (span hep do co che fit-to-arc-length truoc day, hoac chua
+  // tung qua UI moi co clampPathX) — khong clamp thi buildDisplacement se
+  // nhan mot f() phang o hai dau hoac roi vao nhanh phong thu khong don dieu.
   const stored = warp.paths?.find((path) => path.role === 'baseline');
-  if (stored) return stored.anchors.length >= 2 ? stored : null;
+  if (stored) return stored.anchors.length >= 2 ? clampPathX(stored) : null;
 
-  if (warp.type === 'wave') return buildWavePath(warp.intensity, baselineRatio);
+  if (warp.type === 'wave') return clampPathX(buildWavePath(warp.intensity, baselineRatio));
   return null;
 }
 

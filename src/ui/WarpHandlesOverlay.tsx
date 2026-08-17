@@ -4,6 +4,7 @@ import type { Viewport } from '../render/viewport';
 import { rotateVector } from '../render/interactions/resizeMath';
 import { getLoadedFont } from '../text/fontService';
 import { resolveWarpPath, textGeometry } from '../text/textGeometry';
+import { clampPathX } from '../text/warp';
 import type { Node, TextNode, WarpAnchor, WarpPath } from '../schema';
 
 export type HandleRef = { anchor: number; kind: 'anchor' | 'in' | 'out' };
@@ -61,37 +62,6 @@ export function movePathPoint(
     if (ref.kind === 'in') return anchor.in ? { ...anchor, in: shift(anchor.in, delta) } : anchor;
     return anchor.out ? { ...anchor, out: shift(anchor.out, delta) } : anchor;
   });
-  return { ...path, anchors };
-}
-
-// f(x) chi xac dinh khi path la ham cua x. Dieu kien du: hoanh do anchor khong
-// giam, va hai handle cua moi segment nam trong khoang hoanh do cua segment do
-// — khi ay Bx'(t)/3 la dang Bernstein bac hai voi ca ba he so thoa a, c >= 0
-// va (b >= 0 hoac b² <= ac), nen Bx' >= 0 (spec §2.3).
-//
-// Chay tren TOAN path moi lan keo, nen keo mot anchor cung tu dong kep lai
-// handle ke cua hai anchor lan can.
-export function clampPathX(path: WarpPath): WarpPath {
-  const anchors = path.anchors.map((anchor) => ({ ...anchor }));
-  const last = anchors.length - 1;
-  if (last < 1) return path;
-
-  // Hai mep ghim o 0 va 1 de f phu tron [0, width].
-  anchors[0].x = 0;
-  for (let i = 1; i <= last; i++) anchors[i].x = Math.max(anchors[i].x, anchors[i - 1].x);
-  anchors[last].x = 1;
-  for (let i = last - 1; i >= 1; i--) anchors[i].x = Math.min(anchors[i].x, anchors[i + 1].x);
-
-  for (let i = 0; i < last; i++) {
-    const lo = anchors[i].x;
-    const hi = anchors[i + 1].x;
-    const clamp = (v: number) => Math.min(Math.max(v, lo), hi);
-    const out = anchors[i].out;
-    if (out) anchors[i].out = { ...out, x: clamp(out.x) };
-    const into = anchors[i + 1].in;
-    if (into) anchors[i + 1].in = { ...into, x: clamp(into.x) };
-  }
-
   return { ...path, anchors };
 }
 

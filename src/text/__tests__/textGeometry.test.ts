@@ -60,6 +60,27 @@ describe('resolveWarpPath', () => {
     expect(path).toEqual(stored);
   });
 
+  it('kep path da luu ve full-span [0,1] du tai lieu cu bake span hep', () => {
+    // Tai lieu truoc plan nay co the luu path voi span hep hon [0,1] (co che
+    // fit-to-arc-length cu) — resolveWarpPath phai tu clamp lai, khong duoc
+    // tra thang stored, neu khong f(x) se phang o hai dau thay vi cong het co.
+    const stored = {
+      role: 'baseline' as const,
+      closed: false,
+      anchors: [
+        { x: 0.1, y: 0.1 },
+        { x: 0.9, y: 0.9 },
+      ],
+    };
+    const path = resolveWarpPath(
+      textNode({ warp: { type: 'wave', intensity: 0.5, paths: [stored] } }),
+      0.8,
+    );
+    expect(path).not.toBeNull();
+    expect(path?.anchors[0].x).toBe(0);
+    expect(path?.anchors[path!.anchors.length - 1].x).toBe(1);
+  });
+
   it('bo qua paths co duoi 2 anchor', () => {
     const broken = { role: 'baseline' as const, closed: false, anchors: [{ x: 0, y: 0.5 }] };
     expect(

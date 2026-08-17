@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { WarpPath } from '../../schema';
-import { clampPathX, listHandles, movePathPoint, projectLocalPoint } from '../WarpHandlesOverlay';
+import { listHandles, movePathPoint, projectLocalPoint } from '../WarpHandlesOverlay';
 import type { Viewport } from '../../render/viewport';
 import { evalD1 } from '../../text/bezier';
-import { buildWavePath } from '../../text/warp';
+import { buildWavePath, clampPathX } from '../../text/warp';
 
 const path: WarpPath = {
   role: 'baseline',

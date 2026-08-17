@@ -1,4 +1,4 @@
-import type { Size, WarpPath } from '../schema';
+import type { Size, WarpAnchor, WarpPath } from '../schema';
 import type { Contour, GlyphShape } from './glyphOutlines';
 import { type Cubic, evalCubic, extrema, splitCubic } from './bezier';
 
@@ -54,6 +54,39 @@ export function buildWavePath(intensity: number, baselineRatio: number): WarpPat
       { x: 1, y: b + 0.6 * a, in: { x: 0.75, y: b - 0.4 * a } },
     ],
   };
+}
+
+// f(x) chi xac dinh khi path la ham cua x. Dieu kien du: hoanh do anchor khong
+// giam, va hai handle cua moi segment nam trong khoang hoanh do cua segment do
+// — khi ay Bx'(t)/3 la dang Bernstein bac hai voi ca ba he so thoa a, c >= 0
+// va (b >= 0 hoac b² <= ac), nen Bx' >= 0 (spec §2.3).
+//
+// Dat o day (khong phai UI) vi day la noi so huu WarpPath/buildDisplacement —
+// resolveWarpPath cung goi ham nay cho path DA LUU, khong chi path dang keo,
+// nen tai lieu cu (khong full-span [0,1] hoac khong don dieu) cung duoc chinh
+// truoc khi vao buildDisplacement.
+export function clampPathX(path: WarpPath): WarpPath {
+  const anchors = path.anchors.map((anchor): WarpAnchor => ({ ...anchor }));
+  const last = anchors.length - 1;
+  if (last < 1) return path;
+
+  // Hai mep ghim o 0 va 1 de f phu tron [0, width].
+  anchors[0].x = 0;
+  for (let i = 1; i <= last; i++) anchors[i].x = Math.max(anchors[i].x, anchors[i - 1].x);
+  anchors[last].x = 1;
+  for (let i = last - 1; i >= 1; i--) anchors[i].x = Math.min(anchors[i].x, anchors[i + 1].x);
+
+  for (let i = 0; i < last; i++) {
+    const lo = anchors[i].x;
+    const hi = anchors[i + 1].x;
+    const clamp = (v: number) => Math.min(Math.max(v, lo), hi);
+    const out = anchors[i].out;
+    if (out) anchors[i].out = { ...out, x: clamp(out.x) };
+    const into = anchors[i + 1].in;
+    if (into) anchors[i + 1].in = { ...into, x: clamp(into.x) };
+  }
+
+  return { ...path, anchors };
 }
 
 const LUT_TOL = 0.01; // px — sai lech DOC toi da giua cung va day cung theo x
