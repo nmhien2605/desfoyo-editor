@@ -109,10 +109,10 @@ export function TextEditOverlay({
       onBlur={commit}
       onKeyDown={(e) => {
         e.stopPropagation();
-        if (e.key === 'Escape') {
-          setValue(node.text);
-          onClose();
-        }
+        // Escape commit (khong huy) — dung spec §5.1: "Blur hoac Escape ->
+        // dispatch(UpdateProps)". Dung chung commit() voi onBlur, khong tu
+        // viet nhanh rieng.
+        if (e.key === 'Escape') commit();
       }}
       className="pointer-events-auto absolute resize-none select-text overflow-hidden border-2 border-blue-500 bg-white/90 p-0 outline-none"
       style={{
