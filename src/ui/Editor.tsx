@@ -115,7 +115,17 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
           <Toolbar />
           <PageTabs />
           <div className="flex">
-            <div className="relative" onDragOver={(e) => e.preventDefault()} onDrop={(e) => void handleAssetDrop(e)}>
+            {/* select-none: mọi thao tác kéo trên canvas đều bắt đầu bằng một
+                pointerdown ở vùng này, và mặc định trình duyệt coi đó là bắt
+                đầu bôi đen văn bản — kéo một node là bôi xanh cả toolbar, rồi
+                lần kéo sau bấm trúng vùng đã bôi sẽ khởi động drag-and-drop
+                gốc của trình duyệt (con trỏ đổi thành biểu tượng thả) và node
+                không nhúc nhích. Textarea sửa chữ bật lại select-text riêng. */}
+            <div
+              className="relative select-none"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => void handleAssetDrop(e)}
+            >
               <CanvasHost
                 reconcilerRef={reconcilerRef}
                 onReady={(app: Application, pageContainer: Container) => {

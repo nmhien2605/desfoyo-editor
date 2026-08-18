@@ -99,6 +99,8 @@ export function TextEditOverlay({
   });
   const zoom = viewport.toScreen({ x: 1, y: 0 }).x - viewport.toScreen({ x: 0, y: 0 }).x;
 
+  // select-text: khung bọc canvas là vùng select-none (xem Editor.tsx) nên
+  // phải bật lại ở đây, nếu không bôi đen/kéo chọn chữ trong ô sửa mất tác dụng.
   return (
     <textarea
       ref={textareaRef}
@@ -112,7 +114,7 @@ export function TextEditOverlay({
           onClose();
         }
       }}
-      className="pointer-events-auto absolute resize-none overflow-hidden border-2 border-blue-500 bg-white/90 p-0 outline-none"
+      className="pointer-events-auto absolute resize-none select-text overflow-hidden border-2 border-blue-500 bg-white/90 p-0 outline-none"
       style={{
         left: topLeft.x,
         top: topLeft.y,

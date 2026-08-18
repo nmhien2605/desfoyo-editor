@@ -7,7 +7,15 @@ import { serializeNode, type RasterizedMap } from './svgSerializer';
 // Extracts the page container specifically (not app.stage), so any future
 // selection/UI chrome doesn't leak into the exported image.
 export function exportPng(app: Application, pageContainer: Container): Promise<Blob> {
-  const canvas = app.renderer.extract.canvas({ target: pageContainer }) as HTMLCanvasElement;
+  // resolution: 1 ghim tường minh — mặc định extract lấy resolution của
+  // renderer, mà renderer giờ chạy theo devicePixelRatio (CanvasHost.tsx, để
+  // chữ trên màn retina không mờ). Không ghim thì file xuất ra to gấp đôi trên
+  // máy retina và bằng 1x trên máy thường: cùng một tài liệu cho hai kết quả
+  // khác nhau tuỳ màn hình người dùng.
+  const canvas = app.renderer.extract.canvas({
+    target: pageContainer,
+    resolution: 1,
+  }) as HTMLCanvasElement;
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
@@ -30,7 +38,9 @@ async function rasterizeTextAndSvgNodes(app: Application, page: Page, reconciler
     const obj = reconciler.getDisplayObject(node.id);
     if (!obj) return;
     pending.push(
-      app.renderer.extract.base64({ target: obj }).then((href) => {
+      // resolution: 1 vì cùng lý do với exportPng ở trên — kết quả xuất không
+      // được phụ thuộc devicePixelRatio của máy đang mở editor.
+      app.renderer.extract.base64({ target: obj, resolution: 1 }).then((href) => {
         map[node.id] = href;
       }),
     );

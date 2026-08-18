@@ -1,4 +1,4 @@
-import { Graphics } from 'pixi.js';
+import { Graphics, Rectangle } from 'pixi.js';
 import type { Fill, TextNode } from '../../schema';
 import { applyTransform } from '../applyTransform';
 import { resolveFill } from '../fillToColor';
@@ -64,14 +64,20 @@ function draw(obj: TextGraphics, node: TextNode): void {
   if (!loaded) {
     // Font chưa nạp xong: không vẽ gì và kích hoạt nạp. Callback đăng ký ở
     // create() sẽ vẽ lại khi font sẵn sàng.
+    obj.hitArea = null;
     void loadFont(node.font.family);
     return;
   }
-  drawTextShapes(
-    obj as unknown as TextDrawTarget,
-    textGeometry(node, loaded.font).shapes,
-    node.fill,
-  );
+  const geometry = textGeometry(node, loaded.font);
+  drawTextShapes(obj as unknown as TextDrawTarget, geometry.shapes, node.fill);
+
+  // Hit-test mặc định của Graphics là hit-test từng path đã tô, nên chỉ đúng
+  // phần MỰC của chữ mới bấm được: bấm vào khoảng trắng giữa hai ký tự (hay
+  // vào ruột chữ 'o') rơi thẳng xuống stage và bị marquee.ts hiểu là bấm ra
+  // nền — đang chọn thì mất chọn. Đặt hitArea bằng đúng khung mà
+  // SelectionOverlay vẽ để cả khung chữ bấm được, như mọi trình thiết kế.
+  const { minX, minY, maxX, maxY } = geometry.bounds;
+  obj.hitArea = new Rectangle(minX, minY, maxX - minX, maxY - minY);
 }
 
 export const textRenderer = {

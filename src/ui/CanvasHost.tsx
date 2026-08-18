@@ -60,6 +60,13 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
         height: page.size.height,
         background: backgroundColor(page.background),
         antialias: true,
+        // Thiếu hai dòng này thì backing store chỉ bằng số CSS pixel: trên màn
+        // retina (devicePixelRatio = 2) mọi thứ được vẽ ở nửa độ phân giải rồi
+        // để trình duyệt phóng to — đó là nguồn gốc chữ bị mờ. autoDensity giữ
+        // canvas.style bằng đúng page.size nên toạ độ CSS (viewport.ts,
+        // SelectionOverlay, ruler) không phải đổi gì.
+        resolution: window.devicePixelRatio || 1,
+        autoDensity: true,
       });
       if (cancelled) {
         app.destroy(true);

@@ -2,7 +2,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { getLoadedFont, loadFont, registerFont } from '../../text/fontService';
-import { drawTextShapes, type TextDrawTarget } from '../renderers/textRenderer';
+import { Graphics, Rectangle } from 'pixi.js';
+import { drawTextShapes, textRenderer, type TextDrawTarget } from '../renderers/textRenderer';
 import { textGeometry } from '../../text/textGeometry';
 import type { TextNode } from '../../schema';
 
@@ -122,5 +123,35 @@ describe('drawTextShapes', () => {
       'closePath',
       'cut',
     ]);
+  });
+});
+
+describe('textRenderer.update — hitArea', () => {
+  it('hitArea la khung hinh hoc, khong phai net chu: diem giua hai ky tu van tinh la trung node', () => {
+    const font = getLoadedFont('Poppins')!.font;
+    const twoLetters: TextNode = { ...node, text: 'll' };
+    const obj = new Graphics();
+    textRenderer.update(obj, twoLetters);
+
+    const { bounds } = textGeometry(twoLetters, font);
+    const hit = obj.hitArea as Rectangle;
+    expect(hit.x).toBeCloseTo(bounds.minX, 6);
+    expect(hit.y).toBeCloseTo(bounds.minY, 6);
+    expect(hit.width).toBeCloseTo(bounds.maxX - bounds.minX, 6);
+    expect(hit.height).toBeCloseTo(bounds.maxY - bounds.minY, 6);
+
+    // Khoang trang giua hai net doc cua "ll" khong thuoc path da to nao — day
+    // dung la truong hop truoc kia bam vao bi hieu la bam ra nen va mat chon.
+    expect(hit.contains((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2)).toBe(
+      true,
+    );
+  });
+
+  it('font chua nap thi xoa hitArea, khong de lai vung bam cua lan ve truoc', () => {
+    const obj = new Graphics();
+    textRenderer.update(obj, { ...node, text: 'l' });
+    expect(obj.hitArea).not.toBeNull();
+    textRenderer.update(obj, { ...node, font: { ...node.font, family: 'KhongTonTai' } });
+    expect(obj.hitArea).toBeNull();
   });
 });
