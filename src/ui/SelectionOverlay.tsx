@@ -8,6 +8,7 @@ import {
   computeSelectionBounds,
   applyGroupRotate,
 } from '../render/interactions/groupTransformMath';
+import { startPointerGesture } from '../render/interactions/pointerGesture';
 import type { Rect } from '../render/interactions/marquee';
 import type { SnapGuide } from '../render/interactions/snapping';
 import type { ImageNode, Node, Transform } from '../schema';
@@ -152,7 +153,6 @@ function SingleSelectionOverlay({
   const startResize = (handle: ResizeHandle) => (downEvent: ReactPointerEvent) => {
     downEvent.stopPropagation();
     const startWorld = viewport.toWorld({ x: downEvent.clientX, y: downEvent.clientY });
-    store.getState().beginGesture(`resize:${node.id}`);
 
     const onMove = (moveEvent: PointerEvent) => {
       const currentWorld = viewport.toWorld({ x: moveEvent.clientX, y: moveEvent.clientY });
@@ -171,13 +171,7 @@ function SingleSelectionOverlay({
         patch: { x: result.transform.x, y: result.transform.y } as Partial<Transform>,
       });
     };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      store.getState().endGesture();
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    startPointerGesture(store, `resize:${node.id}`, onMove);
   };
 
   const startRotate = (downEvent: ReactPointerEvent) => {
@@ -185,7 +179,6 @@ function SingleSelectionOverlay({
     const pivotWorld = { x: node.transform.x, y: node.transform.y };
     const grabWorld = viewport.toWorld({ x: downEvent.clientX, y: downEvent.clientY });
     const grabOffset = angleBetween(pivotWorld, grabWorld) - node.transform.rotation;
-    store.getState().beginGesture(`rotate:${node.id}`);
 
     const onMove = (moveEvent: PointerEvent) => {
       const pointerWorld = viewport.toWorld({ x: moveEvent.clientX, y: moveEvent.clientY });
@@ -197,13 +190,7 @@ function SingleSelectionOverlay({
         patch: { rotation },
       });
     };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      store.getState().endGesture();
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    startPointerGesture(store, `rotate:${node.id}`, onMove);
   };
 
   const rotateHandleLocal = { x: node.size.width / 2, y: -24 / camera.zoom };
@@ -360,7 +347,6 @@ function ImageCropHandles({
     downEvent.stopPropagation();
     const startWorld = viewport.toWorld({ x: downEvent.clientX, y: downEvent.clientY });
     const startCrop = crop;
-    store.getState().beginGesture(`crop:${node.id}:${handle}`);
 
     const onMove = (moveEvent: PointerEvent) => {
       const currentWorld = viewport.toWorld({ x: moveEvent.clientX, y: moveEvent.clientY });
@@ -377,13 +363,7 @@ function ImageCropHandles({
         patch: { crop: nextCrop },
       });
     };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      store.getState().endGesture();
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    startPointerGesture(store, `crop:${node.id}:${handle}`, onMove);
   };
 
   return (
@@ -427,7 +407,6 @@ function MultiSelectionOverlay({ nodes, activePageId }: { nodes: Node[]; activeP
     const pivotWorld = bounds.pivot;
     const grabWorld = viewport.toWorld({ x: downEvent.clientX, y: downEvent.clientY });
     let lastAngle = angleBetween(pivotWorld, grabWorld);
-    store.getState().beginGesture('group-rotate');
 
     const onMove = (moveEvent: PointerEvent) => {
       const pointerWorld = viewport.toWorld({ x: moveEvent.clientX, y: moveEvent.clientY });
@@ -443,13 +422,7 @@ function MultiSelectionOverlay({ nodes, activePageId }: { nodes: Node[]; activeP
         });
       }
     };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      store.getState().endGesture();
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    startPointerGesture(store, 'group-rotate', onMove);
   };
 
   const rotateHandlePos = viewport.toScreen({

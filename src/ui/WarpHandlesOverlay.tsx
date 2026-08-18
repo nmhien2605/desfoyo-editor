@@ -2,6 +2,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useEditorStoreApi } from './EditorContext';
 import type { Viewport } from '../render/viewport';
 import { rotateVector } from '../render/interactions/resizeMath';
+import { startPointerGesture } from '../render/interactions/pointerGesture';
 import { getLoadedFont } from '../text/fontService';
 import { resolveWarpPath, textGeometry } from '../text/textGeometry';
 import { clampPathX, curveHeightOf } from '../text/warp';
@@ -138,7 +139,6 @@ export function WarpHandlesOverlay({
     // lưu — không còn khái niệm bake/fit, nên khi ghi vào warp.paths, hình
     // hiển thị không đổi — điều user thấy lúc thả tay chính là điều được lưu.
     const startPath = path;
-    store.getState().beginGesture(`warp-handle:${node.id}`);
 
     const onMove = (moveEvent: PointerEvent) => {
       const currentWorld = viewport.toWorld({ x: moveEvent.clientX, y: moveEvent.clientY });
@@ -164,13 +164,7 @@ export function WarpHandlesOverlay({
         } as Partial<Node>,
       });
     };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      store.getState().endGesture();
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    startPointerGesture(store, `warp-handle:${node.id}`, onMove);
   };
 
   const polyline = path.anchors
