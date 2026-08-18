@@ -1,12 +1,12 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useEditorStoreApi } from './EditorContext';
 import type { Viewport } from '../render/viewport';
-import { rotateVector } from '../render/interactions/resizeMath';
+import { rotateVector, computeResize } from '../render/interactions/resizeMath';
 import { startPointerGesture } from '../render/interactions/pointerGesture';
 import { getLoadedFont } from '../text/fontService';
 import { resolveWarpPath, textGeometry } from '../text/textGeometry';
 import { clampPathX, curveHeightOf } from '../text/warp';
-import type { Node, TextNode, WarpAnchor, WarpPath } from '../schema';
+import type { Node, TextNode, Transform, WarpAnchor, WarpPath } from '../schema';
 
 export type HandleRef = { anchor: number; kind: 'anchor' | 'in' | 'out' };
 
@@ -96,6 +96,25 @@ export function movePathPoint(
   return { ...path, anchors };
 }
 
+// Keo anchor DAU hoac CUOI theo x = keo mep node giong het 1 resize handle
+// thuong ('w'/'e') — tai dung computeResize (dung chung voi SelectionOverlay)
+// thay vi tu viet lai cong thuc pivot/world-anchor. worldDelta.y luon bi bo
+// qua: 'w'/'e' khong doi height (computeResize.growY = 0 cho hai handle nay),
+// truyen 0 cho ro rang thay vi phu thuoc vao chi tiet noi bo do. Anchor giua
+// va moi handle (in/out) khong resize — chi 2 dau mut cua path moi la mep
+// node (docs/superpowers/specs/2026-08-18-warp-endpoint-resize-design.md).
+export function endpointResize(
+  node: Node,
+  ref: HandleRef,
+  lastAnchorIndex: number,
+  worldDelta: { x: number; y: number },
+): { size: { width: number; height: number }; transform: { x: number; y: number } } | null {
+  if (ref.kind !== 'anchor') return null;
+  if (ref.anchor === 0) return computeResize(node, 'w', { x: worldDelta.x, y: 0 });
+  if (ref.anchor === lastAnchorIndex) return computeResize(node, 'e', { x: worldDelta.x, y: 0 });
+  return null;
+}
+
 // Path và point vẽ bằng DOM overlay ở toạ độ màn hình, không vẽ vào Pixi —
 // cùng cách SelectionOverlay.tsx đang làm với handle resize/crop, nên dùng
 // lại được toàn bộ toWorld/toScreen và beginGesture/endGesture.
@@ -149,11 +168,13 @@ export function WarpHandlesOverlay({
         y: local.y / (node.transform.scaleY || 1) / box.height,
       };
       const nextPath = clampPathX(movePathPoint(startPath, ref, delta));
+      const resize = endpointResize(node, ref, startPath.anchors.length - 1, worldDelta);
       store.getState().dispatch({
         type: 'UpdateProps',
         pageId: activePageId,
         nodeId: node.id,
         patch: {
+          ...(resize ? { size: resize.size } : {}),
           warp: {
             type: node.warp?.type ?? 'wave',
             // Slider phai theo kip path vua keo, neu khong lan keo slider ke
@@ -163,6 +184,14 @@ export function WarpHandlesOverlay({
           },
         } as Partial<Node>,
       });
+      if (resize) {
+        store.getState().dispatch({
+          type: 'UpdateTransform',
+          pageId: activePageId,
+          nodeId: node.id,
+          patch: { x: resize.transform.x, y: resize.transform.y } as Partial<Transform>,
+        });
+      }
     };
     startPointerGesture(store, `warp-handle:${node.id}`, onMove);
   };
