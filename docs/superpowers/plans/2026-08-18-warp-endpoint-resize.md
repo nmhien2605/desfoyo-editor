@@ -1,5 +1,23 @@
 # Warp Endpoint Resize Implementation Plan
 
+> **Kết quả thực tế (2026-08-18):** Task 1 đã triển khai và giữ lại. Task 2
+> (dispatch thêm `size`/`transform` qua `computeResize` khi kéo anchor
+> đầu/cuối) đã bị **revert** sau final whole-branch review — review phát
+> hiện lỗi Critical: `computeResize`'s pivot math giả định local frame co
+> giãn theo `node.size.width`, nhưng path ở đây chuẩn hoá theo `box.width`
+> (từ `textGeometry()`, cố ý độc lập với `node.size`) — nên `transform.x`
+> (từ `computeResize`) và `anchor.x` (theo `box.width` không đổi) cộng dồn
+> delta thay vì bù trừ, khiến handle di chuyển ~2x tốc độ con trỏ và lệch xa
+> dần khi kéo tiếp. Verify độc lập bằng số cụ thể xác nhận đúng lỗi này.
+> Also found: zero `worldDelta.y` trước khi vào `computeResize` sai với node
+> đã xoay (hàm tự unrotate bên trong).
+>
+> Quan trọng hơn: verify riêng cho thấy **chỉ Task 1** đã cho đúng hành vi
+> mong muốn (kéo dài path, mép trái bám cursor, mép phải đứng yên) — vì
+> `node.size` không hề chi phối việc render text (`buildWarpMap` dùng
+> `box.width` từ layout, độc lập `node.size`). Task 2 vừa thừa vừa gây lỗi.
+> Người dùng chọn bỏ hẳn Task 2 (revert commit `2d8ab4a`, xem `112b6fc`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Cho phép kéo tự do 2 anchor đầu/cuối của wave warp path theo trục x (hiện bị `clampPathX` ghim cứng về 0/1), và khi kéo thì `node.size`/`node.transform` của text node resize theo — neo mép đối diện đứng yên trong world space, dùng đúng cơ chế `computeResize` đã có cho các resize handle khác trong app.
