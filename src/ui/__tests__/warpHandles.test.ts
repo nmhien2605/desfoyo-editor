@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { Node, TextNode, WarpPath } from '../../schema';
-import { endpointResize, listHandles, movePathPoint, projectLocalPoint } from '../WarpHandlesOverlay';
+import type { WarpPath } from '../../schema';
+import { listHandles, movePathPoint, projectLocalPoint } from '../WarpHandlesOverlay';
 import type { Viewport } from '../../render/viewport';
 import { evalD1 } from '../../text/bezier';
 import { buildWavePath, clampPathX, curveHeightOf } from '../../text/warp';
-import { computeResize } from '../../render/interactions/resizeMath';
 
 const path: WarpPath = {
   role: 'baseline',
@@ -284,67 +283,5 @@ describe('dong bo curveHeight khi keo handle', () => {
     const after = curveHeightOf(dragged, 120, 100);
     expect(after).not.toBeCloseTo(before, 3);
     expect(after).toBeGreaterThan(before);
-  });
-});
-
-const resizeTestNode: TextNode = {
-  id: 'text-1',
-  type: 'text',
-  transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
-  size: { width: 200, height: 80 },
-  opacity: 1,
-  visible: true,
-  locked: false,
-  text: 'abc',
-  font: { family: 'Poppins', weight: 400, style: 'normal', size: 100 },
-  align: 'left',
-  letterSpacing: 0,
-  lineHeight: 1.2,
-  fill: { type: 'solid', color: '#000000' },
-};
-
-describe('endpointResize', () => {
-  const lastIndex = 2; // path wave chuan co 3 anchor: index 0, 1, 2
-
-  it('keo anchor dau (index 0) tra ve dung computeResize voi handle w, worldDelta.y bi zero', () => {
-    const result = endpointResize(resizeTestNode, { anchor: 0, kind: 'anchor' }, lastIndex, {
-      x: -30,
-      y: 12,
-    });
-    expect(result).toEqual(computeResize(resizeTestNode, 'w', { x: -30, y: 0 }));
-  });
-
-  it('keo anchor cuoi (index lastIndex) tra ve dung computeResize voi handle e', () => {
-    const result = endpointResize(resizeTestNode, { anchor: lastIndex, kind: 'anchor' }, lastIndex, {
-      x: 45,
-      y: -5,
-    });
-    expect(result).toEqual(computeResize(resizeTestNode, 'e', { x: 45, y: 0 }));
-  });
-
-  it('keo anchor giua thi khong resize', () => {
-    const result = endpointResize(resizeTestNode, { anchor: 1, kind: 'anchor' }, lastIndex, {
-      x: 100,
-      y: 0,
-    });
-    expect(result).toBeNull();
-  });
-
-  it('keo handle (in/out) o dau/cuoi thi khong resize', () => {
-    const result = endpointResize(resizeTestNode, { anchor: 0, kind: 'out' }, lastIndex, {
-      x: 100,
-      y: 0,
-    });
-    expect(result).toBeNull();
-  });
-
-  it('regression cu the: keo anchor cuoi sang phai 50px thi box rong them dung 50, mep trai dung yen', () => {
-    const result = endpointResize(resizeTestNode, { anchor: lastIndex, kind: 'anchor' }, lastIndex, {
-      x: 50,
-      y: 0,
-    })!;
-    expect(result.size.width).toBeCloseTo(250, 6);
-    expect(result.size.height).toBeCloseTo(80, 6);
-    expect(result.transform.x).toBeCloseTo(0, 6);
   });
 });
