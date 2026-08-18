@@ -15,7 +15,7 @@ export interface SelectionBounds {
 // Multi-select is NOT a GroupNode — this only ever applies deltas to each
 // node's own transform, never wraps them in a group. Real GroupNode
 // transform needs no special math (Pixi's container nesting handles it),
-// this module is only for ungrouped multi-select. See CONTEXT.md "Node".
+// this module is only for ungrouped multi-select.
 export function computeSelectionBounds(nodes: Node[]): SelectionBounds {
   const corners = nodes.flatMap((node) => nodeWorldCorners(node));
   const min = { x: Math.min(...corners.map((c) => c.x)), y: Math.min(...corners.map((c) => c.y)) };

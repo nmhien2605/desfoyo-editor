@@ -43,7 +43,7 @@ export function rotateVector(v: { x: number; y: number }, angle: number) {
 
 // The one genuinely fiddly bit of Phase 1: opposite-corner-anchored resize
 // needs the pivot's new world position recomputed, since transform.x/y is
-// the pivot (see CONTEXT.md "Node"), not a corner. Isolated here as a pure,
+// the pivot, not a corner. Isolated here as a pure,
 // unit-testable function so it doesn't get buried in event-handler code.
 export function computeResize(
   node: Node,

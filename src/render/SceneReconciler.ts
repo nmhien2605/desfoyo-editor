@@ -55,8 +55,7 @@ function findPage(doc: Document, pageId: string): Page | undefined {
 // they restructure multiple nodes across containers atomically, so those
 // two rebuild the scene from the page rather than doing surgical Pixi
 // container moves — group/ungroup are one-shot structural actions, not a
-// per-frame gesture, so this isn't a perf concern. See CONTEXT.md
-// "Command" and "Node".
+// per-frame gesture, so this isn't a perf concern.
 export class SceneReconciler {
   private displayObjects = new Map<string, Container>();
   private layer: Container;

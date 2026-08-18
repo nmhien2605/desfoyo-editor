@@ -64,11 +64,21 @@ interface TextNode extends BaseNode {
   letterSpacing: number;
   lineHeight: number;
   fill: Fill;              // màu/gradient/texture
-  // Biến dạng text
+  // Biến dạng text — xem src/schema/warp.ts và
+  // docs/superpowers/specs/2026-08-17-text-warp-arclength-design.md
   warp?: {
-    type: 'none' | 'arc' | 'wave' | 'bulge' | 'flag' | 'perspective' | 'path';
-    intensity: number;
-    pathId?: string;       // nếu type = 'path'
+    type: 'none' | 'wave' | 'arch' | 'rise' | 'flag' | 'circle' | 'angle' | 'distort' | 'custom';
+    // Biên độ dao động dọc, bội số của fontSize, có dấu — cùng đơn vị
+    // `curveHeight` của Kittl. Chỉ 'wave' đã hiện thực (TransformationControls
+    // .ENABLED_WARP_TYPES); các type còn lại chừa chỗ cho sau.
+    curveHeight: number;
+    // Vắng mặt = chế độ preset (path sinh từ type + curveHeight). Có mặt
+    // (sau khi kéo handle) thì path là nguồn sự thật, slider chỉ đọc ngược.
+    paths?: {
+      role: 'baseline' | 'top' | 'bottom';
+      closed: boolean;
+      anchors: { x: number; y: number; in?: { x: number; y: number }; out?: { x: number; y: number } }[];
+    }[];
   };
 }
 ```

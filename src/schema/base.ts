@@ -14,7 +14,7 @@ export type BlendMode = z.infer<typeof BlendModeSchema>;
 // x/y = position of the pivot point (not the unrotated top-left corner).
 // originX/originY (0..1) locate the pivot inside the node's own bounding box.
 // Rotation/scale happen in place around (x, y) — no recompute of x/y needed
-// after a rotation. See plan/04-data-model.md and CONTEXT.md ("Node").
+// after a rotation. See docs/04-data-model.md.
 export const TransformSchema = z.object({
   x: z.number(),
   y: z.number(),

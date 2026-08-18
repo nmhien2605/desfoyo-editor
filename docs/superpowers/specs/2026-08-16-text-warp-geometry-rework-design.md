@@ -22,6 +22,7 @@ QC (`QC/qc.md` + ảnh so sánh) chỉ ra wave đang cho ra biến dạng kiểu
 ### 1.2 Không phải lỗi (đã kiểm, ghi lại để khỏi sửa nhầm)
 
 - **Hit-test chọn node**: `drag.ts:27` đặt `eventMode='static'` trên chính `Graphics`; Pixi hit-test theo hình đã vẽ → đã đúng với chữ đã warp.
+  **Erratum (commit `5b7db6e`, sau ngày viết spec này):** hành vi đã đổi có chủ ý — `textRenderer.ts` giờ đặt `hitArea` bằng bbox chữ, không còn hit-test theo ink nữa, để sửa bug bấm vào khoảng trắng giữa hai ký tự bị hiểu là bấm ra nền (mất chọn). Ghi chú "không phải lỗi" ở trên chỉ đúng tại thời điểm viết spec.
 - **Bbox export SVG**: text serialize thành `<g${groupAttrs}>` không phát `width/height`; viewBox lấy theo page size → không phụ thuộc `node.size`.
 - **`node.size` lệch khỏi hình đã warp**: có thật, nhưng **không được sửa bằng cách đổi `node.size`** — xem §2.4.
 

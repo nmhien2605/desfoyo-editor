@@ -303,6 +303,7 @@ export function textGeometry(node: TextNode, font: Font): TextGeometry {
 - Bỏ mọi thứ liên quan `resolveWarpGeometry`/bake — gọi thẳng `resolveWarpPath(node, geometry.baselineY / geometry.height)`.
 - Thêm **kẹp hoành độ** khi kéo (§2.3): với anchor thứ `i`, `x` bị kẹp trong `(x[i-1], x[i+1])`; với handle, kẹp trong khoảng của anchor chủ và anchor kề theo hướng handle. Giữ path luôn là hàm của `x`.
 - Phần chiếu toạ độ (`projectLocalPoint`, `toScreen`) không đổi.
+- **Bổ sung sau spec (commit `876d25f`):** khi kéo handle của một anchor "smooth" (có cả `in` và `out`), handle đối diện tự xoay theo để giữ tiếp tuyến mượt qua anchor đó — UX thường thấy ở công cụ vector, không nằm trong bất kỳ mục nào ở trên nhưng không mâu thuẫn với chúng.
 
 ### 5.8 `src/ui/SelectionOverlay.tsx`
 

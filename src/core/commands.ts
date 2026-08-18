@@ -4,7 +4,7 @@ import type { Transform } from '../schema';
 // Every document mutation goes through one of these. No direct model
 // mutation path exists — the SceneReconciler relies on each command already
 // knowing the exact nodeId(s) it affects to do targeted updates instead of
-// diffing the whole tree. See CONTEXT.md "Command".
+// diffing the whole tree.
 //
 // parentId on AddNode/RemoveNode/Reorder: which container the node lives in
 // — undefined/null means page.children directly, otherwise the id of the

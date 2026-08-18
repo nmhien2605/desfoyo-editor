@@ -4,8 +4,8 @@ import { FillSchema, StrokeSchema } from './fill-stroke';
 import { WarpSchema } from './warp';
 
 // 'shape' | 'image' | 'group' are valid node types.
-// 'svg' arrived in Phase 4 Pass E (see CONTEXT.md "Node" and
-// plan/04-data-model.md) — Zod previously rejected it as out-of-phase.
+// 'svg' arrived in Phase 4 Pass E (see docs/04-data-model.md) — Zod
+// previously rejected it as out-of-phase.
 
 export const ShapeNodeSchema = z.object({
   ...BaseNodeShape,
@@ -41,7 +41,7 @@ export type ImageNode = z.infer<typeof ImageNodeSchema>;
 // AssetRef of type 'svg'); overrides recolors specific elements by their
 // SVG `id` attribute. v1 only actually applies solid-color overrides (see
 // svgRenderer.ts's applyOverrides) — gradient overrides are declared here
-// to match plan/04-data-model.md's Record<string, Fill> shape but are
+// to match docs/04-data-model.md's Record<string, Fill> shape but are
 // silently inert for now, same convention buildFilters.ts's unknown
 // 'custom' shaderId already uses.
 export const SvgNodeSchema = z.object({
@@ -54,7 +54,7 @@ export type SvgNode = z.infer<typeof SvgNodeSchema>;
 
 // TextNode: text là nội dung thô, mọi hình học suy ra từ đó tại render time
 // (src/text/textGeometry.ts) chứ không lưu trong model. `align: 'justify'` mà
-// plan/04-data-model.md nêu bị cắt khỏi v1 — justify cần auto-wrap, xem
+// docs/04-data-model.md nêu bị cắt khỏi v1 — justify cần auto-wrap, xem
 // docs/text-future-work.md mục 2.
 export const TextNodeSchema = z.object({
   ...BaseNodeShape,
@@ -74,7 +74,7 @@ export const TextNodeSchema = z.object({
 });
 export type TextNode = z.infer<typeof TextNodeSchema>;
 
-// GroupNode per plan/04-data-model.md: exactly BaseNode + children, no other
+// GroupNode per docs/04-data-model.md: exactly BaseNode + children, no other
 // fields. z.lazy() is required because NodeSchema is now self-referential
 // (a group's children can themselves include groups).
 export interface GroupNode extends BaseNode {

@@ -11,7 +11,7 @@ export interface TreeLocation {
 
 // The single place recursive node lookup happens — every call site (store
 // dispatch, SceneReconciler, LayersPanel) routes through this instead of
-// duplicating tree-walk logic. See CONTEXT.md "Node" and "Command".
+// duplicating tree-walk logic.
 export function findNodeInTree(
   children: Node[],
   nodeId: string,

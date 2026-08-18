@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-// Full Effect union per plan/04-data-model.md. This is a type/validation
+// Full Effect union per docs/04-data-model.md. This is a type/validation
 // surface only — Phase 1 wires up just one demo filter (e.g. shadow) at the
 // render layer; the rest of the union costs nothing to declare now and
 // avoids a schema migration when later phases add the renderer for them.

@@ -4,7 +4,7 @@ export interface Point {
 }
 
 // Trivial compared to resize since rotation is already pivot-centered by
-// convention (see CONTEXT.md "Node") — no anchor recomputation needed.
+// convention — no anchor recomputation needed.
 export function angleBetween(pivotWorld: Point, pointWorld: Point): number {
   return Math.atan2(pointWorld.y - pivotWorld.y, pointWorld.x - pivotWorld.x);
 }

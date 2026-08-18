@@ -16,7 +16,6 @@ const SNAP_THRESHOLD_PX = 6;
 // zoom/pan transform (Phase 2). If multiple nodes are selected, dragging
 // any one of them moves the whole selection by the same delta — this is
 // NOT a GroupNode, just independent per-node UpdateTransform dispatches.
-// See CONTEXT.md "Node" and "Command".
 export function attachDrag(
   obj: Container,
   node: Node,

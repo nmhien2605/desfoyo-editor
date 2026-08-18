@@ -13,7 +13,7 @@ export async function decodeSvgText(dataUri: string): Promise<string> {
 
 // v1 only applies solid-color overrides — gradient overrides are declared
 // in the schema (SvgNodeSchema.overrides: Record<string, Fill>) to match
-// plan/04-data-model.md, but silently ignored here, same convention
+// docs/04-data-model.md, but silently ignored here, same convention
 // buildFilters.ts's unknown 'custom' shaderId already uses. Unknown ids
 // (no matching element) are also silently no-ops.
 export function applyOverrides(svgText: string, overrides: Record<string, Fill> | undefined): string {

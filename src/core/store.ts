@@ -29,8 +29,8 @@ export const MAX_ZOOM = 8;
 export interface EditorStore {
   // documentSlice — mutated only via dispatch(). lastCommand is stamped
   // alongside every mutation so the SceneReconciler can do a single
-  // targeted update instead of diffing the whole document. See CONTEXT.md
-  // "Command". Setting lastCommand to null (undo/redo) signals CanvasHost
+  // targeted update instead of diffing the whole document. Setting
+  // lastCommand to null (undo/redo) signals CanvasHost
   // to do a full rebuild instead of a targeted apply().
   document: Document;
   lastCommand: Command | null;

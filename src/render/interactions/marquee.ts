@@ -29,7 +29,7 @@ function intersects(rect: Rect, bounds: { min: { x: number; y: number }; max: { 
 
 // Rubber-band select: only fires from a `stage` pointerdown, which — since
 // every node's own pointerdown handler in drag.ts calls stopPropagation() —
-// only bubbles up here on an empty-canvas click. See CONTEXT.md "Selection".
+// only bubbles up here on an empty-canvas click.
 export function attachMarquee(stage: Container, pageContainer: Container, store: EditorStoreApi): void {
   stage.on('pointerdown', (event: FederatedPointerEvent) => {
     if (event.target !== stage) return;
