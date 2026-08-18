@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { nanoid } from 'nanoid';
 import { useEditorStore, useEditorStoreApi, useCanvasContext } from './EditorContext';
+import { activePage } from '../core/store';
 import {
   deleteSelection,
   groupSelection,
@@ -120,7 +121,7 @@ export function Toolbar() {
   const selectedNodeIds = useEditorStore((s) => s.selectedNodeIds);
   const canUndo = useEditorStore((s) => s.past.length > 0);
   const canRedo = useEditorStore((s) => s.future.length > 0);
-  const isSingleGroup = useEditorStore(() => isSingleGroupSelected(store) !== null);
+  const isSingleGroup = useEditorStore((_state) => isSingleGroupSelected(store) !== null);
   const grid = useEditorStore((s) => s.grid);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const svgInputRef = useRef<HTMLInputElement>(null);
@@ -128,7 +129,7 @@ export function Toolbar() {
 
   const handleFitToScreen = () => {
     if (!app) return;
-    const page = store.getState().document.pages.find((p) => p.id === activePageId);
+    const page = activePage(store.getState());
     if (!page) return;
     fitToScreen(store, { width: app.screen.width, height: app.screen.height }, page.size);
   };

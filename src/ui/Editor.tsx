@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type DragEvent } from 'react';
 import type { Application, Container } from 'pixi.js';
-import { createEditorStore, type EditorStoreApi } from '../core/store';
+import { activePage, createEditorStore, type EditorStoreApi } from '../core/store';
 import { DocumentSchema, type Document } from '../schema';
 import { EditorStoreProvider, CanvasProvider, type CanvasContextValue } from './EditorContext';
 import { CanvasHost } from './CanvasHost';
@@ -74,8 +74,9 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
 
         const reconciler = reconcilerRef.current;
         if (!reconciler) throw new Error('Editor is not mounted yet');
-        const { document: doc, activePageId } = store.getState();
-        const page = doc.pages.find((p) => p.id === activePageId) ?? doc.pages[0];
+        const state = store.getState();
+        const doc = state.document;
+        const page = activePage(state) ?? doc.pages[0];
         const svg = await exportSvg(app, page, doc, reconciler);
         return new Blob([svg], { type: 'image/svg+xml' });
       },

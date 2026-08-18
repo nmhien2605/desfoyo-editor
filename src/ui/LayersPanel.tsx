@@ -1,5 +1,6 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
+import { activePage } from '../core/store';
 import type { Node } from '../schema';
 
 function labelFor(node: Node): string {
@@ -14,9 +15,7 @@ function labelFor(node: Node): string {
 // children the same way.
 export function LayersPanel() {
   const activePageId = useEditorStore((s) => s.activePageId);
-  const children = useEditorStore(
-    (s) => s.document.pages.find((p) => p.id === s.activePageId)?.children ?? [],
-  );
+  const children = useEditorStore((s) => activePage(s)?.children ?? []);
 
   return (
     <div className="w-56 border-l border-gray-200 p-2">

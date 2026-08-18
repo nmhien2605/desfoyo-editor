@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
+import { activePage } from '../core/store';
+import { findNodeInTree } from '../core/tree';
 import { customShaders } from '../effects/shaders/customShaders';
 import { decodeSvgText, listFillableIds } from '../render/renderers/svgRenderer';
 import { getLoadedFont, onFontLoaded, registeredFamilies } from '../text/fontService';
 import { measureText } from '../text/textGeometry';
 import { TransformationControls } from './TransformationControls';
-import type { BlendMode, Effect, Fill, ImageNode, Node, Stroke, SvgNode, TextNode } from '../schema';
+import type { BlendMode, Document, Effect, Fill, ImageNode, Node, Stroke, SvgNode, TextNode } from '../schema';
 
 const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten'];
 const STROKE_ALIGNS: Stroke['align'][] = ['inside', 'center', 'outside'];
@@ -53,15 +55,25 @@ function withStopColor(fill: Fill, index: number, color: string): Fill {
 // Minimal single-selection properties panel: fill (solid/gradient), opacity,
 // blend mode, and (shapes only) stroke. Schema already supports all of this
 // (src/schema/fill-stroke.ts) — this is the first UI surface for it.
+// findNodeInTree (khong phai children.find phang): node duoc chon co the
+// nam trong group, xem SelectionOverlay.tsx cho cung ly do. Tach rieng de
+// test doc lap khong can render component.
+export function singleSelectedNode(state: {
+  document: Document;
+  activePageId: string;
+  selectedNodeIds: Set<string>;
+}): Node | null {
+  if (state.selectedNodeIds.size !== 1) return null;
+  const [id] = state.selectedNodeIds;
+  const page = activePage(state);
+  return page ? (findNodeInTree(page.children, id)?.node ?? null) : null;
+}
+
 export function PropertiesPanel() {
   const store = useEditorStoreApi();
   const activePageId = useEditorStore((s) => s.activePageId);
   const selectedNodeIds = useEditorStore((s) => s.selectedNodeIds);
-  const node = useEditorStore((s) => {
-    if (s.selectedNodeIds.size !== 1) return null;
-    const [id] = s.selectedNodeIds;
-    return s.document.pages.find((p) => p.id === s.activePageId)?.children.find((n) => n.id === id) ?? null;
-  });
+  const node = useEditorStore(singleSelectedNode);
   if (selectedNodeIds.size !== 1 || !node) return <div className="w-64 border-l border-gray-200 p-2 text-sm text-gray-400">No selection</div>;
 
   const updateProps = (patch: Partial<Node>) => {
@@ -589,9 +601,7 @@ function TextControls({ node, onChange }: { node: TextNode; onChange: (patch: Pa
     const nodeId = node.id;
     return onFontLoaded((family) => {
       const state = store.getState();
-      const current = state.document.pages
-        .find((p) => p.id === state.activePageId)
-        ?.children.find((n) => n.id === nodeId);
+      const current = findNodeInTree(activePage(state)?.children ?? [], nodeId)?.node;
       if (!current || current.type !== 'text' || current.font.family !== family) return;
       const font = getLoadedFont(family)?.font;
       if (!font) return;

@@ -1,5 +1,5 @@
 import type { Container, FederatedPointerEvent } from 'pixi.js';
-import type { EditorStoreApi } from '../../core/store';
+import { activePage, type EditorStoreApi } from '../../core/store';
 import { nodeBounds } from './groupTransformMath';
 
 export interface Rect {
@@ -51,8 +51,7 @@ export function attachMarquee(stage: Container, pageContainer: Container, store:
       store.getState().setMarqueeRect(null);
       if (!rect) return;
 
-      const { document, activePageId } = store.getState();
-      const page = document.pages.find((p) => p.id === activePageId);
+      const page = activePage(store.getState());
       if (!page) return;
       for (const node of page.children) {
         if (intersects(rect, nodeBounds(node))) store.getState().select(node.id, 'toggle');

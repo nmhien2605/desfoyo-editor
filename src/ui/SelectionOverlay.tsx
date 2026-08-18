@@ -9,9 +9,11 @@ import {
   applyGroupRotate,
 } from '../render/interactions/groupTransformMath';
 import { startPointerGesture } from '../render/interactions/pointerGesture';
+import { activePage } from '../core/store';
+import { findNodeInTree } from '../core/tree';
 import type { Rect } from '../render/interactions/marquee';
 import type { SnapGuide } from '../render/interactions/snapping';
-import type { ImageNode, Node, Transform } from '../schema';
+import type { Document, ImageNode, Node, Transform } from '../schema';
 import { getLoadedFont } from '../text/fontService';
 import { textGeometry } from '../text/textGeometry';
 import { TextEditOverlay } from './TextEditOverlay';
@@ -63,21 +65,33 @@ function worldPoint(node: Node, local: Point): Point {
   return { x: transform.x + offset.x, y: transform.y + offset.y };
 }
 
+// findNodeInTree (khong phai children.filter phang): node duoc chon co the
+// nam trong group — loc phang chi bat top-level children se lam khung
+// chon/handle bien mat cho node trong group du no van dang duoc chon
+// (tree.ts: day la noi DUY NHAT tra cuu node de qui, moi noi khac phai qua
+// day). Tach rieng de test doc lap khong can render component.
+export function selectedNodesOf(state: {
+  document: Document;
+  activePageId: string;
+  selectedNodeIds: Set<string>;
+}): Node[] {
+  const page = activePage(state);
+  if (!page) return [];
+  return Array.from(state.selectedNodeIds)
+    .map((id) => findNodeInTree(page.children, id)?.node)
+    .filter((n): n is Node => !!n);
+}
+
 export function SelectionOverlay() {
   const { canvas } = useCanvasContext();
   const activePageId = useEditorStore((s) => s.activePageId);
   const camera = useEditorStore((s) => s.camera);
   const marqueeRect = useEditorStore((s) => s.marqueeRect);
   const activeGuides = useEditorStore((s) => s.activeGuides);
-  // useShallow: .filter() below allocates a new array every call — without
+  // useShallow: selectedNodesOf allocates a new array every call — without
   // shallow comparison, useSyncExternalStore sees a "new" snapshot on every
   // render (even when the selection is unchanged) and loops.
-  const selectedNodes = useEditorStore(
-    useShallow((s) => {
-      const children = s.document.pages.find((p) => p.id === s.activePageId)?.children ?? [];
-      return children.filter((n) => s.selectedNodeIds.has(n.id));
-    }),
-  );
+  const selectedNodes = useEditorStore(useShallow(selectedNodesOf));
 
   if (!canvas) return null;
   const viewport = createViewport(canvas, () => camera);

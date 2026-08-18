@@ -6,7 +6,7 @@ import { attachViewportControls, attachPan } from '../render/interactions/viewpo
 import { attachMarquee } from '../render/interactions/marquee';
 import { fillToColor } from '../render/fillToColor';
 import { useEditorStoreApi } from './EditorContext';
-import type { GridSettings } from '../core/store';
+import { activePage, type GridSettings } from '../core/store';
 import type { Document, Page, PageBackground, Size } from '../schema';
 
 function backgroundColor(bg: PageBackground) {
@@ -52,8 +52,8 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
     let detachPan: (() => void) | null = null;
 
     (async () => {
-      const { document, activePageId } = store.getState();
-      const page = document.pages.find((p) => p.id === activePageId) ?? document.pages[0];
+      const state = store.getState();
+      const page = activePage(state) ?? state.document.pages[0];
 
       await app.init({
         width: page.size.width,
@@ -102,7 +102,7 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
       reconciler = new SceneReconciler(pageContainer, (obj, node) => {
         attachDrag(obj, node, store, app.stage, pageContainer);
       });
-      reconciler.mount(page, document);
+      reconciler.mount(page, state.document);
       if (reconcilerRef) reconcilerRef.current = reconciler;
 
       // Shared by both "load a whole new document" and "switch active
@@ -131,8 +131,7 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
           // Wholesale replacement (EditorHandle.loadDocument), not a
           // command-driven change — rebuild the scene from scratch rather
           // than trying to targeted-diff into an unrelated document.
-          const newPage =
-            state.document.pages.find((p) => p.id === state.activePageId) ?? state.document.pages[0];
+          const newPage = activePage(state) ?? state.document.pages[0];
           remountPage(newPage, state.document);
           return;
         }
@@ -141,8 +140,7 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
           // from a page that no longer exists) changes what should be on
           // screen without necessarily touching `document`/`lastCommand`
           // in a way the branches below react to — remount explicitly.
-          const newPage =
-            state.document.pages.find((p) => p.id === state.activePageId) ?? state.document.pages[0];
+          const newPage = activePage(state) ?? state.document.pages[0];
           remountPage(newPage, state.document);
           return;
         }

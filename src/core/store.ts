@@ -384,3 +384,10 @@ export function createEditorStore(initialDocument: Document) {
 }
 
 export type EditorStoreApi = ReturnType<typeof createEditorStore>;
+
+// document.pages.find((p) => p.id === state.activePageId) lap lai o hon 10
+// noi (actions.ts, CanvasHost.tsx, Editor.tsx, Toolbar.tsx, marquee.ts,
+// drag.ts, SceneReconciler.ts, cac panel...) — gop ve day.
+export function activePage(state: Pick<EditorStore, 'document' | 'activePageId'>): Page | undefined {
+  return state.document.pages.find((p) => p.id === state.activePageId);
+}

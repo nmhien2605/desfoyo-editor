@@ -1,4 +1,4 @@
-import type { EditorStoreApi } from '../core/store';
+import { activePage, type EditorStoreApi } from '../core/store';
 import { deepCloneNode, findNodeInTree } from '../core/tree';
 import type { Node } from '../schema';
 
@@ -7,12 +7,13 @@ const PASTE_OFFSET = 10;
 // Plain module-level in-memory clipboard — not the OS clipboard. Real OS
 // clipboard integration is a separate feature with its own permissions
 // surface the Phase 2 spec doesn't ask for; this only needs to survive
-// within one <Editor> mount's lifetime. See CONTEXT.md "Command".
+// within one <Editor> mount's lifetime.
 let clipboard: Node[] = [];
 
 function selectedNodes(store: EditorStoreApi): Node[] {
-  const { document, activePageId, selectedNodeIds } = store.getState();
-  const page = document.pages.find((p) => p.id === activePageId);
+  const state = store.getState();
+  const { selectedNodeIds } = state;
+  const page = activePage(state);
   if (!page) return [];
   return Array.from(selectedNodeIds)
     .map((id) => findNodeInTree(page.children, id)?.node)

@@ -1,4 +1,5 @@
 import { useEditorStore, useCanvasContext } from './EditorContext';
+import { activePage } from '../core/store';
 import { createViewport } from '../render/viewport';
 
 const RULER_SIZE = 20;
@@ -18,7 +19,7 @@ export function Rulers() {
   const { canvas } = useCanvasContext();
   const camera = useEditorStore((s) => s.camera);
   const activePageId = useEditorStore((s) => s.activePageId);
-  const pageSize = useEditorStore((s) => s.document.pages.find((p) => p.id === s.activePageId)?.size);
+  const pageSize = useEditorStore((s) => activePage(s)?.size);
 
   if (!canvas || !pageSize) return null;
   const viewport = createViewport(canvas, () => camera);

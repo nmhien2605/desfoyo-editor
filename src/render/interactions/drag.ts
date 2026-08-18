@@ -1,5 +1,5 @@
 import type { Container, FederatedPointerEvent } from 'pixi.js';
-import type { EditorStoreApi } from '../../core/store';
+import { activePage, type EditorStoreApi } from '../../core/store';
 import type { Node } from '../../schema';
 import { findNodeInTree } from '../../core/tree';
 import { applyGroupMove, computeSelectionBounds, nodeBounds } from './groupTransformMath';
@@ -41,8 +41,9 @@ export function attachDrag(
     }
     if (node.locked) return;
 
-    const pageId = store.getState().activePageId;
-    const page = store.getState().document.pages.find((p) => p.id === pageId);
+    const state = store.getState();
+    const pageId = state.activePageId;
+    const page = activePage(state);
     const selectedIds = Array.from(store.getState().selectedNodeIds);
     const startNodes: Node[] = page
       ? selectedIds.map((id) => findNodeInTree(page.children, id)?.node).filter((n): n is Node => !!n)

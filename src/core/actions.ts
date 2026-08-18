@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import type { EditorStoreApi } from './store';
+import { activePage, type EditorStoreApi } from './store';
 import { findNodeInTree } from './tree';
 import { computeSelectionBounds, nodeBounds, type SelectionBounds } from '../render/interactions/groupTransformMath';
 import type { Node } from '../schema';
@@ -24,8 +24,9 @@ function edgeValue(bounds: SelectionBounds, edge: AlignEdge): number {
 }
 
 function selectedTopLevelNodes(store: EditorStoreApi): Node[] {
-  const { selectedNodeIds, document, activePageId } = store.getState();
-  const page = document.pages.find((p) => p.id === activePageId);
+  const state = store.getState();
+  const { selectedNodeIds } = state;
+  const page = activePage(state);
   if (!page) return [];
   return Array.from(selectedNodeIds)
     .map((id) => findNodeInTree(page.children, id)?.node)
@@ -116,9 +117,10 @@ export function groupSelection(store: EditorStoreApi): void {
 }
 
 export function isSingleGroupSelected(store: EditorStoreApi): string | null {
-  const { selectedNodeIds, document, activePageId } = store.getState();
+  const state = store.getState();
+  const { selectedNodeIds } = state;
   if (selectedNodeIds.size !== 1) return null;
-  const page = document.pages.find((p) => p.id === activePageId);
+  const page = activePage(state);
   const [id] = selectedNodeIds;
   if (!page || findNodeInTree(page.children, id)?.node.type !== 'group') return null;
   return id;
@@ -132,17 +134,17 @@ export function ungroupSelection(store: EditorStoreApi): void {
 }
 
 export function selectAll(store: EditorStoreApi): void {
-  const { document, activePageId } = store.getState();
-  const page = document.pages.find((p) => p.id === activePageId);
+  const page = activePage(store.getState());
   if (!page || page.children.length === 0) return;
   store.getState().select(page.children[0].id, 'replace');
   for (let i = 1; i < page.children.length; i++) store.getState().select(page.children[i].id, 'toggle');
 }
 
 export function nudgeSelection(store: EditorStoreApi, dx: number, dy: number): void {
-  const { selectedNodeIds, document, activePageId } = store.getState();
+  const state = store.getState();
+  const { selectedNodeIds } = state;
   if (selectedNodeIds.size === 0) return;
-  const page = document.pages.find((p) => p.id === activePageId);
+  const page = activePage(state);
   if (!page) return;
   store.getState().beginGesture('nudge');
   for (const id of selectedNodeIds) {
@@ -150,7 +152,7 @@ export function nudgeSelection(store: EditorStoreApi, dx: number, dy: number): v
     if (!location) continue;
     store.getState().dispatch({
       type: 'UpdateTransform',
-      pageId: activePageId,
+      pageId: page.id,
       nodeId: id,
       patch: { x: location.node.transform.x + dx, y: location.node.transform.y + dy },
     });

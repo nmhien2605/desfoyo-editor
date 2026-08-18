@@ -1,9 +1,9 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { selectionBox, updateCropHandle } from '../SelectionOverlay';
+import { selectedNodesOf, selectionBox, updateCropHandle } from '../SelectionOverlay';
 import { loadFont, registerFont } from '../../text/fontService';
-import type { TextNode } from '../../schema';
+import type { Document, GroupNode, ShapeNode, TextNode } from '../../schema';
 
 const FULL = { x: 0, y: 0, width: 1, height: 1 };
 
@@ -79,5 +79,72 @@ describe('updateCropHandle', () => {
     });
     expect(next.width).toBeLessThanOrEqual(0.5);
     expect(next.height).toBeLessThanOrEqual(0.5);
+  });
+});
+
+function shapeNode(id: string): ShapeNode {
+  return {
+    id,
+    type: 'shape',
+    transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, originX: 0.5, originY: 0.5 },
+    size: { width: 20, height: 20 },
+    opacity: 1,
+    visible: true,
+    locked: false,
+    shape: 'rect',
+    fill: { type: 'solid', color: '#000000' },
+  };
+}
+
+function groupNode(id: string, children: ShapeNode[]): GroupNode {
+  return {
+    id,
+    type: 'group',
+    transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, originX: 0.5, originY: 0.5 },
+    size: { width: 20, height: 20 },
+    opacity: 1,
+    visible: true,
+    locked: false,
+    children,
+  };
+}
+
+function makeDocument(topLevelChildren: (ShapeNode | GroupNode)[]): Document {
+  return {
+    version: 1,
+    id: 'doc-1',
+    meta: { title: 'Test', createdAt: 0, updatedAt: 0 },
+    pages: [
+      {
+        id: 'page-1',
+        name: 'Page 1',
+        size: { width: 800, height: 600 },
+        background: { type: 'color', value: '#ffffff' },
+        children: topLevelChildren,
+      },
+    ],
+    assets: {},
+  };
+}
+
+describe('selectedNodesOf', () => {
+  it('node nam trong group van co trong danh sach chon (khong bi loc phang mat)', () => {
+    const child = shapeNode('child-1');
+    const document = makeDocument([groupNode('group-1', [child])]);
+    const state = { document, activePageId: 'page-1', selectedNodeIds: new Set(['child-1']) };
+    expect(selectedNodesOf(state)).toEqual([child]);
+  });
+
+  it('node top-level van chon binh thuong', () => {
+    const node = shapeNode('top-1');
+    const document = makeDocument([node]);
+    const state = { document, activePageId: 'page-1', selectedNodeIds: new Set(['top-1']) };
+    expect(selectedNodesOf(state)).toEqual([node]);
+  });
+
+  it('khong co page dang active thi tra mang rong', () => {
+    const document = makeDocument([]);
+    const state = { document, activePageId: 'khong-ton-tai', selectedNodeIds: new Set(['x']) };
+    expect(selectedNodesOf(state)).toEqual([]);
   });
 });
