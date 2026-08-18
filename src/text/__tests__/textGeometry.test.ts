@@ -231,8 +231,11 @@ describe('bien doi theo do dai cung', () => {
     // hoanh do noi bo, X la phep noi suy theo do dai cung nen KHONG tuyen
     // tinh — be ngang bbox chi xap xi bat bien, sai khac tang theo do cong.
     // Do thuc nghiem tren 'Wave'/Poppins toi curveHeight = 4 (tran slider):
-    // toi da ~0.78px. Dat nguong 1px, ro rang tren muc do nhung van bat duoc
-    // loi that (vd he so k tinh sai lam bbox lech vai px).
+    // toi da ~1.53px (tang so voi ~0.78px truoc day vi buildWavePath gio do
+    // bien do tren duong cong that, khong phai control-polygon — cung
+    // curveHeight nhung duong cong thuc te cong hon). Dat nguong 2px, ro rang
+    // tren muc do nhung van bat duoc loi that (vd he so k tinh sai lam bbox
+    // lech vai px).
     const plain = textGeometry(textNode({ text: 'Wave' }), poppins).bounds;
     const plainW = plain.maxX - plain.minX;
     for (const curveHeight of [0.25, 1, 2, 4]) {
@@ -240,7 +243,7 @@ describe('bien doi theo do dai cung', () => {
         textNode({ text: 'Wave', warp: { type: 'wave', curveHeight } }),
         poppins,
       ).bounds;
-      expect(Math.abs(b.maxX - b.minX - plainW)).toBeLessThan(1);
+      expect(Math.abs(b.maxX - b.minX - plainW)).toBeLessThan(2);
     }
   });
 
@@ -293,7 +296,10 @@ describe('bien doi theo do dai cung', () => {
         // exact khi doan dong la doan DOC (xem warp.test.ts, nhanh MIN_DX cua
         // displaceSegment) — voi contour font that, doan dong thuong xien, nen
         // alpha+beta*x chi khop f(x) toi may bit cuoi.
-        expect(contour[contour.length - 2]).toBe(contour[0]);
+        // toBeCloseTo (khong phai toBe): affine ngoai suy va map.X() truc
+        // tiep co the lech vai bit cuoi cua so thap phan tuy thuoc a/b cua
+        // path — sai khac ~1e-13, khong phai loi hinh hoc.
+        expect(contour[contour.length - 2]).toBeCloseTo(contour[0], 9);
         expect(contour[contour.length - 1]).toBeCloseTo(contour[1], 9);
       }
     }

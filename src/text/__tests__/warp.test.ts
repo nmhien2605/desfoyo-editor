@@ -52,17 +52,23 @@ describe('buildWavePath', () => {
     expect(last.in!.y).toBeLessThan(last.y);
   });
 
-  it('khoang dao dong doc dung bang |curveHeight| * fontSize', () => {
+  it('khoang dao dong DOC TREN DUONG CONG THAT dung bang |curveHeight| * fontSize', () => {
+    // Do bang lay mau day (khong phai quet y cua anchor/handle — do la khung
+    // control-polygon, rong hon duong cong that no bao quanh) — doc lap voi
+    // pathYExtent trong warp.ts, cung triet ly voi walkPath o tren.
     for (const curve of [0.5, 1, 2.5, 4]) {
       const path = buildWavePath(curve, 0.5, FONT_SIZE, SIZE.height);
-      const ys: number[] = [];
-      for (const anchor of path.anchors) {
-        ys.push(anchor.y);
-        if (anchor.in) ys.push(anchor.in.y);
-        if (anchor.out) ys.push(anchor.out.y);
-      }
-      const spreadPx = (Math.max(...ys) - Math.min(...ys)) * SIZE.height;
-      expect(spreadPx).toBeCloseTo(curve * FONT_SIZE, 9);
+      const { lo, hi } = denseYExtent(path, SIZE);
+      expect((hi - lo) * SIZE.height).toBeCloseTo(curve * FONT_SIZE, 1);
+    }
+  });
+
+  it('trung diem dao dong DOC TREN DUONG CONG THAT nam dung tai baseline', () => {
+    for (const curve of [0.5, 1, 2, 4]) {
+      const path = buildWavePath(curve, 0.5, FONT_SIZE, SIZE.height);
+      const { lo, hi } = denseYExtent(path, SIZE);
+      const midPx = ((lo + hi) / 2) * SIZE.height;
+      expect(midPx).toBeCloseTo(0.5 * SIZE.height, 0);
     }
   });
 
@@ -144,6 +150,30 @@ function walkPath(path: WarpPath, size: { width: number; height: number }) {
   return { total, at };
 }
 
+// Cuc tri y doc lap, lay mau day thay vi giai tich — doc lap voi pathYExtent
+// noi bo cua warp.ts (cung ly do voi walkPath o tren: khong dung chung code
+// voi cai dang kiem tra).
+function denseYExtent(path: WarpPath, size: { width: number; height: number }): { lo: number; hi: number } {
+  const px = (p: { x: number; y: number }) => ({ x: p.x * size.width, y: p.y * size.height });
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = 0; i < path.anchors.length - 1; i++) {
+    const from = path.anchors[i];
+    const to = path.anchors[i + 1];
+    const p0 = px(from);
+    const p3 = px(to);
+    const c1 = from.out ? px(from.out) : p0;
+    const c2 = to.in ? px(to.in) : p3;
+    const steps = 4000;
+    for (let s = 0; s <= steps; s++) {
+      const y = evalCubic(p0.y, c1.y, c2.y, p3.y, s / steps);
+      if (y < lo) lo = y;
+      if (y > hi) hi = y;
+    }
+  }
+  return { lo: lo / size.height, hi: hi / size.height };
+}
+
 describe('buildWarpMap', () => {
   const WAVE = () => clampPathX(buildWavePath(1, 0.5, FONT_SIZE, SIZE.height));
 
@@ -214,11 +244,15 @@ describe('buildWarpMap', () => {
   });
 
   it('kep ve dau mut khi x ra ngoai [0, W]', () => {
+    // toBeCloseTo (khong phai toBe): k*width chi ~ L do lam tron dau phay
+    // dong, nen s=clamp(k*900,0,L) va s=clamp(k*width,0,L) co the roi vao hai
+    // nhanh khac nhau cua lookup() (bang-L tuyet doi vs noi suy sat mep) —
+    // sai khac chi co 1e-13px, khong phai loi hanh vi.
     const map = buildWarpMap(WAVE(), SIZE, 50)!;
     expect(map.X(-100)).toBe(map.X(0));
     expect(map.D(-100)).toBe(map.D(0));
-    expect(map.X(900)).toBe(map.X(SIZE.width));
-    expect(map.D(900)).toBe(map.D(SIZE.width));
+    expect(map.X(900)).toBeCloseTo(map.X(SIZE.width), 6);
+    expect(map.D(900)).toBeCloseTo(map.D(SIZE.width), 6);
   });
 
   it('D neo o baselineY: tinh tien path doc keo D theo dung luong da tinh', () => {

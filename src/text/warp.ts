@@ -32,55 +32,87 @@ function segmentsOf(path: WarpPath, size: Size): Segment[] {
   return segments;
 }
 
+// Cuc tri y THAT cua duong cong (khong phai khung control-polygon): dung
+// chung extrema()/evalCubic() voi shapesBounds() trong textGeometry.ts. Ca
+// buildWavePath (chuan hoa bien do preset) lan curveHeightOf (doc nguoc tu
+// path bi keo tay bat ky) can cung mot phep do nay — tach rieng de hai ham
+// khong tu lam theo hai kieu khac nhau.
+function pathYExtent(path: WarpPath, size: Size): { lo: number; hi: number } {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const seg of segmentsOf(path, size)) {
+    const by: Cubic = [seg.p0.y, seg.c1.y, seg.c2.y, seg.p3.y];
+    const ys = [by[0], by[3], ...extrema(...by).map((t) => evalCubic(...by, t))];
+    for (const y of ys) {
+      if (y < lo) lo = y;
+      if (y > hi) hi = y;
+    }
+  }
+  return { lo, hi };
+}
+
+// Hinh dang co dinh cua preset (ty le handle khong doi voi curveHeight/b) —
+// dung de do cuc tri y THAT mot lan duy nhat o module scope, roi quy doi
+// nguoc lai thanh he so a/b can dung. Tach rieng vi buildWavePath goi ham
+// nay voi a=1,b=0 con anchorsAt() (ben duoi) goi lai voi a,b that.
+function unitWaveAnchors(a: number, b: number): WarpAnchor[] {
+  return [
+    // Xuat phat thap ben trai, handle nam ngang: doan dau gan nhu thang
+    // roi moi cong len (tai lieu §6, doan 1).
+    { x: 0, y: b + a, out: { x: 0.2, y: b + a } },
+    // Hai handle doi xung qua anchor giua ⇒ thang hang, chuyen tiep muot
+    // giua hai doan cong (tai lieu §2).
+    { x: 0.5, y: b, in: { x: 0.35, y: b + 0.15 * a }, out: { x: 0.65, y: b - 0.15 * a } },
+    // Handle vao nam *tren* anchor cuoi ⇒ cung lon vong len o khoang
+    // giua-phai roi ha xuong diem ket thuc (tai lieu §6, doan 2).
+    { x: 1, y: b + 0.6 * a, in: { x: 0.75, y: b - 0.4 * a } },
+  ];
+}
+
+// Cuc tri y THAT (khong phai khung control-polygon) cua hinh dang don vi
+// (a=1, b=0) — hang so vi ty le handle o unitWaveAnchors khong doi theo tham
+// so goi. Dung de quy doi curveHeight (bien do tren duong cong that, theo
+// boi so fontSize) va baseline (trung diem dao dong that) sang he so a/b cua
+// control-polygon can dung khi dung anchors.
+const UNIT_WAVE_EXTENT = pathYExtent(
+  { role: 'baseline', closed: false, anchors: unitWaveAnchors(1, 0) },
+  { width: 1, height: 1 },
+);
+
 // Dung cau truc docs/wave-transformation.md mo ta: 1 path mo, 3 anchor,
-// 4 handle, tong 7 point hien thi. baselineRatio = baselineY / height, nen
-// curveHeight = 0 cho ra mot duong ngang dung ngay tai baseline — tuc warp
-// tro thanh phep dong nhat.
+// 4 handle, tong 7 point hien thi. curveHeight = 0 cho ra mot duong ngang
+// dung ngay tai baseline — tuc warp tro thanh phep dong nhat.
 //
 // curveHeight do bang boi so cua fontSize, giong Kittl: khoang dao dong doc
-// cua path bang dung |curveHeight| * fontSize. Hinh goc dao dong tu -0.4a toi
-// +a, tuc 1.4a, nen chia 1.4 de quy ve dung bien do yeu cau. Dau am lat cong.
+// CUA DUONG CONG THAT (khong phai control-polygon) bang dung |curveHeight| *
+// fontSize, va TRUNG DIEM dao dong that nam dung tai baseline (spec §5.1) —
+// tuc curveHeight=0 la phep dong nhat tuyet doi, con curveHeight khac 0 chi
+// lam chu "lon song" quanh baseline, khong lam ca khoi chu troi di.
 export function buildWavePath(
   curveHeight: number,
   baselineRatio: number,
   fontSize: number,
   boxHeight: number,
 ): WarpPath {
-  const a = boxHeight > 0 ? (curveHeight * fontSize) / (1.4 * boxHeight) : 0;
-  const b = baselineRatio;
-  return {
-    role: 'baseline',
-    closed: false,
-    anchors: [
-      // Xuat phat thap ben trai, handle nam ngang: doan dau gan nhu thang
-      // roi moi cong len (tai lieu §6, doan 1).
-      { x: 0, y: b + a, out: { x: 0.2, y: b + a } },
-      // Hai handle doi xung qua anchor giua ⇒ thang hang, chuyen tiep muot
-      // giua hai doan cong (tai lieu §2).
-      { x: 0.5, y: b, in: { x: 0.35, y: b + 0.15 * a }, out: { x: 0.65, y: b - 0.15 * a } },
-      // Handle vao nam *tren* anchor cuoi ⇒ cung lon vong len o khoang
-      // giua-phai roi ha xuong diem ket thuc (tai lieu §6, doan 2).
-      { x: 1, y: b + 0.6 * a, in: { x: 0.75, y: b - 0.4 * a } },
-    ],
-  };
+  const realSpread = UNIT_WAVE_EXTENT.hi - UNIT_WAVE_EXTENT.lo;
+  const realMid = (UNIT_WAVE_EXTENT.hi + UNIT_WAVE_EXTENT.lo) / 2;
+  const a = boxHeight > 0 ? (curveHeight * fontSize) / boxHeight / realSpread : 0;
+  const b = baselineRatio - realMid * a;
+  return { role: 'baseline', closed: false, anchors: unitWaveAnchors(a, b) };
 }
 
 // Doc nguoc curveHeight tu mot path bat ky — nghich dao cua buildWavePath ve
-// mat bien do. Can khi user keo handle: slider phai theo kip hinh, neu khong
-// lan keo slider ke tiep se lam hinh nhay. Kittl lam dung viec nay trong
-// setPoints.
+// mat bien do, do TREN DUONG CONG THAT bang pathYExtent (cung phep do voi
+// buildWavePath, nen buildWavePath -> curveHeightOf la roundtrip chinh xac).
+// Can khi user keo handle: slider phai theo kip hinh, neu khong lan keo
+// slider ke tiep se lam hinh nhay. Kittl lam dung viec nay trong setPoints.
 //
 // Dau lay theo chieu diem dau so voi diem cuoi, dung quy uoc cua buildWavePath
 // (a > 0 dat anchor dau CAO hon anchor cuoi theo he toa do y-xuong).
 export function curveHeightOf(path: WarpPath, boxHeight: number, fontSize: number): number {
   if (fontSize <= 0 || path.anchors.length < 2) return 0;
-  const ys: number[] = [];
-  for (const anchor of path.anchors) {
-    ys.push(anchor.y);
-    if (anchor.in) ys.push(anchor.in.y);
-    if (anchor.out) ys.push(anchor.out.y);
-  }
-  const spread = ((Math.max(...ys) - Math.min(...ys)) * boxHeight) / fontSize;
+  const { lo, hi } = pathYExtent(path, { width: 1, height: 1 });
+  const spread = ((hi - lo) * boxHeight) / fontSize;
   const first = path.anchors[0].y;
   const last = path.anchors[path.anchors.length - 1].y;
   const signed = first >= last ? spread : -spread;
