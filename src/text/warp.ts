@@ -133,11 +133,10 @@ export function clampPathX(path: WarpPath): WarpPath {
   const last = anchors.length - 1;
   if (last < 1) return path;
 
-  // Anchor dau/cuoi tu do theo x — khong con ghim 0/1 (spec
-  // docs/superpowers/specs/2026-08-18-warp-endpoint-resize-design.md), keo
-  // dai/ngan duoc path. Chi con dam bao DON DIEU: anchor giua khong duoc
-  // vuot qua 2 anchor dau, giu f(x) la ham cua x (spec §2.3 cua tai lieu
-  // arclength). Vong lap forward/backward chi so sanh voi gia tri THAT cua
+  // Anchor dau/cuoi tu do theo x — khong con ghim 0/1, keo dai/ngan duoc path.
+  // Chi con dam bao DON DIEU: anchor giua khong duoc vuot qua 2 anchor dau,
+  // giu f(x) la ham cua x (spec §2.3 cua docs/superpowers/specs/2026-08-17-text-warp-arclength-design.md).
+  // Vong lap forward/backward chi so sanh voi gia tri THAT cua
   // anchors[0]/anchors[last] (khong con la hang so 0/1 co dinh), nen van
   // dung dan voi bat ky vi tri nao cua 2 dau mut.
   for (let i = 1; i <= last; i++) anchors[i].x = Math.max(anchors[i].x, anchors[i - 1].x);
