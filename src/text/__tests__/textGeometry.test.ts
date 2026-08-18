@@ -63,10 +63,13 @@ describe('resolveWarpPath', () => {
     expect(path).toEqual(stored);
   });
 
-  it('kep path da luu ve full-span [0,1] du tai lieu cu bake span hep', () => {
+  it('kep path da luu giu don dieu, khong can ep ve [0,1] (arc-length model chap nhan x bat ky)', () => {
     // Tai lieu truoc plan nay co the luu path voi span hep hon [0,1] (co che
-    // fit-to-arc-length cu) — resolveWarpPath phai tu clamp lai, khong duoc
-    // tra thang stored, neu khong f(x) se phang o hai dau thay vi cong het co.
+    // fit-to-arc-length cu) — sau khi dua ra mo hinh arc-length moi (spec
+    // §2.3) va cho phep endpoint di dong (plan 2026-08-18-warp-endpoint-resize),
+    // clampPathX chi con dam bao DON DIEU (endpoint tu do tuy y, khong can
+    // ghim ve 0/1). buildWarpMap co the xu ly path voi x bat ky miễn là
+    // monotone.
     const stored = {
       role: 'baseline' as const,
       closed: false,
@@ -81,8 +84,8 @@ describe('resolveWarpPath', () => {
       120,
     );
     expect(path).not.toBeNull();
-    expect(path?.anchors[0].x).toBe(0);
-    expect(path?.anchors[path!.anchors.length - 1].x).toBe(1);
+    expect(path?.anchors[0].x).toBeCloseTo(0.1, 10);
+    expect(path?.anchors[path!.anchors.length - 1].x).toBeCloseTo(0.9, 10);
   });
 
   it('bo qua paths co duoi 2 anchor', () => {

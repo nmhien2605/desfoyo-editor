@@ -170,18 +170,40 @@ function isMonotoneX(path: WarpPath): boolean {
 }
 
 describe('clampPathX', () => {
-  it('ghim hai mep o 0 va 1', () => {
-    const moved = movePathPoint(
-      buildWavePath(0.5, 0.8),
-      { anchor: 0, kind: 'anchor' },
-      {
-        x: 0.3,
-        y: 0,
-      },
-    );
+  it('anchor dau di chuyen tu do theo x, khong con bi ghim ve 0', () => {
+    const moved = movePathPoint(buildWavePath(0.5, 0.8), { anchor: 0, kind: 'anchor' }, {
+      x: 0.3,
+      y: 0,
+    });
     const clamped = clampPathX(moved);
-    expect(clamped.anchors[0].x).toBe(0);
-    expect(clamped.anchors[clamped.anchors.length - 1].x).toBe(1);
+    expect(clamped.anchors[0].x).toBeCloseTo(0.3, 10);
+  });
+
+  it('anchor cuoi di chuyen tu do theo x, khong con bi ghim ve 1', () => {
+    const moved = movePathPoint(buildWavePath(0.5, 0.8), { anchor: 2, kind: 'anchor' }, {
+      x: 0.4,
+      y: 0,
+    });
+    const clamped = clampPathX(moved);
+    expect(clamped.anchors[2].x).toBeCloseTo(1.4, 10);
+  });
+
+  it('anchor dau khong duoc vuot qua anchor giua (van giu don dieu)', () => {
+    const moved = movePathPoint(buildWavePath(0.5, 0.8), { anchor: 0, kind: 'anchor' }, {
+      x: 0.9,
+      y: 0,
+    });
+    const clamped = clampPathX(moved);
+    expect(clamped.anchors[0].x).toBeLessThanOrEqual(clamped.anchors[1].x);
+  });
+
+  it('anchor cuoi khong duoc lui qua anchor giua (van giu don dieu)', () => {
+    const moved = movePathPoint(buildWavePath(0.5, 0.8), { anchor: 2, kind: 'anchor' }, {
+      x: -0.9,
+      y: 0,
+    });
+    const clamped = clampPathX(moved);
+    expect(clamped.anchors[2].x).toBeGreaterThanOrEqual(clamped.anchors[1].x);
   });
 
   it('anchor giua khong vuot qua anchor phai', () => {
