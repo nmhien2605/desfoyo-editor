@@ -79,6 +79,27 @@ const UNIT_WAVE_EXTENT = pathYExtent(
   { width: 1, height: 1 },
 );
 
+// Moi preset (wave/arch/rise/flag/angle) la CUNG mot phep bien doi: hinh dang
+// don vi (a=1, b=0) co dinh, roi curveHeight/baselineRatio chi quy dinh a
+// (bien do) va b (tam dao dong) qua DUNG mot cong thuc — xem buildWavePath
+// truoc day. Gom logic nay vao mot ham dung chung de them preset moi chi can
+// khai bao bang toa do (unitAnchors) + cuc tri do mot lan (unitExtent), khong
+// phai chep lai cong thuc a/b.
+function buildPresetPath(
+  unitAnchors: (a: number, b: number) => WarpAnchor[],
+  unitExtent: { lo: number; hi: number },
+  curveHeight: number,
+  baselineRatio: number,
+  fontSize: number,
+  boxHeight: number,
+): WarpPath {
+  const realSpread = unitExtent.hi - unitExtent.lo;
+  const realMid = (unitExtent.hi + unitExtent.lo) / 2;
+  const a = boxHeight > 0 ? (curveHeight * fontSize) / boxHeight / realSpread : 0;
+  const b = baselineRatio - realMid * a;
+  return { role: 'baseline', closed: false, anchors: unitAnchors(a, b) };
+}
+
 // Dung cau truc docs/wave-transformation.md mo ta: 1 path mo, 3 anchor,
 // 4 handle, tong 7 point hien thi. curveHeight = 0 cho ra mot duong ngang
 // dung ngay tai baseline — tuc warp tro thanh phep dong nhat.
@@ -94,11 +115,102 @@ export function buildWavePath(
   fontSize: number,
   boxHeight: number,
 ): WarpPath {
-  const realSpread = UNIT_WAVE_EXTENT.hi - UNIT_WAVE_EXTENT.lo;
-  const realMid = (UNIT_WAVE_EXTENT.hi + UNIT_WAVE_EXTENT.lo) / 2;
-  const a = boxHeight > 0 ? (curveHeight * fontSize) / boxHeight / realSpread : 0;
-  const b = baselineRatio - realMid * a;
-  return { role: 'baseline', closed: false, anchors: unitWaveAnchors(a, b) };
+  return buildPresetPath(unitWaveAnchors, UNIT_WAVE_EXTENT, curveHeight, baselineRatio, fontSize, boxHeight);
+}
+
+// Bang toa do 3 anchor + 4 handle cua arch/rise/flag lay THANG tu
+// docs/kittl-warp-reverse-engineered.md §4.3 (do truc tiep tu runtime Kittl,
+// khong phai tu suy dien): pts[0]/pts[3]/pts[6] la 3 anchor, pts[1] la handle
+// out cua anchor dau, pts[2]/pts[4] la handle in/out cua anchor giua, pts[5]
+// la handle in cua anchor cuoi (dung cau truc Bs() cua Kittl). O day viet
+// truc tiep duoi dang y = b + a * T.y (T la gia tri trong bang goc, tuc gia
+// tri tai a=1, b=0) de dung chung buildPresetPath — khong doi x, khong lat
+// truc: quy uoc y-down, chuan hoa 0..1 theo bbox trung voi WarpPath cua ta.
+function unitArchAnchors(a: number, b: number): WarpAnchor[] {
+  return [
+    { x: 0, y: b + a, out: { x: 0.2, y: b + 0.7 * a } },
+    { x: 0.5, y: b + 0.65 * a, in: { x: 0.33, y: b + 0.65 * a }, out: { x: 0.67, y: b + 0.65 * a } },
+    { x: 1, y: b + a, in: { x: 0.8, y: b + 0.7 * a } },
+  ];
+}
+const UNIT_ARCH_EXTENT = pathYExtent(
+  { role: 'baseline', closed: false, anchors: unitArchAnchors(1, 0) },
+  { width: 1, height: 1 },
+);
+export function buildArchPath(
+  curveHeight: number,
+  baselineRatio: number,
+  fontSize: number,
+  boxHeight: number,
+): WarpPath {
+  return buildPresetPath(unitArchAnchors, UNIT_ARCH_EXTENT, curveHeight, baselineRatio, fontSize, boxHeight);
+}
+
+// Bang goc (docs/kittl-warp-reverse-engineered.md §4.3):
+// rise: [(0,1), (.25,.95), (.4,.75), (.6,.6), (.75,.5), (.8,.45), (1,.5)]
+function unitRiseAnchors(a: number, b: number): WarpAnchor[] {
+  return [
+    { x: 0, y: b + a, out: { x: 0.25, y: b + 0.95 * a } },
+    { x: 0.6, y: b + 0.6 * a, in: { x: 0.4, y: b + 0.75 * a }, out: { x: 0.75, y: b + 0.5 * a } },
+    { x: 1, y: b + 0.5 * a, in: { x: 0.8, y: b + 0.45 * a } },
+  ];
+}
+const UNIT_RISE_EXTENT = pathYExtent(
+  { role: 'baseline', closed: false, anchors: unitRiseAnchors(1, 0) },
+  { width: 1, height: 1 },
+);
+export function buildRisePath(
+  curveHeight: number,
+  baselineRatio: number,
+  fontSize: number,
+  boxHeight: number,
+): WarpPath {
+  return buildPresetPath(unitRiseAnchors, UNIT_RISE_EXTENT, curveHeight, baselineRatio, fontSize, boxHeight);
+}
+
+// Bang goc (docs/kittl-warp-reverse-engineered.md §4.3):
+// flag: [(0,.85), (.2,1), (.35,1), (.5,.85), (.65,.7), (.8,.7), (1,.85)]
+function unitFlagAnchors(a: number, b: number): WarpAnchor[] {
+  return [
+    { x: 0, y: b + 0.85 * a, out: { x: 0.2, y: b + a } },
+    { x: 0.5, y: b + 0.85 * a, in: { x: 0.35, y: b + a }, out: { x: 0.65, y: b + 0.7 * a } },
+    { x: 1, y: b + 0.85 * a, in: { x: 0.8, y: b + 0.7 * a } },
+  ];
+}
+const UNIT_FLAG_EXTENT = pathYExtent(
+  { role: 'baseline', closed: false, anchors: unitFlagAnchors(1, 0) },
+  { width: 1, height: 1 },
+);
+export function buildFlagPath(
+  curveHeight: number,
+  baselineRatio: number,
+  fontSize: number,
+  boxHeight: number,
+): WarpPath {
+  return buildPresetPath(unitFlagAnchors, UNIT_FLAG_EXTENT, curveHeight, baselineRatio, fontSize, boxHeight);
+}
+
+// Angle la truong hop rieng: 2 anchor, KHONG handle (doan thang nghieng) —
+// bang goc §4.3: angle: [(0,1), (1,.4)]. listHandles()/WarpHandlesOverlay.tsx
+// da tong quat theo WarpAnchor.in/out co mat hay khong nen khong can sua UI:
+// path 2 anchor khong handle tu dong khong hien tay cam nao.
+function unitAngleAnchors(a: number, b: number): WarpAnchor[] {
+  return [
+    { x: 0, y: b + a },
+    { x: 1, y: b + 0.4 * a },
+  ];
+}
+const UNIT_ANGLE_EXTENT = pathYExtent(
+  { role: 'baseline', closed: false, anchors: unitAngleAnchors(1, 0) },
+  { width: 1, height: 1 },
+);
+export function buildAnglePath(
+  curveHeight: number,
+  baselineRatio: number,
+  fontSize: number,
+  boxHeight: number,
+): WarpPath {
+  return buildPresetPath(unitAngleAnchors, UNIT_ANGLE_EXTENT, curveHeight, baselineRatio, fontSize, boxHeight);
 }
 
 // Doc nguoc curveHeight tu mot path bat ky — nghich dao cua buildWavePath ve
@@ -107,15 +219,23 @@ export function buildWavePath(
 // Can khi user keo handle: slider phai theo kip hinh, neu khong lan keo
 // slider ke tiep se lam hinh nhay. Kittl lam dung viec nay trong setPoints.
 //
-// Dau lay theo chieu diem dau so voi diem cuoi, dung quy uoc cua buildWavePath
-// (a > 0 dat anchor dau CAO hon anchor cuoi theo he toa do y-xuong).
+// Dau lay theo chieu diem dau so voi TRUNG DIEM dao dong that (lo+hi)/2 —
+// KHONG phai so voi diem cuoi. Ly do doi tu "first vs last": Arch va Flag co
+// anchor dau/cuoi CUNG mot y (hinh doi xung qua truc doc, bien do nam het o
+// handle) nen first >= last luon hoa ra bang nhau, khong bao gio doc duoc dau
+// am — buoc buildArchPath/buildFlagPath voi curveHeight < 0 di qua day se sai.
+// "first vs mid" dung duoc cho CA 5 preset vi he so T.y cua diem dau (x=0)
+// trong moi bang goc (wave=1, arch=1, rise=1, flag=.85, angle=1) DEU DUONG:
+// y_dau - mid = a * T.y[dau], T.y[dau] > 0 ⇒ dau(y_dau - mid) = dau(a), voi
+// moi preset — bat bien nay khong phu thuoc hinh dang co doi xung hay khong,
+// chi can T.y[dau] != 0 (dung cho toan bo preset dang co).
 export function curveHeightOf(path: WarpPath, boxHeight: number, fontSize: number): number {
   if (fontSize <= 0 || path.anchors.length < 2) return 0;
   const { lo, hi } = pathYExtent(path, { width: 1, height: 1 });
   const spread = ((hi - lo) * boxHeight) / fontSize;
+  const mid = (lo + hi) / 2;
   const first = path.anchors[0].y;
-  const last = path.anchors[path.anchors.length - 1].y;
-  const signed = first >= last ? spread : -spread;
+  const signed = first >= mid ? spread : -spread;
   return Math.min(4, Math.max(-1, signed));
 }
 

@@ -3,7 +3,16 @@ import type { TextNode, WarpPath } from '../schema';
 import { evalCubic, extrema } from './bezier';
 import type { GlyphShape } from './glyphOutlines';
 import { layoutText } from './layout';
-import { buildWarpMap, buildWavePath, clampPathX, warpContours } from './warp';
+import {
+  buildAnglePath,
+  buildArchPath,
+  buildFlagPath,
+  buildRisePath,
+  buildWarpMap,
+  buildWavePath,
+  clampPathX,
+  warpContours,
+} from './warp';
 
 export interface TextGeometry {
   shapes: GlyphShape[];
@@ -58,6 +67,9 @@ export function shapesBounds(shapes: GlyphShape[]): TextGeometry['bounds'] {
 // chính nó (buildWarpMap không còn hệ số k = L/W ép khớp bề rộng W — ký tự
 // giữ nguyên kích thước bất kể path dài/ngắn). Nếu path ngắn hơn W, phần text
 // vượt quá bị buildWarpMap + clipContourAtX cắt bỏ hẳn, không hiển thị.
+//
+// 5 preset (wave/arch/rise/flag/angle) dùng chung buildWarpMap/warpContours —
+// khác nhau đúng một chỗ: hàm sinh path ban đầu (buildXxxPath trong warp.ts).
 export function resolveWarpPath(
   node: TextNode,
   baselineRatio: number,
@@ -74,9 +86,13 @@ export function resolveWarpPath(
   const stored = warp.paths?.find((path) => path.role === 'baseline');
   if (stored) return stored.anchors.length >= 2 ? clampPathX(stored) : null;
 
-  if (warp.type === 'wave') {
-    return clampPathX(buildWavePath(warp.curveHeight, baselineRatio, node.font.size, boxHeight));
-  }
+  const { curveHeight } = warp;
+  const size = node.font.size;
+  if (warp.type === 'wave') return clampPathX(buildWavePath(curveHeight, baselineRatio, size, boxHeight));
+  if (warp.type === 'arch') return clampPathX(buildArchPath(curveHeight, baselineRatio, size, boxHeight));
+  if (warp.type === 'rise') return clampPathX(buildRisePath(curveHeight, baselineRatio, size, boxHeight));
+  if (warp.type === 'flag') return clampPathX(buildFlagPath(curveHeight, baselineRatio, size, boxHeight));
+  if (warp.type === 'angle') return clampPathX(buildAnglePath(curveHeight, baselineRatio, size, boxHeight));
   return null;
 }
 

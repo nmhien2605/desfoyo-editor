@@ -99,10 +99,25 @@ describe('resolveWarpPath', () => {
     ).toBeNull();
   });
 
-  it('tra null cho transformation chua co preset', () => {
+  it('tra null cho transformation chua co preset (circle/distort/custom can envelope rieng)', () => {
     expect(
-      resolveWarpPath(textNode({ warp: { type: 'arch', curveHeight: 0.5 } }), 0.8, 120),
+      resolveWarpPath(textNode({ warp: { type: 'circle', curveHeight: 0.5 } }), 0.8, 120),
     ).toBeNull();
+    expect(
+      resolveWarpPath(textNode({ warp: { type: 'distort', curveHeight: 0.5 } }), 0.8, 120),
+    ).toBeNull();
+    expect(
+      resolveWarpPath(textNode({ warp: { type: 'custom', curveHeight: 0.5 } }), 0.8, 120),
+    ).toBeNull();
+  });
+
+  it('sinh path preset cho arch/rise/flag/angle khi chua co paths', () => {
+    for (const type of ['arch', 'rise', 'flag'] as const) {
+      const path = resolveWarpPath(textNode({ warp: { type, curveHeight: 0.5 } }), 0.8, 120);
+      expect(path?.anchors).toHaveLength(3);
+    }
+    const angle = resolveWarpPath(textNode({ warp: { type: 'angle', curveHeight: 0.5 } }), 0.8, 120);
+    expect(angle?.anchors).toHaveLength(2);
   });
 });
 
@@ -246,6 +261,20 @@ describe('bien doi theo do dai cung', () => {
         poppins,
       ).bounds;
       expect(b.maxX - b.minX).toBeLessThanOrEqual(plainW + 0.5);
+    }
+  });
+
+  it('I3 ap dung cho ca arch/rise/flag/angle — bat bien khong rieng cua Wave', () => {
+    // dX/dx = cos(theta) <= 1 dung voi BAT KY path nao (khong phu thuoc hinh
+    // dang preset), nen bat bien nay phai giu dung cho ca 4 preset moi.
+    const plain = textGeometry(textNode({ text: 'Wave' }), poppins).bounds;
+    const plainW = plain.maxX - plain.minX;
+    for (const type of ['arch', 'rise', 'flag', 'angle'] as const) {
+      for (const curveHeight of [-1, 0.5, 2, 4]) {
+        const b = textGeometry(textNode({ text: 'Wave', warp: { type, curveHeight } }), poppins)
+          .bounds;
+        expect(b.maxX - b.minX).toBeLessThanOrEqual(plainW + 0.5);
+      }
     }
   });
 

@@ -15,9 +15,10 @@ export const WARP_TYPES: WarpType[] = [
   'flag',
 ];
 
-// v1 chỉ build Wave. 7 kiểu còn lại hiện nhưng bị khoá — xem
-// docs/text-future-work.md mục 5.
-export const ENABLED_WARP_TYPES: WarpType[] = ['wave'];
+// wave/arch/rise/flag/angle dùng chung engine (buildWarpMap/warpContours) —
+// xem docs/text-future-work.md mục 5. circle/distort/custom cần envelope
+// warp riêng, vẫn khoá.
+export const ENABLED_WARP_TYPES: WarpType[] = ['wave', 'arch', 'rise', 'flag', 'angle'];
 
 export function setWarpType(warp: Warp | undefined, type: WarpType): Warp {
   // paths bị xoá khi đổi kiểu: một path do user chỉnh cho Wave không còn ý

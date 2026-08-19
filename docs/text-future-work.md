@@ -77,24 +77,26 @@ UI cũng phải đổi: 2 đường cong nghĩa là gấp đôi số anchor/hand
 
 ## 5. 7 transformation còn lại
 
-Đều dùng lại `WarpPath` + `applyWarp` đã có. Ước lượng độ khó tăng dần:
+Đều dùng lại `WarpPath` + `applyWarp` đã có.
+
+**Đã xong (2026-08-19):** Angle, Rise, Arch, Flag — xem `implement.md` (kế
+hoạch) và `buildAnglePath`/`buildRisePath`/`buildArchPath`/`buildFlagPath`
+trong `src/text/warp.ts`. Bảng dưới đây viết TRƯỚC khi có số liệu đo thật ở
+`kittl-warp-reverse-engineered.md` §4.3 nên sai về cấu trúc điểm (Arch/Rise
+thực ra là 3 anchor + 4 handle như Wave, chỉ Angle mới 2 anchor không handle)
+— giữ lại hàng "Circle/Distort/Custom" vì vẫn đúng và vẫn chưa làm:
 
 | Effect | Cách làm | Ghi chú |
 |---|---|---|
-| **Angle** | path 2 anchor, không handle | Dễ nhất — đường thẳng nghiêng |
-| **Rise** | path 2 anchor + handle, cong 1 phía | Baseline follow là đủ |
-| **Arch** | path 2 anchor, cung đơn | Đẹp hơn nhiều nếu có envelope (mục 4) |
-| **Flag** | như Wave nhưng biên độ tăng dần theo x | Baseline follow là đủ |
 | **Circle** | `closed: true`, path tròn | Cần xử lý riêng: chữ chạy hết vòng, có toggle "Direction Inverted" theo [text-effect.md](./text-effect.md) |
 | **Distort** | khung bao 4 góc kéo tự do | Bắt buộc có envelope |
 | **Custom** | lưới mesh N×M kéo từng điểm | Bắt buộc có envelope + UI lưới |
 
-Bảng control point chuẩn hoá của cả bốn preset đã trích xuất sẵn từ Kittl —
+Bảng control point chuẩn hoá của Angle/Rise/Arch/Flag lấy thẳng từ Kittl —
 xem [kittl-warp-reverse-engineered.md](./kittl-warp-reverse-engineered.md) §4.3.
-Engine `buildWarpMap` + `warpContours` đã dùng chung được, nên thêm một preset
-chỉ là thêm bảng số vào `buildWavePath` cùng test.
-
-Panel đã dựng sẵn lưới 8 nút, bật thêm nút nào thì chỉ cần viết hàm sinh path tương ứng trong `warp.ts`.
+Engine `buildWarpMap` + `warpContours` dùng chung được cho mọi preset, kể cả
+3 preset còn lại — chỉ khác nhau ở hàm sinh path ban đầu và (với
+Circle/Distort/Custom) cần thêm envelope warp (mục 4) trước khi làm được.
 
 ---
 

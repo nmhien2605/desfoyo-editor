@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { WarpPath } from '../../schema';
 import {
+  buildAnglePath,
+  buildArchPath,
+  buildFlagPath,
+  buildRisePath,
   buildWarpMap,
   buildWavePath,
   clampPathX,
@@ -503,5 +507,82 @@ describe('curveHeightOf', () => {
       })),
     };
     expect(curveHeightOf(scaled, SIZE.height, FONT_SIZE)).toBe(4);
+  });
+});
+
+// arch/rise/flag/angle dung chung buildPresetPath voi wave — bang toa do lay
+// thang tu docs/kittl-warp-reverse-engineered.md §4.3 (xem implement.md).
+// Test o day danh cho DAC TRUNG RIENG cua tung preset (so anchor, co/khong co
+// handle) + bat bien chung (identity tai 0, roundtrip curveHeightOf, X(0)=0,
+// clampPathX hop le) ma ca 4 preset deu phai thoa, khong lap lai toan bo suite
+// da co cho Wave.
+const PRESETS = [
+  { name: 'arch', build: buildArchPath, anchorCount: 3, hasHandles: true },
+  { name: 'rise', build: buildRisePath, anchorCount: 3, hasHandles: true },
+  { name: 'flag', build: buildFlagPath, anchorCount: 3, hasHandles: true },
+  { name: 'angle', build: buildAnglePath, anchorCount: 2, hasHandles: false },
+] as const;
+
+describe.each(PRESETS)('preset $name (buildXxxPath)', ({ build, anchorCount, hasHandles }) => {
+  it(`co dung ${anchorCount} anchor`, () => {
+    expect(build(0.5, 0.8, FONT_SIZE, SIZE.height).anchors).toHaveLength(anchorCount);
+  });
+
+  it(hasHandles ? 'co 4 handle, anchor dau/cuoi chi co mot phia' : 'khong co handle nao', () => {
+    const path = build(0.5, 0.8, FONT_SIZE, SIZE.height);
+    const handles = path.anchors.flatMap((a) => [a.in, a.out]).filter(Boolean);
+    expect(handles).toHaveLength(hasHandles ? 4 : 0);
+    if (hasHandles) {
+      expect(path.anchors[0].in).toBeUndefined();
+      expect(path.anchors[path.anchors.length - 1].out).toBeUndefined();
+    }
+  });
+
+  it('curveHeight = 0 cho duong nam ngang tuyet doi (identity)', () => {
+    const path = build(0, 0.8, FONT_SIZE, SIZE.height);
+    const ys = path.anchors.flatMap((a) =>
+      [a.y, a.in?.y, a.out?.y].filter((v): v is number => v !== undefined),
+    );
+    expect(ys.every((y) => Math.abs(y - 0.8) < 1e-9)).toBe(true);
+    expect(buildWarpMap(path, SIZE, 0.8 * SIZE.height)).toBeNull();
+  });
+
+  it('curveHeightOf doc nguoc dung con so da dung de sinh path, ca hai dau', () => {
+    for (const curve of [-1, 0.25, 1, 2.5, 4]) {
+      const path = build(curve, 0.5, FONT_SIZE, SIZE.height);
+      expect(curveHeightOf(path, SIZE.height, FONT_SIZE)).toBeCloseTo(curve, 9);
+    }
+  });
+
+  it('X(0) = 0 tinh theo path — mep trai chu bam diem dau path', () => {
+    const path = clampPathX(build(1, 0.5, FONT_SIZE, SIZE.height));
+    const map = buildWarpMap(path, SIZE, 50)!;
+    expect(map).not.toBeNull();
+    expect(map.X(0)).toBeCloseTo(path.anchors[0].x * SIZE.width, 6);
+  });
+
+  it('clampPathX giu tinh don dieu theo x tren path preset (kha nang no-op)', () => {
+    const path = build(1, 0.5, FONT_SIZE, SIZE.height);
+    const clamped = clampPathX(path);
+    for (let i = 1; i < clamped.anchors.length; i++) {
+      expect(clamped.anchors[i].x).toBeGreaterThanOrEqual(clamped.anchors[i - 1].x);
+    }
+  });
+});
+
+describe('buildAnglePath — cat (clipContourAtX) tren duong thang nghieng', () => {
+  it('phan text vuot qua do dai path van bi cat het, khong stretch — giong Wave', () => {
+    // Angle khong co cung cong (2 anchor, khong handle) nen moi segment la mot
+    // "cubic suy bien" thanh doan thang — day la truong hop bien rieng cho
+    // crossingsAtX/clipContourAtX so voi cac preset con lai (deu co cung cong).
+    const path = clampPathX(buildAnglePath(2, 0.5, FONT_SIZE, SIZE.height));
+    const map = buildWarpMap(path, SIZE, 50)!;
+    expect(map).not.toBeNull();
+
+    const out = warpContours([shape(rect(0, 0, SIZE.width * 2, 10))], map);
+    for (const piece of out) {
+      const xs = piece.outer.filter((_, i) => i % 2 === 0);
+      expect(Math.max(...xs)).toBeLessThanOrEqual(map.L + 1e-6);
+    }
   });
 });
