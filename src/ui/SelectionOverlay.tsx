@@ -18,6 +18,7 @@ import { getLoadedFont } from '../text/fontService';
 import { textGeometry } from '../text/textGeometry';
 import { TextEditOverlay } from './TextEditOverlay';
 import { WarpHandlesOverlay } from './WarpHandlesOverlay';
+import { CircleHandlesOverlay } from './CircleHandlesOverlay';
 
 const HANDLES: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
@@ -301,9 +302,16 @@ function SingleSelectionOverlay({
           onClose={() => setEditingNodeId(null)}
         />
       )}
-      {!isEditingText && node.type === 'text' && node.warp && node.warp.type !== 'none' && (
-        <WarpHandlesOverlay node={node} activePageId={activePageId} viewport={viewport} />
+      {!isEditingText && node.type === 'text' && node.warp?.type === 'circle' && (
+        <CircleHandlesOverlay node={node} activePageId={activePageId} viewport={viewport} />
       )}
+      {!isEditingText &&
+        node.type === 'text' &&
+        node.warp &&
+        node.warp.type !== 'none' &&
+        node.warp.type !== 'circle' && (
+          <WarpHandlesOverlay node={node} activePageId={activePageId} viewport={viewport} />
+        )}
       {extras}
     </div>
   );

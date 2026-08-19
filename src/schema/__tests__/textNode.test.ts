@@ -44,7 +44,10 @@ describe('TextNodeSchema', () => {
         ],
       },
     };
-    expect(TextNodeSchema.parse(withWarp)).toEqual(withWarp);
+    expect(TextNodeSchema.parse(withWarp)).toEqual({
+      ...withWarp,
+      warp: { ...withWarp.warp, directionInverted: false },
+    });
   });
 
   it('tu choi curveHeight ngoai khoang -1..4', () => {
@@ -56,7 +59,7 @@ describe('TextNodeSchema', () => {
 
   it('doc `intensity` cua tai lieu cu nhu bi danh cua curveHeight', () => {
     const parsed = WarpSchema.parse({ type: 'wave', intensity: 0.8 });
-    expect(parsed).toEqual({ type: 'wave', curveHeight: 0.8 });
+    expect(parsed).toEqual({ type: 'wave', curveHeight: 0.8, directionInverted: false });
   });
 
   it('tu choi fontSize <= 0', () => {

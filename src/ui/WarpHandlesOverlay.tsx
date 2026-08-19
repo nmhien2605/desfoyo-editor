@@ -119,7 +119,9 @@ export function WarpHandlesOverlay({
   const path = resolveWarpPath(node, geometry.baselineY / geometry.height, geometry.height);
   if (!path) return null;
 
-  const box = { width: geometry.width, height: geometry.height };
+  // advanceWidth (khong tinh letterSpacing) — dong bo voi textGeometry.ts's
+  // warpShapesFromPath, de handle keo tay khong lech khoi hinh warp thuc te.
+  const box = { width: geometry.advanceWidth, height: geometry.height };
   const originX = node.transform.originX ?? 0;
   const originY = node.transform.originY ?? 0;
 

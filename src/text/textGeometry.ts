@@ -1,8 +1,9 @@
 import type { Font } from 'opentype.js';
-import type { TextNode, WarpPath } from '../schema';
+import type { CircleParams, TextNode, WarpPath } from '../schema';
 import { evalCubic, extrema } from './bezier';
+import { warpContoursCircle } from './circleWarp';
 import type { GlyphShape } from './glyphOutlines';
-import { layoutText } from './layout';
+import { layoutText, type TextLayout } from './layout';
 import {
   buildAnglePath,
   buildArchPath,
@@ -16,12 +17,21 @@ import {
 
 export interface TextGeometry {
   shapes: GlyphShape[];
-  // Kích thước text *chưa warp*. Đây cũng là mẫu số chuẩn hoá của warp path,
-  // nên nó phải độc lập với warp — nếu lấy bbox sau warp thì path lại phụ
-  // thuộc chính kết quả của nó, thành vòng lặp phản hồi. Cũng là nguồn của
-  // node.size, tức pivot của applyTransform: đổi nó theo warp sẽ làm node đã
-  // xoay nhảy vị trí mỗi lần kéo slider.
+  // Kích thước text *chưa warp*, TÍNH CẢ letterSpacing — dùng để đo (hiển thị
+  // số đo) và làm sàn cho node rỗng, KHÔNG dùng làm nguồn node.size nữa khi
+  // đang warp (xem pivotWidth bên dưới).
   width: number;
+  advanceWidth: number;
+  // Width nên dùng để đồng bộ node.size (nguồn pivot của applyTransform.ts).
+  // Khi CÓ warp thực sự (path/circle đã áp dụng), bằng advanceWidth — vì hình
+  // đã warp neo theo advanceWidth (hoặc fontSize, với circle đã lưu), không
+  // đổi theo letterSpacing; nếu pivot vẫn đồng bộ theo `width` (letterSpacing-
+  // inclusive) thì pivot trôi theo letterSpacing còn hình thì đứng yên, tạo ra
+  // lệch pha khiến CẢ NODE (bao gồm hình đã warp) nhìn như bị dịch chuyển mỗi
+  // lần đổi letterSpacing — dù bản thân hình không đổi kích thước hay vị trí
+  // cục bộ. Khi KHÔNG warp, bằng `width` như cũ (nội dung phẳng thật sự giãn
+  // theo letterSpacing, pivot phải theo kịp mới đúng khung chọn/pivot).
+  pivotWidth: number;
   height: number;
   baselineY: number;
   // Bbox thật của hình SAU warp. Chỉ để vẽ khung chọn — không đụng transform.
@@ -96,6 +106,42 @@ export function resolveWarpPath(
   return null;
 }
 
+// Circle dung rigid-transform-per-glyph (xem circleWarp.ts), khong phai
+// WarpPath — nen can ham resolve rieng, khong dung chung voi resolveWarpPath.
+// Pham vi hien tai: chi 1 dong (hanh vi nhieu dong tren Circle chua duoc do
+// tren Kittl that — xem docs/kittl-circle-reverse-engineered.md §7). Neu
+// node.text co '\n' thi tra null, textGeometry() se roi ve layout phang
+// khong warp (giong het cach cac warp.type chua build khac dang bi bo qua).
+//
+// centerX/centerY/radius LUON chuan hoa theo node.font.size (khong phai
+// layout.width/height) — de mot khi da luu (keo handle), Circle DONG BANG
+// tuyet doi: khong doi theo letterSpacing lan noi dung text, chi doi qua
+// keo handle. Circle khong co co che clip (khac warp family — text dai hon
+// chu vi thi chong len chinh no, xem docs/kittl-circle-reverse-engineered.md
+// §6) nen khong the dua vao clip lam luoi an toan nhu warp family — phai
+// dong bang triet de hon.
+export function resolveCircleParams(
+  node: TextNode,
+  layout: Pick<TextLayout, 'advanceWidth' | 'height'>,
+): CircleParams | null {
+  const warp = node.warp;
+  if (!warp || warp.type !== 'circle') return null;
+  if (node.text.includes('\n')) return null;
+  if (warp.circle) return warp.circle;
+  const fontSize = node.font.size;
+  if (fontSize <= 0) return null;
+  // Preset (chua keo handle): muc tieu pixel la cx=0.5*advanceWidth (giua hop
+  // THEO NOI DUNG, khong tinh letterSpacing), cy=0.5*height, r=advanceWidth/pi
+  // (quyet dinh rieng, Kittl khong lo cong thuc that — xem implement.md). Quy
+  // doi ca 3 ve don vi fontSize de denormalize o textGeometry() luon dung MOT
+  // cong thuc (*fontSize) cho ca preset lan da luu, khong phai re nhanh.
+  return {
+    centerX: (0.5 * layout.advanceWidth) / fontSize,
+    centerY: (0.5 * layout.height) / fontSize,
+    radius: layout.advanceWidth / Math.PI / fontSize,
+  };
+}
+
 export function textGeometry(node: TextNode, font: Font): TextGeometry {
   const layout = layoutText({
     text: node.text,
@@ -106,6 +152,31 @@ export function textGeometry(node: TextNode, font: Font): TextGeometry {
     align: node.align,
   });
 
+  const circleParams = resolveCircleParams(node, layout);
+  let shapes: GlyphShape[];
+  let warped: boolean;
+  if (circleParams) {
+    shapes = warpContoursCircle(layout.shapes, layout.shapePivotX, layout.baselineY, {
+      cx: circleParams.centerX * node.font.size,
+      cy: circleParams.centerY * node.font.size,
+      r: circleParams.radius * node.font.size,
+      directionInverted: node.warp?.directionInverted ?? false,
+    });
+    warped = true;
+  } else {
+    const result = warpShapesFromPath(node, layout);
+    shapes = result.shapes;
+    warped = result.warped;
+  }
+
+  const pivotWidth = warped ? layout.advanceWidth : layout.width;
+  return { ...layout, shapes, pivotWidth, bounds: shapesBounds(shapes) };
+}
+
+function warpShapesFromPath(
+  node: TextNode,
+  layout: TextLayout,
+): { shapes: GlyphShape[]; warped: boolean } {
   const path =
     layout.height > 0
       ? resolveWarpPath(node, layout.baselineY / layout.height, layout.height)
@@ -113,22 +184,30 @@ export function textGeometry(node: TextNode, font: Font): TextGeometry {
   // buildWarpMap tra null khi path phang dung tai baseline — khi ay bo qua warp
   // hoan toan de curveHeight = 0 la phep dong nhat TUYET DOI, khong dinh sai so
   // cua bang tra (spec §2.5).
+  // advanceWidth (khong tinh letterSpacing), khong phai width — de letterSpacing
+  // chi giai cach ky tu tren path, khong keo dai/thu ngan chinh path.
   const map = path
-    ? buildWarpMap(path, { width: layout.width, height: layout.height }, layout.baselineY)
+    ? buildWarpMap(path, { width: layout.advanceWidth, height: layout.height }, layout.baselineY)
     : null;
-  const shapes = map ? warpContours(layout.shapes, map) : layout.shapes;
-
-  return { ...layout, shapes, bounds: shapesBounds(shapes) };
+  return map
+    ? { shapes: warpContours(layout.shapes, map), warped: true }
+    : { shapes: layout.shapes, warped: false };
 }
 
 // Dùng bởi UI để giữ node.size khớp với nội dung sau khi sửa chữ/font —
 // node.size là nguồn cho pivot (applyTransform.ts) và cho khung chọn
-// (SelectionOverlay.tsx), nên không được để nó lệch khỏi text thật.
+// (SelectionOverlay.tsx dùng bounds thật khi có warp, nhưng pivot luôn đọc
+// node.size), nên không được để nó lệch khỏi text thật.
+//
+// Dùng pivotWidth (KHÔNG phải width) — xem giải thích ở TextGeometry.pivotWidth:
+// khi có warp, letterSpacing không còn được phép đổi node.size.width nữa, nếu
+// không pivot trôi trong khi hình warp (đã cố định theo advanceWidth/fontSize)
+// đứng yên, làm cả node nhìn như bị dịch chuyển mỗi lần đổi letterSpacing.
 //
 // Sàn chiều rộng: text rỗng đo ra width = 0, mà khung chọn rộng 0 thì không
 // click trúng được nữa — node sẽ chỉ chọn được qua LayersPanel. Sàn này chỉ
 // áp cho node.size, không đụng tới hình học thật mà textGeometry trả về.
 export function measureText(node: TextNode, font: Font): { width: number; height: number } {
-  const { width, height } = textGeometry(node, font);
-  return { width: Math.max(width, node.font.size * 0.5), height };
+  const { pivotWidth, height } = textGeometry(node, font);
+  return { width: Math.max(pivotWidth, node.font.size * 0.5), height };
 }

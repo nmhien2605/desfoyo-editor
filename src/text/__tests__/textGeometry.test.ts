@@ -3,7 +3,14 @@ import opentype from 'opentype.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { TextNode, WarpPath } from '../../schema';
-import { measureText, resolveWarpPath, shapesBounds, textGeometry } from '../textGeometry';
+import { layoutText } from '../layout';
+import {
+  measureText,
+  resolveCircleParams,
+  resolveWarpPath,
+  shapesBounds,
+  textGeometry,
+} from '../textGeometry';
 
 let poppins: opentype.Font;
 beforeAll(() => {
@@ -31,6 +38,17 @@ function textNode(overrides: Partial<TextNode> = {}): TextNode {
     fill: { type: 'solid', color: '#000000' },
     ...overrides,
   };
+}
+
+function layoutOf(node: TextNode) {
+  return layoutText({
+    text: node.text,
+    font: poppins,
+    fontSize: node.font.size,
+    letterSpacing: node.letterSpacing,
+    lineHeight: node.lineHeight,
+    align: node.align,
+  });
 }
 
 describe('resolveWarpPath', () => {
@@ -121,6 +139,42 @@ describe('resolveWarpPath', () => {
   });
 });
 
+describe('resolveCircleParams', () => {
+  it('tra null khi khong co warp, type khac circle, hoac text co xuong dong', () => {
+    expect(resolveCircleParams(textNode(), layoutOf(textNode()))).toBeNull();
+    const wave = textNode({ warp: { type: 'wave', curveHeight: 0.5 } });
+    expect(resolveCircleParams(wave, layoutOf(wave))).toBeNull();
+    const multiline = textNode({ text: 'a\nb', warp: { type: 'circle', curveHeight: 0.5 } });
+    expect(resolveCircleParams(multiline, layoutOf(multiline))).toBeNull();
+  });
+
+  it('preset mac dinh: center/radius theo advanceWidth va height, chuan hoa theo fontSize', () => {
+    const node = textNode({ warp: { type: 'circle', curveHeight: 0.5 } });
+    const layout = layoutOf(node);
+    const params = resolveCircleParams(node, layout);
+    expect(params).toEqual({
+      centerX: (0.5 * layout.advanceWidth) / node.font.size,
+      centerY: (0.5 * layout.height) / node.font.size,
+      radius: (layout.advanceWidth / Math.PI) / node.font.size,
+    });
+  });
+
+  it('preset khong phu thuoc letterSpacing (fix)', () => {
+    const plain = textNode({ warp: { type: 'circle', curveHeight: 0.5 }, letterSpacing: 0 });
+    const spaced = textNode({ warp: { type: 'circle', curveHeight: 0.5 }, letterSpacing: 30 });
+    expect(resolveCircleParams(spaced, layoutOf(spaced))).toEqual(
+      resolveCircleParams(plain, layoutOf(plain)),
+    );
+  });
+
+  it('circle da luu thang preset', () => {
+    const stored = { centerX: 0.4, centerY: 0.6, radius: 0.25 };
+    const node = textNode({ warp: { type: 'circle', curveHeight: 0.5, circle: stored } });
+    const params = resolveCircleParams(node, layoutOf(node));
+    expect(params).toEqual(stored);
+  });
+});
+
 describe('textGeometry', () => {
   it('khong warp thi giong het layout thuan', () => {
     const plain = textGeometry(textNode(), poppins);
@@ -171,6 +225,111 @@ describe('textGeometry', () => {
   });
 });
 
+describe('textGeometry — circle', () => {
+  it('nhanh circle duoc kich hoat: shapes khac layout phang (khong = toa do goc)', () => {
+    const plain = textGeometry(textNode(), poppins);
+    const circle = textGeometry(textNode({ warp: { type: 'circle', curveHeight: 0.5 } }), poppins);
+    expect(circle.shapes[0].outer).not.toEqual(plain.shapes[0].outer);
+    expect(circle.shapes.length).toBe(plain.shapes.length);
+  });
+
+  it('bounds van tinh qua shapesBounds tren shapes da warp', () => {
+    const circle = textGeometry(textNode({ warp: { type: 'circle', curveHeight: 0.5 } }), poppins);
+    expect(circle.bounds).toEqual(shapesBounds(circle.shapes));
+  });
+
+  it('text nhieu dong tren circle roi ve layout phang khong warp (ngoai pham vi)', () => {
+    const node = textNode({ text: 'ab\ncd', warp: { type: 'circle', curveHeight: 0.5 } });
+    const circle = textGeometry(node, poppins);
+    const plain = textGeometry(textNode({ text: 'ab\ncd' }), poppins);
+    expect(circle.shapes).toEqual(plain.shapes);
+  });
+
+  it('directionInverted lam glyph huong nguoc (kiem tra gian tiep qua toa do khac nhau)', () => {
+    const normal = textGeometry(textNode({ warp: { type: 'circle', curveHeight: 0.5 } }), poppins);
+    const inverted = textGeometry(
+      textNode({ warp: { type: 'circle', curveHeight: 0.5, directionInverted: true } }),
+      poppins,
+    );
+    expect(inverted.shapes[0].outer).not.toEqual(normal.shapes[0].outer);
+  });
+
+  it('letterSpacing khong doi ban kinh preset (fix) — glyph dau trung khit', () => {
+    const base = textNode({
+      text: 'Wave',
+      letterSpacing: 0,
+      warp: { type: 'circle', curveHeight: 0.5 },
+    });
+    const spaced = textNode({
+      text: 'Wave',
+      letterSpacing: 40,
+      warp: { type: 'circle', curveHeight: 0.5 },
+    });
+    const a = textGeometry(base, poppins);
+    const b = textGeometry(spaced, poppins);
+    expect(b.shapes[0].outer).toEqual(a.shapes[0].outer);
+  });
+
+  it('letterSpacing khong doi circle DA LUU (dong bang tuyet doi theo B2)', () => {
+    const stored = { centerX: 0.5, centerY: 0.5, radius: 0.3 };
+    const base = textNode({
+      text: 'Wave',
+      letterSpacing: 0,
+      warp: { type: 'circle', curveHeight: 0.5, circle: stored },
+    });
+    const spaced = textNode({
+      text: 'Wave',
+      letterSpacing: 40,
+      warp: { type: 'circle', curveHeight: 0.5, circle: stored },
+    });
+    const a = textGeometry(base, poppins);
+    const b = textGeometry(spaced, poppins);
+    expect(b.shapes[0].outer).toEqual(a.shapes[0].outer);
+  });
+});
+
+describe('textGeometry — letterSpacing khong lam doi path (linear family, fix)', () => {
+  it('preset: glyph dau trung khit du doi letterSpacing', () => {
+    const base = textNode({
+      text: 'Wave',
+      letterSpacing: 0,
+      warp: { type: 'wave', curveHeight: 0.8 },
+    });
+    const spaced = textNode({
+      text: 'Wave',
+      letterSpacing: 25,
+      warp: { type: 'wave', curveHeight: 0.8 },
+    });
+    const a = textGeometry(base, poppins);
+    const b = textGeometry(spaced, poppins);
+    expect(b.shapes[0].outer).toEqual(a.shapes[0].outer);
+  });
+
+  it('path da luu: glyph dau trung khit du doi letterSpacing', () => {
+    const stored: WarpPath = {
+      role: 'baseline',
+      closed: false,
+      anchors: [
+        { x: 0, y: 0.2 },
+        { x: 1, y: 0.8 },
+      ],
+    };
+    const base = textNode({
+      text: 'Wave',
+      letterSpacing: 0,
+      warp: { type: 'wave', curveHeight: 0.5, paths: [stored] },
+    });
+    const spaced = textNode({
+      text: 'Wave',
+      letterSpacing: 25,
+      warp: { type: 'wave', curveHeight: 0.5, paths: [stored] },
+    });
+    const a = textGeometry(base, poppins);
+    const b = textGeometry(spaced, poppins);
+    expect(b.shapes[0].outer).toEqual(a.shapes[0].outer);
+  });
+});
+
 describe('text-on-path', () => {
   it('curveHeight = 0 cho hinh hoc trung khit layout, moi dong', () => {
     const node = textNode({ text: 'Hi\nHi', warp: { type: 'wave', curveHeight: 0 } });
@@ -188,6 +347,33 @@ describe('text-on-path', () => {
     const flat = measureText({ ...base, warp: { type: 'wave', curveHeight: 0 } }, poppins);
     const curved = measureText({ ...base, warp: { type: 'wave', curveHeight: 1 } }, poppins);
     expect(curved).toEqual(flat);
+  });
+
+  it('node.size (pivot cua applyTransform) khong doi khi letterSpacing doi, mien la co warp — fix loi path bi dich chuyen', () => {
+    // Bug: node.size dong bo theo measureText, truoc day dung `width` (gom
+    // letterSpacing) lam pivot cho applyTransform. Hinh warp (path/circle) da
+    // duoc co dinh theo advanceWidth/fontSize (khong doi theo letterSpacing) o
+    // fix truoc, nhung pivot van doi theo letterSpacing => CA NODE nhin nhu
+    // dich chuyen moi lan doi letterSpacing du hinh khong doi kich thuoc/vi tri
+    // cuc bo. Fix: measureText dung pivotWidth (= advanceWidth khi co warp).
+    const base = textNode({ text: 'Headline', warp: { type: 'wave', curveHeight: 0.8 } });
+    const plain = measureText({ ...base, letterSpacing: 0 }, poppins);
+    const spaced = measureText({ ...base, letterSpacing: 30 }, poppins);
+    expect(spaced).toEqual(plain);
+  });
+
+  it('circle: node.size cung khong doi khi letterSpacing doi', () => {
+    const base = textNode({ text: 'Headline', warp: { type: 'circle', curveHeight: 0.5 } });
+    const plain = measureText({ ...base, letterSpacing: 0 }, poppins);
+    const spaced = measureText({ ...base, letterSpacing: 30 }, poppins);
+    expect(spaced).toEqual(plain);
+  });
+
+  it('KHONG warp: node.size (width) VAN doi theo letterSpacing nhu binh thuong (doi chung, khong phai qua tay)', () => {
+    const base = textNode({ text: 'Headline' }); // warp: undefined
+    const plain = measureText({ ...base, letterSpacing: 0 }, poppins);
+    const spaced = measureText({ ...base, letterSpacing: 30 }, poppins);
+    expect(spaced.width).toBeGreaterThan(plain.width);
   });
 });
 

@@ -75,4 +75,39 @@ describe('layoutText', () => {
     expect(result.width).toBe(0);
     expect(Number.isFinite(result.height)).toBe(true);
   });
+
+  it('shapePivotX cung do dai va thu tu voi shapes', () => {
+    const result = layout('ij');
+    expect(result.shapePivotX).toHaveLength(result.shapes.length);
+    expect(result.shapePivotX.every((v) => Number.isFinite(v))).toBe(true);
+  });
+
+  it('nhieu shape cua cung mot glyph (vd cham + than chu i) dung chung mot pivotX', () => {
+    // 'i' trong Poppins co the tach cham/than thanh 2 outer rieng (khong long
+    // nhau) — chi test duoc neu font that su co glyph nhu vay, tranh gia dinh
+    // chua kiem chung; bo qua neu khong tim thay (CI khac font se skip êm).
+    const glyphs = getGlyphOutlines('i', poppins, 100);
+    const multiShapeGlyphIndex = glyphs.findIndex((g) => g.shapes.length > 1);
+    if (multiShapeGlyphIndex === -1) return;
+    const result = layout('i');
+    // Tim tat ca shapePivotX ung voi cac shape cua glyph 'i' (chi co 1 glyph
+    // trong text nay) — tat ca phai bang nhau.
+    const uniquePivots = new Set(result.shapePivotX.map((v) => v.toFixed(6)));
+    expect(uniquePivots.size).toBe(1);
+  });
+
+  it('advanceWidth khong gom letterSpacing, width co gom (fix path/circle bi keo gian theo letterSpacing)', () => {
+    const plain = layout('abc');
+    const spaced = layout('abc', { letterSpacing: 10 });
+    expect(spaced.advanceWidth).toBeCloseTo(plain.advanceWidth, 5);
+    expect(plain.advanceWidth).toBeCloseTo(plain.width, 5); // letterSpacing=0: width == advanceWidth
+    expect(spaced.width).toBeCloseTo(plain.advanceWidth + 20, 5); // 2 khoang * 10
+  });
+
+  it('advanceWidth lay max qua nhieu dong, giong cach tinh width', () => {
+    const result = layout('a\nabc');
+    const shortAdv = getGlyphOutlines('a', poppins, 100)[0].advance;
+    const longAdv = getGlyphOutlines('abc', poppins, 100).reduce((s, g) => s + g.advance, 0);
+    expect(result.advanceWidth).toBeCloseTo(Math.max(shortAdv, longAdv), 5);
+  });
 });

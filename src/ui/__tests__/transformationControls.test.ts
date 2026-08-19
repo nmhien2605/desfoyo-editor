@@ -4,6 +4,7 @@ import {
   resetWarp,
   setWarpCurveHeight,
   setWarpType,
+  toggleCircleDirectionInverted,
   DEFAULT_WARP_CURVE_HEIGHT,
 } from '../TransformationControls';
 
@@ -23,6 +24,7 @@ describe('setWarpType', () => {
     expect(setWarpType(undefined, 'wave')).toEqual({
       type: 'wave',
       curveHeight: DEFAULT_WARP_CURVE_HEIGHT,
+      directionInverted: false,
     });
   });
 
@@ -50,6 +52,32 @@ describe('setWarpCurveHeight', () => {
 
 describe('resetWarp', () => {
   it('xoa paths va tra curveHeight ve mac dinh, giu nguyen kieu', () => {
-    expect(resetWarp(edited)).toEqual({ type: 'wave', curveHeight: DEFAULT_WARP_CURVE_HEIGHT });
+    expect(resetWarp(edited)).toEqual({
+      type: 'wave',
+      curveHeight: DEFAULT_WARP_CURVE_HEIGHT,
+      directionInverted: false,
+    });
+  });
+});
+
+describe('toggleCircleDirectionInverted', () => {
+  it('dao dung, giu nguyen circle/curveHeight', () => {
+    const withCircle: Warp = {
+      type: 'circle',
+      curveHeight: 0.5,
+      circle: { centerX: 0.5, centerY: 0.5, radius: 0.3 },
+      directionInverted: false,
+    };
+    const toggled = toggleCircleDirectionInverted(withCircle);
+    expect(toggled.directionInverted).toBe(true);
+    expect(toggled.circle).toEqual(withCircle.circle);
+    expect(toggled.curveHeight).toBe(0.5);
+  });
+
+  it('dao 2 lan tra ve false', () => {
+    const once = toggleCircleDirectionInverted(undefined);
+    expect(once.directionInverted).toBe(true);
+    const twice = toggleCircleDirectionInverted(once);
+    expect(twice.directionInverted).toBe(false);
   });
 });
