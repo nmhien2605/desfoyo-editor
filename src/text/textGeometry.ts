@@ -54,9 +54,10 @@ export function shapesBounds(shapes: GlyphShape[]): TextGeometry['bounds'] {
   return { minX, minY, maxX, maxY };
 }
 
-// paths đã lưu thắng preset. Chữ chạy dọc theo cung theo độ dài cung, nhưng
-// hệ số k = L/W trong buildWarpMap đã bù lại nên không cần khái niệm `fit`:
-// hai mép chữ luôn rơi đúng hai mép hộp.
+// paths đã lưu thắng preset. Chữ chạy dọc theo cung theo đúng độ dài cung của
+// chính nó (buildWarpMap không còn hệ số k = L/W ép khớp bề rộng W — ký tự
+// giữ nguyên kích thước bất kể path dài/ngắn). Nếu path ngắn hơn W, phần text
+// vượt quá bị buildWarpMap + clipContourAtX cắt bỏ hẳn, không hiển thị.
 export function resolveWarpPath(
   node: TextNode,
   baselineRatio: number,

@@ -135,7 +135,7 @@ function commandsToContours(commands: PathCommand[]): Contour[] {
 // Trần đã biết: bỏ qua phần phình của cung so với dây cung, nên sai nếu điểm
 // đầu của một lỗ rơi đúng vào khe giữa cung và dây cung của outer khác. Chưa
 // gặp với font Latin — xem docs/text-future-work.md.
-function containsPoint(contour: Contour, px: number, py: number): boolean {
+export function containsPoint(contour: Contour, px: number, py: number): boolean {
   let inside = false;
   const count = (contour.length - 2) / 6;
   for (let s = 0; s < count; s++) {

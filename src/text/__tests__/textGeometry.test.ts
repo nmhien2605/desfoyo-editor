@@ -229,16 +229,15 @@ describe('bien doi theo do dai cung', () => {
     }
   });
 
-  it('I3 — be ngang bbox khong doi khi curveHeight doi', () => {
-    // X chi duoc GHIM tuyet doi tai hai mep hop (X(0)=0, X(W)=W); tai cac
-    // hoanh do noi bo, X la phep noi suy theo do dai cung nen KHONG tuyen
-    // tinh — be ngang bbox chi xap xi bat bien, sai khac tang theo do cong.
-    // Do thuc nghiem tren 'Wave'/Poppins toi curveHeight = 4 (tran slider):
-    // toi da ~1.53px (tang so voi ~0.78px truoc day vi buildWavePath gio do
-    // bien do tren duong cong that, khong phai control-polygon — cung
-    // curveHeight nhung duong cong thuc te cong hon). Dat nguong 2px, ro rang
-    // tren muc do nhung van bat duoc loi that (vd he so k tinh sai lam bbox
-    // lech vai px).
+  it('I3 (moi) — be ngang bbox sau warp khong bao gio vuot be ngang truoc warp', () => {
+    // Khong con he so k = L/W ep khop W voi L: buildWarpMap gio dat s = x
+    // truc tiep (khong nhan k), nen dX/dx = cos(theta) <= 1 tai moi diem (theta
+    // la goc tiep tuyen cua path) — X(x) <= x voi moi x, suy ra be ngang bbox
+    // sau warp khong bao gio VUOT qua be ngang truoc warp, chi co the bang
+    // hoac hep hon (do nen cuc bo o cho path doc, xem test I8 ben duoi). Day
+    // la bang chung truc tiep cho yeu cau "ky tu khong bi keo gian theo do
+    // dai path": truoc day (k = L/W > 1 khi path cong) bbox LUON bang dung
+    // plainW du curveHeight bao nhieu; gio no <= plainW, khong con bi ep dung.
     const plain = textGeometry(textNode({ text: 'Wave' }), poppins).bounds;
     const plainW = plain.maxX - plain.minX;
     for (const curveHeight of [0.25, 1, 2, 4]) {
@@ -246,7 +245,7 @@ describe('bien doi theo do dai cung', () => {
         textNode({ text: 'Wave', warp: { type: 'wave', curveHeight } }),
         poppins,
       ).bounds;
-      expect(Math.abs(b.maxX - b.minX - plainW)).toBeLessThan(2);
+      expect(b.maxX - b.minX).toBeLessThanOrEqual(plainW + 0.5);
     }
   });
 

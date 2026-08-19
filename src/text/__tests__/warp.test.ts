@@ -4,6 +4,7 @@ import {
   buildWarpMap,
   buildWavePath,
   clampPathX,
+  clipContourAtX,
   curveHeightOf,
   warpContours,
   type WarpMap,
@@ -186,10 +187,30 @@ describe('buildWarpMap', () => {
     expect(buildWarpMap(single, SIZE, 50)).toBeNull();
   });
 
-  it('X ghim dung hai mep hop: X(0) = 0 va X(W) = W', () => {
+  it('X(0) = 0 — mep trai chu luon bam diem dau path', () => {
     const map = buildWarpMap(WAVE(), SIZE, 50)!;
     expect(map.X(0)).toBe(0);
-    expect(Math.abs(map.X(SIZE.width) - SIZE.width)).toBeLessThan(0.1);
+  });
+
+  it('do dai path (L) khong lam doi X tai cung mot x — het stretch theo ty le path', () => {
+    // Truoc day (k = L/W) keo dai path se doi map.X(x) cho MOI x vi ca k
+    // thay doi. Gio path chi quyet dinh HINH DANG uon, khong quyet dinh ty
+    // le: keo dai anchor cuoi ra xa khong duoc lam doi vi tri X cua cac x
+    // van con nam trong pham vi path CHUA keo dai.
+    const short = WAVE();
+    const stretchedLast = short.anchors[short.anchors.length - 1];
+    const stretched: WarpPath = {
+      ...short,
+      anchors: short.anchors.map((a, i) =>
+        i === short.anchors.length - 1 ? { ...a, x: stretchedLast.x + 1 } : a,
+      ),
+    };
+    const m1 = buildWarpMap(short, SIZE, 50)!;
+    const m2 = buildWarpMap(clampPathX(stretched), SIZE, 50)!;
+    for (let x = 0; x <= 200; x += 10) {
+      expect(m2.X(x)).toBeCloseTo(m1.X(x), 6);
+      expect(m2.D(x)).toBeCloseTo(m1.D(x), 6);
+    }
   });
 
   it('X khong giam tren [0, W]', () => {
@@ -200,12 +221,6 @@ describe('buildWarpMap', () => {
       expect(v).toBeGreaterThanOrEqual(prev - 1e-9);
       prev = v;
     }
-  });
-
-  it('L >= W va k = L / W', () => {
-    const map = buildWarpMap(WAVE(), SIZE, 50)!;
-    expect(map.L).toBeGreaterThan(SIZE.width);
-    expect(map.k).toBeCloseTo(map.L / SIZE.width, 12);
   });
 
   it('L khop tham chieu doc lap duoi 0.05px', () => {
@@ -219,7 +234,7 @@ describe('buildWarpMap', () => {
     const map = buildWarpMap(path, SIZE, 50)!;
     const ref = walkPath(path, SIZE);
     for (let x = 0; x <= SIZE.width; x += 2) {
-      const p = ref.at(map.k * x);
+      const p = ref.at(x);
       expect(Math.abs(map.X(x) - p.x)).toBeLessThan(0.05);
       // D neo vao baselineY (50, tham so thu 3 cua buildWarpMap o tren), khong
       // phai diem dau path — xem comment tren buildWarpMap.
@@ -237,22 +252,18 @@ describe('buildWarpMap', () => {
     const map = buildWarpMap(path, SIZE, 50)!;
     const ref = walkPath(path, SIZE);
     for (let x = 0; x <= SIZE.width; x += 2) {
-      const p = ref.at(map.k * x);
+      const p = ref.at(x);
       expect(Math.abs(map.X(x) - p.x)).toBeLessThan(0.05);
       expect(Math.abs(map.D(x) - (p.y - 50))).toBeLessThan(0.05);
     }
   });
 
-  it('kep ve dau mut khi x ra ngoai [0, W]', () => {
-    // toBeCloseTo (khong phai toBe): k*width chi ~ L do lam tron dau phay
-    // dong, nen s=clamp(k*900,0,L) va s=clamp(k*width,0,L) co the roi vao hai
-    // nhanh khac nhau cua lookup() (bang-L tuyet doi vs noi suy sat mep) —
-    // sai khac chi co 1e-13px, khong phai loi hanh vi.
+  it('kep ve dau/cuoi path khi x ra ngoai [0, L]', () => {
     const map = buildWarpMap(WAVE(), SIZE, 50)!;
     expect(map.X(-100)).toBe(map.X(0));
     expect(map.D(-100)).toBe(map.D(0));
-    expect(map.X(900)).toBeCloseTo(map.X(SIZE.width), 6);
-    expect(map.D(900)).toBeCloseTo(map.D(SIZE.width), 6);
+    expect(map.X(map.L + 500)).toBe(map.X(map.L));
+    expect(map.D(map.L + 500)).toBe(map.D(map.L));
   });
 
   it('D neo o baselineY: tinh tien path doc keo D theo dung luong da tinh', () => {
@@ -284,8 +295,7 @@ describe('buildWarpMap', () => {
 // affine, khong keo theo sai so cua buildWarpMap.
 // He so 8/30 < 1 nen X don dieu tang; 0 <= X' <= 1.27.
 const analytic: WarpMap = {
-  L: 0,
-  k: 1,
+  L: Infinity, // khong gioi han — cac test o day do do chinh xac cua warp, khong do clip
   X: (x) => x + 8 * Math.sin(x / 30),
   D: (x) => 12 * Math.sin(x / 25),
 };
@@ -376,9 +386,88 @@ describe('warpContours', () => {
   });
 
   it('map dong nhat cho lai dung contour goc', () => {
-    const identity: WarpMap = { L: 0, k: 1, X: (x) => x, D: () => 0 };
+    const identity: WarpMap = { L: Infinity, X: (x) => x, D: () => 0 };
     const box = rect(10, 20, 60, 80);
     expect(warpContours([shape(box)], identity)[0].outer).toEqual(box);
+  });
+});
+
+describe('clipContourAtX', () => {
+  it('contour hoan toan ben trong (maxX <= xMax) giu nguyen, khong doi', () => {
+    const box = rect(10, 20, 60, 80);
+    expect(clipContourAtX(box, 100)).toEqual([box]);
+  });
+
+  it('contour hoan toan ben ngoai (minX > xMax) bien mat hoan toan', () => {
+    const box = rect(50, 20, 90, 80);
+    expect(clipContourAtX(box, 30)).toEqual([]);
+  });
+
+  it('contour vat qua xMax bi cat: khong con diem nao vuot xMax, van la contour kin', () => {
+    const box = rect(0, 0, 60, 40);
+    const [out] = clipContourAtX(box, 25);
+    expect(out).toBeDefined();
+    for (let i = 0; i < out.length; i += 2) {
+      expect(out[i]).toBeLessThanOrEqual(25 + 1e-6);
+    }
+    expect((out.length - 2) % 6).toBe(0);
+    expect(out[out.length - 2]).toBeCloseTo(out[0], 9);
+    expect(out[out.length - 1]).toBeCloseTo(out[1], 9);
+    // Mep phai cua phan con lai phai cham dung xMax (khong lui vao trong).
+    const xs = out.filter((_, i) => i % 2 === 0);
+    expect(Math.max(...xs)).toBeCloseTo(25, 6);
+  });
+
+  it('contour tach thanh nhieu manh roi nhau khi phan noi giua bi cat het', () => {
+    // Hinh "C nguoc": thanh tren (x 0-20,y 0-5) va thanh duoi (x 0-20,y 20-25)
+    // chi noi voi nhau qua mot cau noi doc nam han o x >= 17. Cat tai x = 15
+    // xoa het cau noi -> hai thanh con lai khong con cham nhau.
+    const c: number[] = [0, 0];
+    lineSeg(c, 0, 0, 20, 0);
+    lineSeg(c, 20, 0, 20, 25);
+    lineSeg(c, 20, 25, 0, 25);
+    lineSeg(c, 0, 25, 0, 20);
+    lineSeg(c, 0, 20, 17, 20);
+    lineSeg(c, 17, 20, 17, 5);
+    lineSeg(c, 17, 5, 0, 5);
+    lineSeg(c, 0, 5, 0, 0);
+
+    const pieces = clipContourAtX(c, 15);
+    expect(pieces).toHaveLength(2);
+    for (const piece of pieces) {
+      for (let i = 0; i < piece.length; i += 2) {
+        expect(piece[i]).toBeLessThanOrEqual(15 + 1e-6);
+      }
+    }
+    const yRange = (piece: number[]) => {
+      const ys = piece.filter((_, i) => i % 2 === 1);
+      return [Math.min(...ys), Math.max(...ys)];
+    };
+    const ranges = pieces.map(yRange).sort((a, b) => a[0] - b[0]);
+    expect(ranges[0][0]).toBeCloseTo(0, 6);
+    expect(ranges[0][1]).toBeCloseTo(5, 6);
+    expect(ranges[1][0]).toBeCloseTo(20, 6);
+    expect(ranges[1][1]).toBeCloseTo(25, 6);
+  });
+});
+
+describe('warpContours voi path ngan hon text (clip, khong stretch)', () => {
+  it('phan text vuot qua do dai path (L) bi cat, khong con diem nao co x > L', () => {
+    const map: WarpMap = { L: 40, X: (x) => Math.min(x, 40), D: () => 0 };
+    const box = rect(0, 0, 100, 10);
+    const [out] = warpContours([shape(box)], map);
+    const xs = out.outer.filter((_, i) => i % 2 === 0);
+    expect(Math.max(...xs)).toBeCloseTo(40, 6);
+  });
+
+  it('phan con lai (chua bi cat) giu dung kich thuoc goc, khong bi nen/gian', () => {
+    // map identity tren doan [0, L]: neu clip dung, be rong phan con lai phai
+    // bang dung min(box width, L) — khong bi scale theo ty le nao ca.
+    const map: WarpMap = { L: 40, X: (x) => Math.min(x, 40), D: () => 0 };
+    const box = rect(10, 0, 100, 10);
+    const [out] = warpContours([shape(box)], map);
+    const xs = out.outer.filter((_, i) => i % 2 === 0);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(30, 6); // [10, 40]
   });
 });
 

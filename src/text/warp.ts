@@ -1,5 +1,5 @@
 import type { Size, WarpAnchor, WarpPath } from '../schema';
-import type { Contour, GlyphShape } from './glyphOutlines';
+import { containsPoint, type Contour, type GlyphShape } from './glyphOutlines';
 import { type Cubic, evalCubic, extrema, splitCubic } from './bezier';
 
 export interface Point {
@@ -159,7 +159,6 @@ export interface WarpMap {
   X(x: number): number;
   D(x: number): number;
   L: number;
-  k: number;
 }
 
 // Khoang cach tu diem toi DUONG THANG qua hai dau mut day cung. Bang tra gio
@@ -229,10 +228,18 @@ function isFlatAtBaseline(path: WarpPath, size: Size, baselineY: number): boolea
   return path.anchors.every((a) => flatY(a) && (!a.in || flatY(a.in)) && (!a.out || flatY(a.out)));
 }
 
-// Bang tra theo DO DAI CUNG cho phep bien doi warp (spec §2.2):
-//   s = clamp(k*x, 0, L),  (x, y) -> (P(s).x, P(s).y + y - baselineY)
-// He so k = L/W la dang dong cua co che Kittl dat lai chieu rong layout bang L
-// moi lan path doi — nho no ma be ngang chu khong doi khi tang do cong.
+// Bang tra theo DO DAI CUNG cho phep bien doi warp:
+//   s = clamp(x, 0, L),  (x, y) -> (P(s).x, P(s).y + y - baselineY)
+// KHONG con he so k = L/W nhu spec §2.2/§2.3 cu (docs/superpowers/specs/
+// 2026-08-17-text-warp-arclength-design.md): truoc day k ep be rong layout W
+// khop dung do dai cung L moi lan path doi, nghia la KEO/NEN toan bo chu theo
+// ti le L/W moi khi nguoi dung keo dai/ngan path (anchor dau/cuoi tu do theo x
+// tu Task 1 cua docs/superpowers/plans/2026-08-18-warp-endpoint-resize.md).
+// Yeu cau moi: kich thuoc ky tu KHONG duoc doi theo do dai path — chi vi tri
+// dat doc theo cung doi. Bo k = dat x truc tiep bang do dai cung (khong quy
+// doi ti le), tuc tung ky tu giu dung kich thuoc goc; buildWarpMap goi o duoi
+// van dung clipContourAtX() de cat bo phan text vuot qua L khi path ngan hon
+// be rong text (thay vi don ep no vao dung mot diem cuoi path).
 //
 // D neo vao baselineY (khong phai diem dau path): baseline phai TRUNG dung gia
 // tri y cua path tai vi tri tuong ung, khong chi theo hinh dang tuong doi cua
@@ -260,10 +267,9 @@ export function buildWarpMap(path: WarpPath, size: Size, baselineY: number): War
 
   const L = us[us.length - 1];
   if (!(L > EPSILON)) return null;
-  const k = L / size.width;
 
   const lookup = (x: number): { x: number; y: number } => {
-    const s = Math.min(Math.max(k * x, 0), L);
+    const s = Math.min(Math.max(x, 0), L);
     if (s <= 0) return { x: xs[0], y: ys[0] };
     if (s >= L) return { x: xs[xs.length - 1], y: ys[ys.length - 1] };
     let low = 0;
@@ -283,7 +289,6 @@ export function buildWarpMap(path: WarpPath, size: Size, baselineY: number): War
 
   return {
     L,
-    k,
     X: (x) => lookup(x).x,
     D: (x) => lookup(x).y - baselineY,
   };
@@ -365,6 +370,146 @@ function warpSegment(out: number[], bx: Cubic, by: Cubic, map: WarpMap, depth: n
   pushWarped(out, bx, by, ax, bxc, ay, byc);
 }
 
+const EPSILON_T = 1e-9; // nguong tren tham so t (0..1), khac ty le voi EPSILON pixel
+
+// Cat mot cubic (theo mot truc) tai global-parameter [t0, t1] — dung 2 lan
+// splitCubic (de Casteljau), nen chinh xac TUYET DOI, khong xap xi.
+function subCubic(v: Cubic, t0: number, t1: number): Cubic {
+  if (t0 <= 0 && t1 >= 1) return v;
+  const head = t0 > 0 ? splitCubic(v[0], v[1], v[2], v[3], t0).right : v;
+  if (t1 >= 1) return head;
+  const u = (t1 - t0) / (1 - t0);
+  return splitCubic(head[0], head[1], head[2], head[3], u).left;
+}
+
+// Tat ca nghiem cua Bx(t) = xMax trong (0,1), sap tang dan. Chia doan theo
+// cuc tri (extrema()) thanh cac doan DON DIEU truoc — mot cubic co toi da 2
+// cuc tri noi bo nen toi da 3 doan don dieu, moi doan co toi da 1 nghiem, tim
+// bang nhi phan (dung ham chung evalCubic voi phan con lai cua file).
+function crossingsAtX(bx: Cubic, xMax: number): number[] {
+  const breaks = [0, ...extrema(bx[0], bx[1], bx[2], bx[3]), 1].sort((a, b) => a - b);
+  const roots: number[] = [];
+  for (let i = 0; i < breaks.length - 1; i++) {
+    const t0 = breaks[i];
+    const t1 = breaks[i + 1];
+    if (t1 - t0 < EPSILON_T) continue;
+    const f0 = evalCubic(bx[0], bx[1], bx[2], bx[3], t0) - xMax;
+    if (Math.abs(f0) < EPSILON) {
+      roots.push(t0);
+      continue;
+    }
+    const f1 = evalCubic(bx[0], bx[1], bx[2], bx[3], t1) - xMax;
+    if (f0 < 0 === f1 < 0) continue;
+    let lo = t0;
+    let hi = t1;
+    let flo = f0;
+    for (let iter = 0; iter < 50; iter++) {
+      const mid = (lo + hi) / 2;
+      const fm = evalCubic(bx[0], bx[1], bx[2], bx[3], mid) - xMax;
+      if (fm < 0 === flo < 0) {
+        lo = mid;
+        flo = fm;
+      } else hi = mid;
+    }
+    roots.push((lo + hi) / 2);
+  }
+  return roots;
+}
+
+// Noi diem cuoi ve diem dau bang mot canh THANG bieu dien duoi dang cubic voi
+// control point chia deu — dung quy uoc cua glyphOutlines.ts's line(). Bien
+// mot doan 'inside' rieng le (bi cat tai x = L) thanh mot contour KIN.
+function closeWithStraightEdge(points: number[]): void {
+  const x0 = points[0];
+  const y0 = points[1];
+  const xn = points[points.length - 2];
+  const yn = points[points.length - 1];
+  if (Math.abs(xn - x0) < EPSILON && Math.abs(yn - y0) < EPSILON) return;
+  points.push(
+    xn + (x0 - xn) / 3,
+    yn + (y0 - yn) / 3,
+    xn + (2 * (x0 - xn)) / 3,
+    yn + (2 * (y0 - yn)) / 3,
+    x0,
+    y0,
+  );
+}
+
+interface TaggedPiece {
+  bx: Cubic;
+  by: Cubic;
+  inside: boolean;
+}
+
+// Cat mot contour KIN theo dieu kien x <= xMax, tra ve 0..N contour KIN moi —
+// nhieu hon 1 khi phan con lai (sau khi cat) tach thanh cac mieng roi nhau.
+// Dung khi path warp ngan hon be rong text: phan text vuot qua L phai BIEN
+// MAT (khong hien thi), khac voi clamp/ngoai suy (chu van hien, chi bi don
+// vao 1 diem hoac keo dai ra ngoai path).
+//
+// Thuat toan: tach moi doan cubic tai cac nghiem cua Bx(t) = xMax thanh cac
+// mieng khong doi dau, roi noi cac mieng 'inside' lien tiep thanh contour con,
+// dong lai bang canh thang tai bien cat. Xoay danh sach de bat dau ngay sau
+// mot mieng 'outside' — vi day la vong KIN, mot run 'inside' co the vat qua
+// diem noi dau/cuoi mang neu khong xoay truoc.
+export function clipContourAtX(contour: Contour, xMax: number): Contour[] {
+  const segCount = (contour.length - 2) / 6;
+  if (segCount === 0) return [];
+
+  // Duong tat dung tinh bao loi (convex hull) cua Bezier: neu MOI control
+  // point (ca on-curve lan tay cam) cung mot phia thi ca cung chac chan cung
+  // phia do — khong can di qua thuat toan cat o duoi. Day la truong hop pho
+  // bien nhat (path dai hon text, L >= W).
+  let minX = Infinity;
+  let maxX = -Infinity;
+  for (let i = 0; i < contour.length; i += 2) {
+    if (contour[i] < minX) minX = contour[i];
+    if (contour[i] > maxX) maxX = contour[i];
+  }
+  if (maxX <= xMax + EPSILON) return [contour];
+  if (minX > xMax + EPSILON) return [];
+
+  const pieces: TaggedPiece[] = [];
+  for (let s = 0; s < segCount; s++) {
+    const i = s * 6;
+    const bx: Cubic = [contour[i], contour[i + 2], contour[i + 4], contour[i + 6]];
+    const by: Cubic = [contour[i + 1], contour[i + 3], contour[i + 5], contour[i + 7]];
+    const ts = [0, ...crossingsAtX(bx, xMax), 1];
+    for (let k = 0; k < ts.length - 1; k++) {
+      const t0 = ts[k];
+      const t1 = ts[k + 1];
+      if (t1 - t0 < EPSILON_T) continue;
+      const mid = (t0 + t1) / 2;
+      const inside = evalCubic(bx[0], bx[1], bx[2], bx[3], mid) <= xMax;
+      pieces.push({ bx: subCubic(bx, t0, t1), by: subCubic(by, t0, t1), inside });
+    }
+  }
+
+  const firstOutside = pieces.findIndex((p) => !p.inside);
+  if (firstOutside === -1) return [contour]; // fast-path o tren le ra da bat, giu day cho chac
+
+  const rotated = [...pieces.slice(firstOutside + 1), ...pieces.slice(0, firstOutside + 1)];
+  const out: Contour[] = [];
+  let current: number[] | null = null;
+  for (const piece of rotated) {
+    if (!piece.inside) {
+      if (current) {
+        closeWithStraightEdge(current);
+        out.push(current);
+        current = null;
+      }
+      continue;
+    }
+    if (!current) current = [piece.bx[0], piece.by[0]];
+    current.push(piece.bx[1], piece.by[1], piece.bx[2], piece.by[2], piece.bx[3], piece.by[3]);
+  }
+  if (current) {
+    closeWithStraightEdge(current);
+    out.push(current);
+  }
+  return out;
+}
+
 function warpContour(contour: Contour, map: WarpMap): Contour {
   const out: number[] = [map.X(contour[0]), contour[1] + map.D(contour[0])];
   for (let i = 0; i + 7 < contour.length; i += 6) {
@@ -387,11 +532,42 @@ function warpContour(contour: Contour, map: WarpMap): Contour {
 // den tu clampPathX. Day la cho yeu hon mo hinh cu: truoc kia hoanh do khong
 // bao gio bi ghi nen va cham glyph la bat kha thi ve mat toan hoc; gio no phu
 // thuoc mot bat bien do noi khac bao dam.
+//
+// Cat truoc khi warp (clipContourAtX voi map.L) chu khong sau: cat dung tren
+// toa do GOC (chua bien doi) noi x chinh la khoang cach doc theo cung tinh tu
+// diem dau path — dung y nghia "phan text vuot qua do dai path". Neu cat SAU
+// warp thi bien x = L da bi map.X() bien thanh mot duong cong, kho xac dinh
+// diem cat chinh xac.
+//
+// Thuong outer chi tach thanh 1 mieng (hoac khong doi neu L >= W, truong hop
+// pho bien) nen holes duoc gan thang vao no. Chi khi outer tach thanh nhieu
+// mieng roi nhau (hiem, thuong la path bi keo rat ngan giua mot glyph rong)
+// moi can dung containsPoint (dung lai logic groupIntoShapes cua
+// glyphOutlines.ts) de biet mieng hole nao thuoc mieng outer nao.
 export function warpContours(shapes: GlyphShape[], map: WarpMap): GlyphShape[] {
-  return shapes.map((shape) => ({
-    outer: warpContour(shape.outer, map),
-    holes: shape.holes.map((hole) => warpContour(hole, map)),
-  }));
+  const out: GlyphShape[] = [];
+  for (const shape of shapes) {
+    const outerPieces = clipContourAtX(shape.outer, map.L);
+    if (outerPieces.length === 0) continue;
+    const holePieces = shape.holes.flatMap((hole) => clipContourAtX(hole, map.L));
+
+    if (outerPieces.length === 1) {
+      out.push({
+        outer: warpContour(outerPieces[0], map),
+        holes: holePieces.map((hole) => warpContour(hole, map)),
+      });
+      continue;
+    }
+
+    for (const piece of outerPieces) {
+      const holes = holePieces.filter((hole) => containsPoint(piece, hole[0], hole[1]));
+      out.push({
+        outer: warpContour(piece, map),
+        holes: holes.map((hole) => warpContour(hole, map)),
+      });
+    }
+  }
+  return out;
 }
 
 const LUT_TOL = 0.01; // px — sai lech DOC toi da giua cung va day cung theo x
