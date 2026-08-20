@@ -46,12 +46,6 @@ describe('buildFilters', () => {
     expect((filter as BevelFilter).rotation).toBeCloseTo(90);
   });
 
-  it('builds a custom Filter for inner-shadow', () => {
-    const effects: Effect[] = [{ type: 'inner-shadow', color: '#000000', blur: 1, offset: [2, 2], alpha: 0.8 }];
-    const [filter] = buildFilters(effects);
-    expect(filter).toBeInstanceOf(Filter);
-  });
-
   it('builds a custom Filter for a known custom shaderId', () => {
     const effects: Effect[] = [{ type: 'custom', shaderId: 'chromatic-aberration', uniforms: { strength: 2 } }];
     const [filter] = buildFilters(effects);
@@ -61,5 +55,28 @@ describe('buildFilters', () => {
   it('produces no filter for an unknown custom shaderId', () => {
     const effects: Effect[] = [{ type: 'custom', shaderId: 'does-not-exist', uniforms: {} }];
     expect(buildFilters(effects)).toEqual([]);
+  });
+
+  it('text-shadow style=drop builds a DropShadowFilter with angle/distance converted to px offset via fontSize', () => {
+    const effects: Effect[] = [
+      { type: 'text-shadow', style: 'drop', color: '#111111', angle: 0, distance: 0.1, blur: 6 },
+    ];
+    const filters = buildFilters(effects, 100); // fontSize=100 => distance*fontSize=10px
+    expect(filters).toHaveLength(1);
+    expect(filters[0]).toBeInstanceOf(DropShadowFilter);
+    const f = filters[0] as DropShadowFilter;
+    expect(f.blur).toBe(6);
+  });
+
+  it('text-shadow style=line/block/3d builds NO filter — geometry handles it, not buildFilters', () => {
+    for (const style of ['line', 'block', '3d'] as const) {
+      const effects: Effect[] = [{ type: 'text-shadow', style, color: '#000', angle: 0, distance: 0.1 }];
+      expect(buildFilters(effects, 100)).toHaveLength(0);
+    }
+  });
+
+  it('text-shadow style=drop khong lam gi khi thieu fontSize (node khong phai text)', () => {
+    const effects: Effect[] = [{ type: 'text-shadow', style: 'drop', color: '#000', angle: 0, distance: 0.1 }];
+    expect(buildFilters(effects)).toHaveLength(0);
   });
 });

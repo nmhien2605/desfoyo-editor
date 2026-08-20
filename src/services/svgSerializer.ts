@@ -1,8 +1,9 @@
-import type { Document, Fill, GroupNode, Node, ShapeNode, TextNode } from '../schema';
+import type { Document, Effect, Fill, GroupNode, Node, ShapeNode, TextNode } from '../schema';
 import { resolveAsset } from './assetResolver';
 import { getLoadedFont } from '../text/fontService';
 import { textGeometry } from '../text/textGeometry';
 import type { GlyphShape } from '../text/glyphOutlines';
+import { buildShadowLayers, findTextShadow } from '../text/textShadow';
 
 // nodeId -> data:image/png;base64,... , built by the caller (exportService
 // .ts's exportSvg) via Pixi's live-render extract, since this module is
@@ -142,6 +143,48 @@ function contourToPathData(contour: number[]): string {
 // CÙNG chiều nên winding cộng dồn thành ±2 — evenodd sẽ coi đó là "chẵn" và
 // đục lỗ sai (không khớp canvas, vốn tô từng glyph độc lập); nonzero vẫn tô
 // đúng vì winding ±2 khác 0.
+let filterCounter = 0;
+
+// Chuan "drop shadow tu ve" bang primitive SVG co ban (feGaussianBlur +
+// feOffset + feFlood + feComposite + feMerge) thay vi feDropShadow rut gon —
+// tuong thich rong hon (mot so bo chuyen doi PDF/in an khong hieu
+// feDropShadow nhung LUON hieu 4 primitive nen ben duoi). Cung mot ket qua
+// hinh anh voi DropShadowFilter cua Pixi: lam mo alpha, dich offset, to mau,
+// ghep duoi nguon.
+function dropShadowFilterDefs(
+  shadow: Extract<Effect, { type: 'text-shadow' }>,
+  fontSize: number,
+  defs: string[],
+): string {
+  const id = `text-shadow-${filterCounter++}`;
+  const offsetPx = shadow.distance * fontSize;
+  const dx = Math.cos(shadow.angle) * offsetPx;
+  const dy = Math.sin(shadow.angle) * offsetPx;
+  const blur = shadow.blur ?? 4;
+  defs.push(
+    `<filter id="${id}" x="-50%" y="-50%" width="200%" height="200%">` +
+      `<feGaussianBlur in="SourceAlpha" stdDeviation="${blur / 2}"/>` +
+      `<feOffset dx="${dx}" dy="${dy}" result="offsetblur"/>` +
+      `<feFlood flood-color="${shadow.color}"/>` +
+      `<feComposite in2="offsetblur" operator="in"/>` +
+      `<feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>` +
+      `</filter>`,
+  );
+  return id;
+}
+
+function shadowLayerMarkup(shadow: Extract<Effect, { type: 'text-shadow' }>, shapes: GlyphShape[], fontSize: number): string {
+  const layers = buildShadowLayers(shapes, shadow, fontSize);
+  return layers
+    .map((layer) => {
+      const data = layer.shapes.map((s) => [s.outer, ...s.holes].map(contourToPathData).join(' ')).join(' ');
+      return layer.mode === 'stroke'
+        ? `<path d="${data}" fill="none" stroke="${shadow.color}" stroke-width="${shadow.thickness ?? 2}"/>`
+        : `<path d="${data}" fill="${shadow.color}" fill-rule="nonzero"/>`;
+    })
+    .join('');
+}
+
 function textElement(node: TextNode, defs: string[]): string {
   const loaded = getLoadedFont(node.font.family);
   // Font chưa nạp thì bỏ qua node, cùng quy ước "thiếu dữ liệu thì im lặng"
@@ -152,7 +195,21 @@ function textElement(node: TextNode, defs: string[]): string {
   const data = shapes
     .map((shape) => [shape.outer, ...shape.holes].map(contourToPathData).join(' '))
     .join(' ');
-  return `<path d="${data}" fill-rule="nonzero" ${fillAttr(node.fill, defs)}/>`;
+
+  const shadow = findTextShadow(node.effects);
+  let shadowMarkup = '';
+  let filterAttr = '';
+  if (shadow?.style === 'drop') {
+    const id = dropShadowFilterDefs(shadow, node.font.size, defs);
+    filterAttr = ` filter="url(#${id})"`;
+  } else if (shadow) {
+    // Ve TRUOC path chu chinh trong markup — SVG ve tuan tu, phan tu sau de
+    // len tren, nen shadow phai dung truoc de nam duoi (giong painter's
+    // algorithm trong textRenderer.ts).
+    shadowMarkup = shadowLayerMarkup(shadow, shapes, node.font.size);
+  }
+
+  return `${shadowMarkup}<path d="${data}" fill-rule="nonzero" ${fillAttr(node.fill, defs)}${filterAttr}/>`;
 }
 
 export function serializeNode(

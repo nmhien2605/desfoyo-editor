@@ -102,18 +102,22 @@ Circle/Distort/Custom) cần thêm envelope warp (mục 4) trước khi làm đ�
 
 ## 6. Shadow (FR-04)
 
-4 kiểu: drop, line, block, 3D. Điểm quan trọng đã ghi trong spec §3: **chỉ `drop` là filter**, ba kiểu còn lại là hình học.
+**Đã xong (2026-08-20):** 4 kiểu shadow (drop, line, block, 3D) được triển khai. Code chính nằm trong: `src/text/textShadow.ts` (hình học), `src/effects/buildFilters.ts` (drop filter), và `src/ui/TextShadowControls.tsx` (UI controls).
+
+Điểm quan trọng từ spec §3: **chỉ `drop` là filter**, ba kiểu còn lại là hình học. Bảng dưới ghi rõ kỹ thuật triển khai từng kiểu:
 
 | Kiểu | Cách làm |
 |---|---|
-| drop | `DropShadowFilter` của pixi-filters — đã có sẵn trong `buildFilters.ts` |
+| drop | `DropShadowFilter` của pixi-filters — áp dụng trong `buildFilters.ts` |
 | line | vẽ lại `Contour[]` lệch theo `angle`/`distance`, chỉ stroke, không fill |
 | block | vẽ `Contour[]` lệch đi rồi fill đặc, đặt dưới lớp chữ chính |
 | 3D | vẽ `Contour[]` lệch dần N bước (`steps`) để tạo khối đùn |
 
-Schema đã phác trong spec §4.3. `distance` chuẩn hoá theo `font.size` để bóng tự co giãn theo cỡ chữ.
+Schema định nghĩa ở spec §4.3. `distance` chuẩn hoá theo `font.size` để bóng tự co giãn theo cỡ chữ.
 
 Ba kiểu hình học đều đọc `Contour[]` **sau warp**, nên bóng tự động cong theo chữ — đó chính là lợi ích của việc gom mọi thứ về một pipeline hình học.
+
+**Hạn chế đã biết — `drop` lệch không gian giữa canvas và SVG export.** `drop` là filter duy nhất (bảng trên), và hai bên dựng nó ở hai không gian toạ độ khác nhau: trên canvas, `buildFilters.ts` gắn `DropShadowFilter` của Pixi lên node — filter này chạy ở **screen space**, không xoay/co theo `transform.rotation`/`scaleX`/`scaleY` của node. Ở SVG export, `svgSerializer.ts` gắn `<filter>` tương đương lên `<path>` nằm **bên trong** `<g transform="translate...rotate...scale...">` — nên `dx`/`dy` ở đó là **local space**, có xoay/co theo node. Kết quả: xoay hoặc scale một text node có shadow `drop` thì hướng/khoảng cách bóng trên canvas và trong SVG export sẽ khác nhau. Chỉ `drop` bị — `line`/`block`/`3d` là hình học local-space ở cả hai phía nên không dính.
 
 ---
 

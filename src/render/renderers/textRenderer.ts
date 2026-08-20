@@ -5,6 +5,7 @@ import { resolveFill } from '../fillToColor';
 import { getLoadedFont, loadFont, onFontLoaded } from '../../text/fontService';
 import { textGeometry } from '../../text/textGeometry';
 import type { GlyphShape } from '../../text/glyphOutlines';
+import { buildShadowLayers, findTextShadow, type ShadowLayer } from '../../text/textShadow';
 
 // Đúng phần bề mặt Graphics mà việc vẽ chữ cần — tách ra để test được thứ tự
 // lệnh vẽ mà không phải dựng WebGL.
@@ -21,6 +22,7 @@ export interface TextDrawTarget {
   closePath(): TextDrawTarget;
   fill(style?: unknown): TextDrawTarget;
   cut(): TextDrawTarget;
+  stroke(style?: unknown): TextDrawTarget;
 }
 
 function trace(target: TextDrawTarget, contour: GlyphShape['outer']): void {
@@ -56,6 +58,31 @@ export function drawTextShapes(target: TextDrawTarget, shapes: GlyphShape[], fil
   }
 }
 
+// Ve cac lop shadow hinh hoc (line/block/3d) — GIONG HET drawTextShapes ve
+// cach dung bezierCurveTo (khong flatten), khac o cho: 'stroke' mode KHONG
+// cut() lo — moi vong (outer va tung hole) duoc trace + stroke DOC LAP,
+// vi stroke khong co khai niem "lo" nhu fill (khong co dien tich de boolean-
+// tru), ta chi muon net vien cua CA outer LAN cac hole rieng.
+export function drawTextShadow(
+  target: TextDrawTarget,
+  layers: ShadowLayer[],
+  color: string,
+  thickness: number | undefined,
+): void {
+  for (const layer of layers) {
+    for (const shape of layer.shapes) {
+      trace(target, shape.outer);
+      if (layer.mode === 'stroke') target.stroke({ width: thickness ?? 2, color });
+      else target.fill(color);
+      for (const hole of shape.holes) {
+        trace(target, hole);
+        if (layer.mode === 'stroke') target.stroke({ width: thickness ?? 2, color });
+        else target.cut();
+      }
+    }
+  }
+}
+
 type TextGraphics = Graphics & { textNode?: TextNode; offFontLoaded?: () => void };
 
 function draw(obj: TextGraphics, node: TextNode): void {
@@ -69,6 +96,17 @@ function draw(obj: TextGraphics, node: TextNode): void {
     return;
   }
   const geometry = textGeometry(node, loaded.font);
+
+  // Shadow lop TRUOC chu chinh (painter's algorithm — ve truoc bi de sau)
+  // de shadow luon nam duoi. 'drop' khong toi day: no la mot WebGL filter
+  // ap dung SAU khi ca Graphics da ve xong (xem applyTransform.ts), khong
+  // phai them geometry — buildShadowLayers() da tra ve [] cho 'drop'.
+  const shadow = findTextShadow(node.effects);
+  if (shadow) {
+    const layers = buildShadowLayers(geometry.shapes, shadow, node.font.size);
+    drawTextShadow(obj as unknown as TextDrawTarget, layers, shadow.color, shadow.thickness);
+  }
+
   drawTextShapes(obj as unknown as TextDrawTarget, geometry.shapes, node.fill);
 
   // Hit-test mặc định của Graphics là hit-test từng path đã tô, nên chỉ đúng

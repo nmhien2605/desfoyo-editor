@@ -234,6 +234,7 @@ export const kittlShowcaseSample: Document = baseDoc({
           letterSpacing: 0,
           lineHeight: 1.2,
           fill: { type: 'solid', color: '#050505' },
+          effects: [{ type: 'text-shadow', style: 'block', color: '#e2b93b', angle: Math.PI / 6, distance: 0.05 }],
         },
         {
           id: 'text-play',

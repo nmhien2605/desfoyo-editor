@@ -7,21 +7,28 @@ import { decodeSvgText, listFillableIds } from '../render/renderers/svgRenderer'
 import { getLoadedFont, onFontLoaded, registeredFamilies } from '../text/fontService';
 import { measureText } from '../text/textGeometry';
 import { TransformationControls } from './TransformationControls';
+import { DEFAULT_TEXT_SHADOW, TextShadowControls } from './TextShadowControls';
 import type { BlendMode, Document, Effect, Fill, ImageNode, Node, Stroke, SvgNode, TextNode } from '../schema';
 
 const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten'];
 const STROKE_ALIGNS: Stroke['align'][] = ['inside', 'center', 'outside'];
-// All 7 variants buildFilters.ts now renders (see src/effects/buildFilters.ts)
-// — Phase 3 Pass D adds 'inner-shadow' and 'custom' (a GLSL filter and a
-// named-shader-registry lookup, respectively).
-const EFFECT_TYPES: Effect['type'][] = ['shadow', 'inner-shadow', 'glow', 'outline', 'blur', 'extrude3d', 'custom'];
+// All 6 variants buildFilters.ts now renders (see src/effects/buildFilters.ts)
+// — Phase 3 Pass D adds 'custom' (a named-shader-registry lookup).
+const EFFECT_TYPES: Effect['type'][] = ['shadow', 'glow', 'outline', 'blur', 'extrude3d', 'custom'];
 const CUSTOM_SHADER_IDS = Object.keys(customShaders);
 
 function defaultEffect(type: Effect['type']): Effect {
   switch (type) {
     case 'shadow':
-    case 'inner-shadow':
       return { type, color: '#000000', blur: 4, offset: [2, 2], alpha: 0.5 };
+    // ponytail: minimal stub to satisfy exhaustiveness on Effect['type'] —
+    // 'text-shadow' is deliberately absent from EFFECT_TYPES (the generic
+    // "+ Add Effect" dropdown) on every node type, so this branch is
+    // permanently unreachable from the UI. The real default lives in
+    // TextShadowControls.DEFAULT_TEXT_SHADOW, which owns text-shadow
+    // creation exclusively via its own enable/disable toggle.
+    case 'text-shadow':
+      return DEFAULT_TEXT_SHADOW;
     case 'glow':
       return { type: 'glow', color: '#ffffff', strength: 2, outer: true };
     case 'outline':
@@ -131,8 +138,18 @@ export function PropertiesPanel() {
         </CollapsibleSection>
       )}
 
-      <CollapsibleSection title="Text Shadow">
-        <EffectsControls effects={node.effects} onChange={(effects) => updateProps({ effects })} />
+      {node.type === 'text' && (
+        <CollapsibleSection title="Text Shadow">
+          <TextShadowControls node={node} onChange={(effects) => updateProps({ effects } as Partial<Node>)} />
+        </CollapsibleSection>
+      )}
+
+      <CollapsibleSection title="Effects">
+        <EffectsControls
+          effects={node.effects}
+          onChange={(effects) => updateProps({ effects })}
+          excludeShadow={node.type === 'text'}
+        />
       </CollapsibleSection>
 
       <section className="kittl-section">
@@ -172,14 +189,25 @@ function CollapsibleSection({ title, children }: { title: string; children: Reac
   );
 }
 
+// text-shadow is TextShadowControls's exclusive concern (own toggle, own
+// Effect entry) — never render/edit/remove it from the generic Effects
+// panel, regardless of node type. Exported for regression testing.
+export function effectsPanelList(effects: Effect[] | undefined): Effect[] {
+  return (effects ?? []).filter((e) => e.type !== 'text-shadow');
+}
+
 function EffectsControls({
   effects,
   onChange,
+  excludeShadow,
 }: {
   effects: Effect[] | undefined;
   onChange: (effects: Effect[]) => void;
+  excludeShadow?: boolean;
 }) {
-  const list = effects ?? [];
+  const all = effects ?? [];
+  const list = effectsPanelList(all);
+  const availableTypes = excludeShadow ? EFFECT_TYPES.filter((t) => t !== 'shadow') : EFFECT_TYPES;
 
   return (
     <fieldset className="flex flex-col gap-1">
@@ -188,22 +216,22 @@ function EffectsControls({
         <div key={i} className="flex flex-col gap-1 border-t border-gray-200 pt-1">
           <div className="flex items-center justify-between">
             <span>{effect.type}</span>
-            <button type="button" onClick={() => onChange(list.filter((_, j) => j !== i))} className="text-xs text-gray-500">
+            <button type="button" onClick={() => onChange(all.filter((e) => e !== effect))} className="text-xs text-gray-500">
               Remove
             </button>
           </div>
-          <EffectParams effect={effect} onChange={(next) => onChange(list.map((e, j) => (j === i ? next : e)))} />
+          <EffectParams effect={effect} onChange={(next) => onChange(all.map((e) => (e === effect ? next : e)))} />
         </div>
       ))}
       <select
         value=""
         onChange={(e) => {
-          if (e.target.value) onChange([...list, defaultEffect(e.target.value as Effect['type'])]);
+          if (e.target.value) onChange([...all, defaultEffect(e.target.value as Effect['type'])]);
         }}
         className="rounded border border-gray-300 px-1 py-0.5"
       >
         <option value="">+ Add Effect</option>
-        {EFFECT_TYPES.map((type) => (
+        {availableTypes.map((type) => (
           <option key={type} value={type}>
             {type}
           </option>
@@ -216,7 +244,6 @@ function EffectsControls({
 function EffectParams({ effect, onChange }: { effect: Effect; onChange: (effect: Effect) => void }) {
   switch (effect.type) {
     case 'shadow':
-    case 'inner-shadow':
       return (
         <>
           <input type="color" value={effect.color} onChange={(e) => onChange({ ...effect, color: e.target.value })} />

@@ -3,7 +3,12 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { getLoadedFont, loadFont, registerFont } from '../../text/fontService';
 import { Graphics, Rectangle } from 'pixi.js';
-import { drawTextShapes, textRenderer, type TextDrawTarget } from '../renderers/textRenderer';
+import {
+  drawTextShadow,
+  drawTextShapes,
+  textRenderer,
+  type TextDrawTarget,
+} from '../renderers/textRenderer';
 import { textGeometry } from '../../text/textGeometry';
 import type { TextNode } from '../../schema';
 
@@ -37,6 +42,10 @@ function fakeTarget() {
     },
     cut() {
       calls.push('cut');
+      return target;
+    },
+    stroke() {
+      calls.push('stroke');
       return target;
     },
   };
@@ -102,6 +111,7 @@ describe('drawTextShapes', () => {
       closePath: () => (calls.push('closePath'), target),
       fill: () => (calls.push('fill'), target),
       cut: () => (calls.push('cut'), target),
+      stroke: () => (calls.push('stroke'), target),
     };
     drawTextShapes(
       target,
@@ -153,5 +163,74 @@ describe('textRenderer.update — hitArea', () => {
     expect(obj.hitArea).not.toBeNull();
     textRenderer.update(obj, { ...node, font: { ...node.font, family: 'KhongTonTai' } });
     expect(obj.hitArea).toBeNull();
+  });
+});
+
+describe('drawTextShadow', () => {
+  it('fill mode: ve outer roi fill, hole thi cut (giong drawTextShapes)', () => {
+    const { target, calls } = fakeTarget();
+    drawTextShadow(
+      target,
+      [{ shapes: [{ outer: [0, 0, 1, 0, 2, 0, 3, 0], holes: [] }], mode: 'fill' }],
+      '#888888',
+      undefined,
+    );
+    expect(calls).toEqual(['moveTo', 'bezierCurveTo', 'closePath', 'fill']);
+  });
+
+  it('stroke mode: ve outer roi stroke, KHONG fill, hole cung duoc stroke rieng (khong cut)', () => {
+    const { target, calls } = fakeTarget();
+    drawTextShadow(
+      target,
+      [
+        {
+          shapes: [{ outer: [0, 0, 1, 0, 2, 0, 3, 0], holes: [[0, 0, 1, 0, 2, 0, 3, 0]] }],
+          mode: 'stroke',
+        },
+      ],
+      '#888888',
+      3,
+    );
+    expect(calls).toEqual([
+      'moveTo',
+      'bezierCurveTo',
+      'closePath',
+      'stroke',
+      'moveTo',
+      'bezierCurveTo',
+      'closePath',
+      'stroke',
+    ]);
+    expect(calls.filter((c) => c === 'cut')).toHaveLength(0);
+  });
+
+  it('nhieu lop (3d): ve tuan tu theo dung thu tu mang truyen vao', () => {
+    const { target, calls } = fakeTarget();
+    drawTextShadow(
+      target,
+      [
+        { shapes: [{ outer: [0, 0, 1, 0, 2, 0, 3, 0], holes: [] }], mode: 'fill' },
+        { shapes: [{ outer: [0, 0, 1, 0, 2, 0, 3, 0], holes: [] }], mode: 'fill' },
+      ],
+      '#888888',
+      undefined,
+    );
+    expect(calls.filter((c) => c === 'fill')).toHaveLength(2);
+  });
+});
+
+describe('textRenderer.update — shadow ve truoc, chu chinh ve sau (z-order)', () => {
+  it('node co text-shadow: lenh fill dau tien la mau shadow, lenh fill cuoi la mau chu', () => {
+    const plain = new Graphics();
+    textRenderer.update(plain, { ...node, text: 'l' });
+    const plainCallCount = plain.context.instructions.length;
+
+    const withShadow = new Graphics();
+    textRenderer.update(withShadow, {
+      ...node,
+      text: 'l',
+      effects: [{ type: 'text-shadow', style: 'block', color: '#888888', angle: 0, distance: 0.1 }],
+    });
+    expect(withShadow.context.instructions.length).toBeGreaterThan(plainCallCount);
   });
 });

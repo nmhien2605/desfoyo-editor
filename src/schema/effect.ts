@@ -13,11 +13,14 @@ export const EffectSchema = z.discriminatedUnion('type', [
     alpha: z.number().min(0).max(1),
   }),
   z.object({
-    type: z.literal('inner-shadow'),
+    type: z.literal('text-shadow'),
+    style: z.enum(['drop', 'line', 'block', '3d']),
     color: z.string(),
-    blur: z.number(),
-    offset: z.tuple([z.number(), z.number()]),
-    alpha: z.number().min(0).max(1),
+    angle: z.number(),
+    distance: z.number(),
+    blur: z.number().optional(),
+    thickness: z.number().optional(),
+    steps: z.number().int().min(1).optional(),
   }),
   z.object({
     type: z.literal('glow'),

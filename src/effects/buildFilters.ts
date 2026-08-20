@@ -1,16 +1,14 @@
-import { BlurFilter, Color, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
+import { BlurFilter, Filter, GlProgram, defaultFilterVert } from 'pixi.js';
 import { BevelFilter, DropShadowFilter, GlowFilter, OutlineFilter } from 'pixi-filters';
 import type { Effect } from '../schema';
-import { innerShadowFrag } from './shaders/innerShadow.frag';
 import { customShaders } from './shaders/customShaders';
 
 // Phase 1 wired up only 'shadow'. Phase 3 Pass A adds glow/outline/blur
 // (direct 1:1 matches with existing pixi-filters/pixi.js filters) and
 // extrude3d (approximated with BevelFilter — a 2D bevel, not true mesh
 // extrusion; real extrude needs geometry work, deferred to a later pass).
-// Phase 3 Pass D adds 'inner-shadow' (a hand-written GLSL filter — no
-// pixi-filters class does this) and 'custom' (picks a named shader from
-// customShaders.ts's registry; not arbitrary user-authored GLSL).
+// Phase 3 Pass D adds 'custom' (picks a named shader from customShaders.ts's
+// registry; not arbitrary user-authored GLSL).
 
 // Effect.uniforms values map onto GLSL uniforms as `u_<key>`, inferring the
 // resource type tag from the JS value shape — a number is 'f32', an array
@@ -27,7 +25,7 @@ function customUniforms(uniforms: Record<string, number | number[]>): Record<str
   return resources;
 }
 
-export function buildFilters(effects: Effect[] | undefined): Filter[] {
+export function buildFilters(effects: Effect[] | undefined, fontSize?: number): Filter[] {
   if (!effects) return [];
 
   const filters: Filter[] = [];
@@ -43,6 +41,24 @@ export function buildFilters(effects: Effect[] | undefined): Filter[] {
           }),
         );
         break;
+      case 'text-shadow': {
+        // Chi 'drop' la filter; 'line'/'block'/'3d' la hinh hoc, ve truc tiep
+        // trong textRenderer.ts/svgSerializer.ts qua buildShadowLayers() —
+        // xem src/text/textShadow.ts. Thieu fontSize (node khong phai text)
+        // thi bo qua lang le, cung quy uoc "thieu du lieu thi im lang" nhu
+        // 'custom' voi shaderId khong ton tai.
+        if (effect.style !== 'drop' || !fontSize) break;
+        const offsetPx = effect.distance * fontSize;
+        filters.push(
+          new DropShadowFilter({
+            color: effect.color,
+            blur: effect.blur ?? 4,
+            offset: { x: Math.cos(effect.angle) * offsetPx, y: Math.sin(effect.angle) * offsetPx },
+            alpha: 1,
+          }),
+        );
+        break;
+      }
       case 'glow':
         filters.push(
           new GlowFilter({
@@ -68,28 +84,11 @@ export function buildFilters(effects: Effect[] | undefined): Filter[] {
           }),
         );
         break;
-      case 'inner-shadow': {
-        const [r, g, b] = new Color(effect.color).toArray();
-        filters.push(
-          new Filter({
-            glProgram: new GlProgram({ vertex: defaultFilterVert, fragment: innerShadowFrag, name: 'inner-shadow-filter' }),
-            resources: {
-              innerShadowUniforms: {
-                uAlpha: { value: effect.alpha, type: 'f32' },
-                uColor: { value: new Float32Array([r, g, b]), type: 'vec3<f32>' },
-                uOffset: { value: effect.offset, type: 'vec2<f32>' },
-                uBlur: { value: effect.blur, type: 'f32' },
-              },
-            },
-          }),
-        );
-        break;
-      }
       case 'custom': {
         const fragment = customShaders[effect.shaderId];
         // Unknown shaderId stays inert rather than throwing — same
-        // silently-inert convention this file already used for
-        // 'inner-shadow'/'custom' before either had a real implementation.
+        // silently-inert convention this file already used for 'custom'
+        // before it had a real implementation.
         if (!fragment) break;
         filters.push(
           new Filter({

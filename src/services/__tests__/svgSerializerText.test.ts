@@ -169,3 +169,48 @@ describe('serializeNode cho text', () => {
     expect(evenOddFilled(subpaths, px, py)).toBe(false);
   });
 });
+
+describe('text-shadow trong SVG export', () => {
+  const withShadow: TextNode = {
+    ...node,
+    effects: [{ type: 'text-shadow', style: 'block', color: '#888888', angle: 0, distance: 0.1 }],
+  };
+  const withLineShadow: TextNode = {
+    ...node,
+    effects: [{ type: 'text-shadow', style: 'line', color: '#888888', angle: 0, distance: 0.1 }],
+  };
+  const withDropShadow: TextNode = {
+    ...node,
+    effects: [{ type: 'text-shadow', style: 'drop', color: '#888888', angle: 0, distance: 0.1 }],
+  };
+
+  it('style=block: mot <path> mau shadow xuat hien TRUOC path chu chinh trong markup (nam duoi)', async () => {
+    const defs: string[] = [];
+    const svg = serializeNode(withShadow, doc, defs);
+    const shadowIdx = svg.indexOf('fill="#888888"');
+    const mainIdx = svg.indexOf('fill="#ff0000"'); // mau fill chinh cua node test co san
+    expect(shadowIdx).toBeGreaterThanOrEqual(0);
+    expect(mainIdx).toBeGreaterThan(shadowIdx);
+  });
+
+  it('style=line: path shadow dung fill="none" va co stroke', () => {
+    const defs: string[] = [];
+    const svg = serializeNode(withLineShadow, doc, defs);
+    expect(svg).toContain('fill="none"');
+    expect(svg).toMatch(/stroke="#888888"\s*stroke-width="\d+/);
+  });
+
+  it('style=drop: khong sinh them <path>, thay vao do gan filter="url(#...)" tren path chinh, va defs co feGaussianBlur+feOffset+feMerge', () => {
+    const defs: string[] = [];
+    const svg = serializeNode(withDropShadow, doc, defs);
+    expect(defs.join('')).toContain('feGaussianBlur');
+    expect(defs.join('')).toContain('feOffset');
+    expect(defs.join('')).toContain('feMerge');
+    expect(svg).toMatch(/filter="url\(#[^)]+\)"/);
+  });
+
+  it('khong co text-shadow: hanh vi giu nguyen nhu truoc (khong regress)', () => {
+    const svg = serializeNode(node, doc, []); // `node` = fixture hien co, khong effects
+    expect(svg).not.toContain('<filter');
+  });
+});
