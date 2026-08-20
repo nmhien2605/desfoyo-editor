@@ -1,11 +1,16 @@
-import { describe, expect, it } from 'vitest';
-import type { Warp, WarpPath } from '../../schema';
+import { beforeAll, describe, expect, it } from 'vitest';
+import opentype from 'opentype.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import type { TextNode, Warp, WarpPath } from '../../schema';
+import { measureText } from '../../text/textGeometry';
 import {
   ENABLED_WARP_TYPES,
   resetWarp,
   setWarpCurveHeight,
   setWarpType,
   toggleCircleDirectionInverted,
+  warpUpdatePatch,
   DEFAULT_WARP_CURVE_HEIGHT,
 } from '../TransformationControls';
 
@@ -48,8 +53,8 @@ describe('ENABLED_WARP_TYPES', () => {
     expect(ENABLED_WARP_TYPES).toContain('custom');
   });
 
-  it('distort van khoa (chua cai dat)', () => {
-    expect(ENABLED_WARP_TYPES).not.toContain('distort');
+  it('distort da duoc bat', () => {
+    expect(ENABLED_WARP_TYPES).toContain('distort');
   });
 });
 
@@ -95,5 +100,53 @@ describe('toggleCircleDirectionInverted', () => {
     expect(once.directionInverted).toBe(true);
     const twice = toggleCircleDirectionInverted(once);
     expect(twice.directionInverted).toBe(false);
+  });
+});
+
+describe('warpUpdatePatch — fix bug node "nhay" vi tri khi chon lai sau khi doi warp type', () => {
+  let poppins: opentype.Font;
+  beforeAll(() => {
+    const path = fileURLToPath(new URL('../../text/fonts/Poppins-Regular.ttf', import.meta.url));
+    const buffer = readFileSync(path);
+    poppins = opentype.parse(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
+    );
+  });
+
+  const baseNode: TextNode = {
+    id: 'text-1',
+    type: 'text',
+    transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, originX: 0.5, originY: 0.5 },
+    size: { width: 0, height: 0 },
+    opacity: 1,
+    visible: true,
+    locked: false,
+    text: 'Hello',
+    font: { family: 'Poppins', weight: 400, style: 'normal', size: 96 },
+    align: 'left',
+    letterSpacing: 30, // >0 — bug chi lo ra khi co letterSpacing (xem textGeometry.ts's pivotWidth)
+    lineHeight: 1.2,
+    fill: { type: 'solid', color: '#000000' },
+  };
+
+  it('font chua nap: patch chi co warp, khong doan size', () => {
+    const patch = warpUpdatePatch(baseNode, null, setWarpType(undefined, 'distort'));
+    expect(patch).toEqual({ warp: setWarpType(undefined, 'distort') });
+  });
+
+  it('doi tu khong-warp (pivotWidth=width, tinh letterSpacing) sang co-warp (pivotWidth=advanceWidth): patch tra dung size moi, khong stale', () => {
+    // node.size dang luu dung theo cong thuc KHONG warp (truoc khi doi type).
+    const unwarpedNode = { ...baseNode, size: measureText(baseNode, poppins) };
+    const nextWarp = setWarpType(undefined, 'distort');
+    const patch = warpUpdatePatch(unwarpedNode, poppins, nextWarp);
+    expect(patch.warp).toEqual(nextWarp);
+    expect(patch.size).toBeDefined();
+    // size moi phai KHAC size cu (do da doi warped: false -> true, cong thuc
+    // pivotWidth doi tu width sang advanceWidth) — day chinh la gia tri ma
+    // truoc day KHONG duoc ghi cung patch, gay stale size + node "nhay" khi
+    // chon lai (PropertiesPanel.tsx's reconcileStaleSize tu sua sau do).
+    expect(patch.size!.width).not.toBeCloseTo(unwarpedNode.size.width, 1);
+    const warpedNode = { ...unwarpedNode, warp: nextWarp };
+    expect(patch.size).toEqual(measureText(warpedNode, poppins));
   });
 });

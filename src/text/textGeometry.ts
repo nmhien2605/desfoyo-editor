@@ -8,6 +8,7 @@ import { layoutText, type TextLayout } from './layout';
 import {
   buildAnglePath,
   buildArchPath,
+  buildDistortEdgePath,
   buildFlagPath,
   buildPathFrame,
   buildRisePath,
@@ -15,6 +16,7 @@ import {
   buildWavePath,
   clampPathX,
   warpContours,
+  warpContoursEnvelope,
 } from './warp';
 
 // Bien do (boi so fontSize) cua path khoi tao cho Custom — xem giai thich o
@@ -45,6 +47,10 @@ export interface TextGeometry {
   centerY: number;
   // Bbox thật của hình SAU warp. Chỉ để vẽ khung chọn — không đụng transform.
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
+  // Bbox thật của glyph TRƯỚC warp (layout phẳng) — dùng làm biên tren/duoi
+  // mặc định cho Distort (resolveDistortPaths) và để WarpHandlesOverlay.tsx
+  // tính lại đúng path đó khi vẽ handle, không phải để vẽ khung chọn.
+  flatBounds: { minX: number; minY: number; maxX: number; maxY: number };
 }
 
 // Bbox chính xác: lấy hai đầu mút cộng các cực trị giải tích. Không dùng bao
@@ -186,6 +192,30 @@ export function resolveCircleParams(
   };
 }
 
+// Distort: khac Circle/warp family, chuan hoa CA HAI path (top/bottom) theo
+// BIEN THAT cua glyph phang (flatBounds.minY/maxY), khong phai baseline hay
+// centerY — mac dinh la hinh chu nhat khit đung khung glyph ngay tu dau (da
+// do tren Kittl, xem docs/kittl-distort-reverse-engineered.md §2-3). paths da
+// luu (ca top lan bottom) thang preset, giong het quy uoc cua resolveWarpPath.
+export function resolveDistortPaths(
+  node: TextNode,
+  layout: Pick<TextLayout, 'height'>,
+  flatBounds: TextGeometry['flatBounds'],
+): { top: WarpPath; bottom: WarpPath } | null {
+  const warp = node.warp;
+  if (!warp || warp.type !== 'distort') return null;
+  const storedTop = warp.paths?.find((path) => path.role === 'top');
+  const storedBottom = warp.paths?.find((path) => path.role === 'bottom');
+  if (storedTop && storedBottom) {
+    return { top: clampPathX(storedTop), bottom: clampPathX(storedBottom) };
+  }
+  if (layout.height <= 0) return null;
+  return {
+    top: buildDistortEdgePath('top', flatBounds.minY / layout.height),
+    bottom: buildDistortEdgePath('bottom', flatBounds.maxY / layout.height),
+  };
+}
+
 export function textGeometry(node: TextNode, font: Font): TextGeometry {
   const layout = layoutText({
     text: node.text,
@@ -196,6 +226,7 @@ export function textGeometry(node: TextNode, font: Font): TextGeometry {
     align: node.align,
   });
 
+  const flatBounds = shapesBounds(layout.shapes);
   const circleParams = resolveCircleParams(node, layout);
   let shapes: GlyphShape[];
   let warped: boolean;
@@ -207,6 +238,10 @@ export function textGeometry(node: TextNode, font: Font): TextGeometry {
       directionInverted: node.warp?.directionInverted ?? false,
     });
     warped = true;
+  } else if (node.warp?.type === 'distort') {
+    const result = warpShapesOnDistort(node, layout, flatBounds);
+    shapes = result.shapes;
+    warped = result.warped;
   } else if (node.warp?.type === 'custom') {
     const result = warpShapesOnCustomPath(node, layout);
     shapes = result.shapes;
@@ -218,7 +253,7 @@ export function textGeometry(node: TextNode, font: Font): TextGeometry {
   }
 
   const pivotWidth = warped ? layout.advanceWidth : layout.width;
-  return { ...layout, shapes, pivotWidth, bounds: shapesBounds(shapes) };
+  return { ...layout, shapes, pivotWidth, bounds: shapesBounds(shapes), flatBounds };
 }
 
 function warpShapesFromPath(
@@ -240,6 +275,31 @@ function warpShapesFromPath(
   return map
     ? { shapes: warpContours(layout.shapes, map), warped: true }
     : { shapes: layout.shapes, warped: false };
+}
+
+// Distort: 2 duong cong doc lap (top/bottom) noi suy tuyen tinh theo vi tri
+// doc cua tung diem glyph — xem resolveDistortPaths o tren va warpContoursEnvelope
+// trong warp.ts (cong thuc + ly do thiet ke rieng, khong phai so do Kittl).
+// flatBounds lay tu shapesBounds TREN layout.shapes CHUA warp — do la "khung"
+// ma path top/bottom mac dinh bam vao (xem resolveDistortPaths).
+function warpShapesOnDistort(
+  node: TextNode,
+  layout: TextLayout,
+  flatBounds: TextGeometry['flatBounds'],
+): { shapes: GlyphShape[]; warped: boolean } {
+  const paths = resolveDistortPaths(node, layout, flatBounds);
+  if (!paths) return { shapes: layout.shapes, warped: false };
+  const size = { width: layout.advanceWidth, height: layout.height };
+  const frameTop = buildPathFrame(paths.top, size, flatBounds.minY);
+  const frameBottom = buildPathFrame(paths.bottom, size, flatBounds.maxY);
+  const envelope = {
+    top: frameTop,
+    bottom: frameBottom,
+    topFlatY: flatBounds.minY,
+    bottomFlatY: flatBounds.maxY,
+    advanceWidth: layout.advanceWidth,
+  };
+  return { shapes: warpContoursEnvelope(layout.shapes, envelope), warped: true };
 }
 
 // Custom: rigid-transform-per-glyph theo path mo (khac warpShapesFromPath

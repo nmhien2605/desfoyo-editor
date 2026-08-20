@@ -202,7 +202,11 @@ export const kittlShowcaseSample: Document = baseDoc({
           id: 'text-fresh',
           type: 'text',
           transform: { x: 320, y: 200, scaleX: 1, scaleY: 1, rotation: -0.3, originX: 0.5, originY: 0.5 },
-          size: { width: 200, height: 80 },
+          // measureText(node, Poppins@48) — khong doan tay, xem finding "node
+          // nhay vi tri khi chon lai" (size doan tay lech voi size do that,
+          // reconcileStaleSize trong PropertiesPanel.tsx tu sua luc chon,
+          // pivot doi dot ngot).
+          size: { width: 139.392, height: 67.2 },
           opacity: 1,
           visible: true,
           locked: false,
@@ -218,7 +222,9 @@ export const kittlShowcaseSample: Document = baseDoc({
           id: 'text-headline',
           type: 'text',
           transform: { x: 470, y: 420, scaleX: 1, scaleY: 1, rotation: 0, originX: 0.5, originY: 0.5 },
-          size: { width: 620, height: 90 },
+          // measureText(node, Poppins@72) — khong doan tay, xem comment o
+          // text-fresh o tren.
+          size: { width: 317.952, height: 100.8 },
           opacity: 1,
           visible: true,
           locked: false,
@@ -233,7 +239,9 @@ export const kittlShowcaseSample: Document = baseDoc({
           id: 'text-play',
           type: 'text',
           transform: { x: 470, y: 600, scaleX: 1, scaleY: 1, rotation: 0, originX: 0.5, originY: 0.5 },
-          size: { width: 380, height: 100 },
+          // measureText(node, Anton@96) — khong doan tay, xem comment o
+          // text-fresh o tren.
+          size: { width: 330.515625, height: 144.515625 },
           opacity: 1,
           visible: true,
           locked: false,
@@ -264,7 +272,9 @@ export const kittlShowcaseSample: Document = baseDoc({
           id: 'text-curved',
           type: 'text',
           transform: { x: 720, y: 720, scaleX: 1, scaleY: 1, rotation: 0.1, originX: 0.5, originY: 0.5 },
-          size: { width: 320, height: 80 },
+          // measureText(node, Lobster@65) — khong doan tay, xem comment o
+          // text-fresh o tren.
+          size: { width: 208.65, height: 81.25 },
           opacity: 1,
           visible: true,
           locked: false,
@@ -280,7 +290,9 @@ export const kittlShowcaseSample: Document = baseDoc({
           id: 'text-bottom',
           type: 'text',
           transform: { x: 470, y: 920, scaleX: 1, scaleY: 1, rotation: 0, originX: 0.5, originY: 0.5 },
-          size: { width: 500, height: 80 },
+          // measureText(node, Anton@64) — khong doan tay, xem comment o
+          // text-fresh o tren.
+          size: { width: 489.15625, height: 96.34375 },
           opacity: 1,
           visible: true,
           locked: false,

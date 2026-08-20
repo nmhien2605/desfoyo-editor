@@ -7,6 +7,7 @@ import { layoutText } from '../layout';
 import {
   measureText,
   resolveCircleParams,
+  resolveDistortPaths,
   resolveWarpPath,
   shapesBounds,
   textGeometry,
@@ -216,6 +217,65 @@ describe('resolveCircleParams', () => {
   });
 });
 
+describe('resolveDistortPaths', () => {
+  function flatBoundsOf(node: TextNode) {
+    const layout = layoutOf(node);
+    return shapesBounds(layout.shapes);
+  }
+
+  it('tra null khi khong co warp hoac type khac distort', () => {
+    expect(resolveDistortPaths(textNode(), layoutOf(textNode()), flatBoundsOf(textNode()))).toBeNull();
+    const wave = textNode({ warp: { type: 'wave', curveHeight: 0.5 } });
+    expect(resolveDistortPaths(wave, layoutOf(wave), flatBoundsOf(wave))).toBeNull();
+  });
+
+  it('preset mac dinh: 2 path PHANG TUYET DOI tai bien tren/duoi cua glyph phang, khong bump', () => {
+    const node = textNode({ warp: { type: 'distort', curveHeight: 0.5 } });
+    const layout = layoutOf(node);
+    const bounds = shapesBounds(layout.shapes);
+    const result = resolveDistortPaths(node, layout, bounds)!;
+    expect(result.top.role).toBe('top');
+    expect(result.bottom.role).toBe('bottom');
+    for (const a of result.top.anchors) expect(a.y).toBeCloseTo(bounds.minY / layout.height, 9);
+    for (const a of result.bottom.anchors) expect(a.y).toBeCloseTo(bounds.maxY / layout.height, 9);
+  });
+
+  it('paths da luu (top+bottom) thang preset', () => {
+    const storedTop: WarpPath = {
+      role: 'top',
+      closed: false,
+      anchors: [
+        { x: 0, y: 0.1 },
+        { x: 1, y: 0.05 },
+      ],
+    };
+    const storedBottom: WarpPath = {
+      role: 'bottom',
+      closed: false,
+      anchors: [
+        { x: 0, y: 0.9 },
+        { x: 1, y: 0.95 },
+      ],
+    };
+    const node = textNode({
+      warp: { type: 'distort', curveHeight: 0.5, paths: [storedTop, storedBottom] },
+    });
+    const layout = layoutOf(node);
+    const result = resolveDistortPaths(node, layout, shapesBounds(layout.shapes))!;
+    expect(result.top.anchors[0].y).toBeCloseTo(0.1, 9);
+    expect(result.bottom.anchors[0].y).toBeCloseTo(0.9, 9);
+  });
+
+  it('preset khong doi theo letterSpacing (bien doc cua glyph khong doi theo giai cach ngang)', () => {
+    const plain = textNode({ warp: { type: 'distort', curveHeight: 0.5 }, letterSpacing: 0 });
+    const spaced = textNode({ warp: { type: 'distort', curveHeight: 0.5 }, letterSpacing: 40 });
+    const a = resolveDistortPaths(plain, layoutOf(plain), flatBoundsOf(plain))!;
+    const b = resolveDistortPaths(spaced, layoutOf(spaced), flatBoundsOf(spaced))!;
+    expect(b.top.anchors[0].y).toBeCloseTo(a.top.anchors[0].y, 9);
+    expect(b.bottom.anchors[0].y).toBeCloseTo(a.bottom.anchors[0].y, 9);
+  });
+});
+
 describe('textGeometry', () => {
   it('khong warp thi giong het layout thuan', () => {
     const plain = textGeometry(textNode(), poppins);
@@ -326,6 +386,135 @@ describe('textGeometry — circle', () => {
     const a = textGeometry(base, poppins);
     const b = textGeometry(spaced, poppins);
     expect(b.shapes[0].outer).toEqual(a.shapes[0].outer);
+  });
+});
+
+describe('textGeometry — distort (envelope top/bottom)', () => {
+  it('preset chua keo: phang tuyet doi, giong het layout thuan', () => {
+    const plain = textGeometry(textNode(), poppins);
+    const distort = textGeometry(textNode({ warp: { type: 'distort', curveHeight: 0.5 } }), poppins);
+    plain.shapes[0].outer.forEach((value, i) =>
+      expect(distort.shapes[0].outer[i]).toBeCloseTo(value, 6),
+    );
+  });
+
+  it('path da luu (bien tren dich len) lam doi hinh hoc', () => {
+    const storedTop: WarpPath = {
+      role: 'top',
+      closed: false,
+      anchors: [
+        { x: 0, y: -0.2 },
+        { x: 1, y: -0.2 },
+      ],
+    };
+    const storedBottom: WarpPath = {
+      role: 'bottom',
+      closed: false,
+      anchors: [
+        { x: 0, y: 0.9 },
+        { x: 1, y: 0.9 },
+      ],
+    };
+    const plain = textGeometry(textNode(), poppins);
+    const distort = textGeometry(
+      textNode({ warp: { type: 'distort', curveHeight: 0.5, paths: [storedTop, storedBottom] } }),
+      poppins,
+    );
+    expect(distort.shapes[0].outer).not.toEqual(plain.shapes[0].outer);
+    expect(distort.shapes[0].outer.every(Number.isFinite)).toBe(true);
+    expect(distort.shapes.length).toBe(plain.shapes.length);
+  });
+
+  it('bounds van tinh qua shapesBounds tren shapes da warp', () => {
+    const storedTop: WarpPath = {
+      role: 'top',
+      closed: false,
+      anchors: [
+        { x: 0, y: -0.2 },
+        { x: 1, y: 0 },
+      ],
+    };
+    const storedBottom: WarpPath = {
+      role: 'bottom',
+      closed: false,
+      anchors: [
+        { x: 0, y: 0.9 },
+        { x: 1, y: 1.1 },
+      ],
+    };
+    const distort = textGeometry(
+      textNode({ warp: { type: 'distort', curveHeight: 0.5, paths: [storedTop, storedBottom] } }),
+      poppins,
+    );
+    expect(distort.bounds).toEqual(shapesBounds(distort.shapes));
+  });
+
+  it('letterSpacing khong doi kich thuoc khung distort preset — glyph dau trung khit', () => {
+    const base = textNode({
+      text: 'Wave',
+      letterSpacing: 0,
+      warp: { type: 'distort', curveHeight: 0.5 },
+    });
+    const spaced = textNode({
+      text: 'Wave',
+      letterSpacing: 30,
+      warp: { type: 'distort', curveHeight: 0.5 },
+    });
+    const a = textGeometry(base, poppins);
+    const b = textGeometry(spaced, poppins);
+    expect(b.shapes[0].outer).toEqual(a.shapes[0].outer);
+  });
+
+  it('letterSpacing khong doi khung distort DA LUU (paths) — glyph dau trung khit', () => {
+    const storedTop: WarpPath = {
+      role: 'top',
+      closed: false,
+      anchors: [
+        { x: 0, y: -0.3 },
+        { x: 1, y: 0 },
+      ],
+    };
+    const storedBottom: WarpPath = {
+      role: 'bottom',
+      closed: false,
+      anchors: [
+        { x: 0, y: 0.8 },
+        { x: 1, y: 1 },
+      ],
+    };
+    const warp = { type: 'distort' as const, curveHeight: 0.5, paths: [storedTop, storedBottom] };
+    const base = textNode({ text: 'Wave', letterSpacing: 0, warp });
+    const spaced = textNode({ text: 'Wave', letterSpacing: 30, warp });
+    const a = textGeometry(base, poppins);
+    const b = textGeometry(spaced, poppins);
+    expect(b.shapes[0].outer).toEqual(a.shapes[0].outer);
+  });
+
+  it('text dai hon/ngan hon van bien dang vua khit (khong cat, khac warp family)', () => {
+    const storedTop: WarpPath = {
+      role: 'top',
+      closed: false,
+      anchors: [
+        { x: 0, y: -0.3 },
+        { x: 1, y: 0.1 },
+      ],
+    };
+    const storedBottom: WarpPath = {
+      role: 'bottom',
+      closed: false,
+      anchors: [
+        { x: 0, y: 0.7 },
+        { x: 1, y: 1.1 },
+      ],
+    };
+    const warp = { type: 'distort' as const, curveHeight: 0.5, paths: [storedTop, storedBottom] };
+    const short = textGeometry(textNode({ text: 'Hi', warp }), poppins);
+    const long = textGeometry(textNode({ text: 'HelloWorld', warp }), poppins);
+    // Ca hai deu phai co glyph cuoi nam trong pham vi hop ly (khong bi cat mat,
+    // khong NaN) — bang chung gian tiep cho "luon vua khit", khac clip cua warp family.
+    expect(short.shapes.length).toBeGreaterThan(0);
+    expect(long.shapes.length).toBeGreaterThan(0);
+    expect(long.shapes.every((s) => s.outer.every(Number.isFinite))).toBe(true);
   });
 });
 

@@ -3,6 +3,7 @@ import type { WarpPath } from '../../schema';
 import {
   buildAnglePath,
   buildArchPath,
+  buildDistortEdgePath,
   buildFlagPath,
   buildPathFrame,
   buildRisePath,
@@ -11,7 +12,10 @@ import {
   clampPathX,
   clipContourAtX,
   curveHeightOf,
+  envelopePoint,
   warpContours,
+  warpContoursEnvelope,
+  type EnvelopeFrame,
   type WarpMap,
 } from '../warp';
 import { evalCubic } from '../bezier';
@@ -631,6 +635,130 @@ describe('buildPathFrame', () => {
     expect(frame.X(frame.L + 500)).toBe(frame.X(frame.L));
     expect(Number.isFinite(frame.angle(-100))).toBe(true);
     expect(Number.isFinite(frame.angle(frame.L + 500))).toBe(true);
+  });
+});
+
+describe('buildDistortEdgePath', () => {
+  it('3 anchor, cung y = edgeRatio, anchor giua co 2 handle cung y', () => {
+    const path = buildDistortEdgePath('top', 0.3);
+    expect(path.role).toBe('top');
+    expect(path.anchors).toHaveLength(3);
+    for (const a of path.anchors) expect(a.y).toBeCloseTo(0.3, 12);
+    expect(path.anchors[1].in?.y).toBeCloseTo(0.3, 12);
+    expect(path.anchors[1].out?.y).toBeCloseTo(0.3, 12);
+    expect(path.anchors[0].in).toBeUndefined();
+    expect(path.anchors[0].out).toBeUndefined();
+    expect(path.anchors[2].in).toBeUndefined();
+    expect(path.anchors[2].out).toBeUndefined();
+  });
+
+  it('phang tai baseline => buildPathFrame tra null (dong nhat)', () => {
+    const path = buildDistortEdgePath('bottom', 0.5);
+    expect(buildPathFrame(path, SIZE, SIZE.height * 0.5)).toBeNull();
+  });
+});
+
+describe('envelopePoint', () => {
+  const ADVANCE = 400;
+  const TOP_Y = 20;
+  const BOTTOM_Y = 80;
+
+  it('ca hai bien null (chua keo) => dong nhat tuyet doi', () => {
+    const envelope: EnvelopeFrame = {
+      top: null,
+      bottom: null,
+      topFlatY: TOP_Y,
+      bottomFlatY: BOTTOM_Y,
+      advanceWidth: ADVANCE,
+    };
+    for (const [x, y] of [
+      [0, TOP_Y],
+      [200, 50],
+      [400, BOTTOM_Y],
+    ]) {
+      expect(envelopePoint(x, y, envelope)).toEqual({ x, y });
+    }
+  });
+
+  it('t=0 (diem tren bien tren) chi phu thuoc top, khong phu thuoc bottom', () => {
+    const topPath = clampPathX(buildDistortEdgePath('top', (TOP_Y - 10) / SIZE.height));
+    const frameTop = buildPathFrame(topPath, { width: ADVANCE, height: SIZE.height }, TOP_Y)!;
+    const envelope: EnvelopeFrame = {
+      top: frameTop,
+      bottom: null,
+      topFlatY: TOP_Y,
+      bottomFlatY: BOTTOM_Y,
+      advanceWidth: ADVANCE,
+    };
+    const p = envelopePoint(0, TOP_Y, envelope);
+    expect(p.y).toBeCloseTo(TOP_Y - 10, 6);
+  });
+
+  it('t=1 (diem tren bien duoi) chi phu thuoc bottom, khong phu thuoc top', () => {
+    const bottomPath = clampPathX(buildDistortEdgePath('bottom', (BOTTOM_Y + 15) / SIZE.height));
+    const frameBottom = buildPathFrame(bottomPath, { width: ADVANCE, height: SIZE.height }, BOTTOM_Y)!;
+    const envelope: EnvelopeFrame = {
+      top: null,
+      bottom: frameBottom,
+      topFlatY: TOP_Y,
+      bottomFlatY: BOTTOM_Y,
+      advanceWidth: ADVANCE,
+    };
+    const p = envelopePoint(ADVANCE, BOTTOM_Y, envelope);
+    expect(p.y).toBeCloseTo(BOTTOM_Y + 15, 6);
+  });
+
+  it('s ti le khit theo advanceWidth/L, khong theo x tuyet doi (khac buildWarpMap)', () => {
+    // Bien tren rong gap doi advanceWidth (L ~ 2*ADVANCE do keo dai handle) —
+    // diem giua text (x = ADVANCE/2, frac = 0.5) phai roi dung giua bien do,
+    // khong phai tai x = ADVANCE/2 tren bien.
+    const topPath = clampPathX({
+      role: 'top',
+      closed: false,
+      anchors: [
+        { x: 0, y: 0 },
+        { x: 2, y: 0 },
+      ],
+    });
+    const frameTop = buildPathFrame(topPath, { width: ADVANCE, height: 1 }, 100)!;
+    const envelope: EnvelopeFrame = {
+      top: frameTop,
+      bottom: null,
+      topFlatY: TOP_Y,
+      bottomFlatY: BOTTOM_Y,
+      advanceWidth: ADVANCE,
+    };
+    const p = envelopePoint(ADVANCE / 2, TOP_Y, envelope);
+    expect(p.x).toBeCloseTo(ADVANCE, 6); // giua duong dai 2*ADVANCE la ADVANCE, khong phai ADVANCE/2
+  });
+});
+
+describe('warpContoursEnvelope', () => {
+  it('dong nhat tuyet doi khi ca hai bien phang (chua keo)', () => {
+    const box = rect(10, 20, 60, 80);
+    const envelope: EnvelopeFrame = {
+      top: null,
+      bottom: null,
+      topFlatY: 20,
+      bottomFlatY: 80,
+      advanceWidth: 400,
+    };
+    expect(warpContoursEnvelope([shape(box)], envelope)[0].outer).toEqual(box);
+  });
+
+  it('ap dung ca cho holes', () => {
+    const outer = rect(0, 0, 100, 100);
+    const hole = rect(30, 30, 70, 70);
+    const envelope: EnvelopeFrame = {
+      top: null,
+      bottom: null,
+      topFlatY: 0,
+      bottomFlatY: 100,
+      advanceWidth: 100,
+    };
+    const [out] = warpContoursEnvelope([{ outer, holes: [hole] }], envelope);
+    expect(out.holes).toHaveLength(1);
+    out.holes[0].forEach((v, i) => expect(v).toBeCloseTo(hole[i], 9));
   });
 });
 

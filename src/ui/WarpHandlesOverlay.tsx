@@ -4,9 +4,11 @@ import type { Viewport } from '../render/viewport';
 import { rotateVector } from '../render/interactions/resizeMath';
 import { startPointerGesture } from '../render/interactions/pointerGesture';
 import { getLoadedFont } from '../text/fontService';
-import { resolveWarpPath, textGeometry } from '../text/textGeometry';
+import { resolveDistortPaths, resolveWarpPath, textGeometry } from '../text/textGeometry';
 import { clampPathX, curveHeightOf } from '../text/warp';
-import type { Node, TextNode, WarpAnchor, WarpPath } from '../schema';
+import type { Node, TextNode, Warp, WarpAnchor, WarpPath } from '../schema';
+
+type PathRole = 'baseline' | 'top' | 'bottom';
 
 export type HandleRef = { anchor: number; kind: 'anchor' | 'in' | 'out' };
 
@@ -114,18 +116,32 @@ export function WarpHandlesOverlay({
 
   const geometry = textGeometry(node, font);
   if (geometry.height <= 0) return null;
-  // Cung nguon voi textGeometry: path o day chinh la path dang dung de warp,
-  // nen handle nam dung tren duong ma chu dang chay.
-  const path = resolveWarpPath(
-    node,
-    geometry.baselineY / geometry.height,
-    geometry.height,
-    geometry.centerY / geometry.height,
-  );
-  if (!path) return null;
+
+  // Distort co 2 duong doc lap (top/bottom, xem resolveDistortPaths) — moi
+  // warp con lai chi co 1 duong (baseline). Cung nguon voi textGeometry: path
+  // o day chinh la path dang dung de warp, nen handle nam dung tren duong ma
+  // chu dang chay.
+  const isDistort = node.warp?.type === 'distort';
+  const distortPaths = isDistort ? resolveDistortPaths(node, geometry, geometry.flatBounds) : null;
+  const paths: { role: PathRole; path: WarpPath }[] = distortPaths
+    ? [
+        { role: 'top', path: distortPaths.top },
+        { role: 'bottom', path: distortPaths.bottom },
+      ]
+    : (() => {
+        const single = resolveWarpPath(
+          node,
+          geometry.baselineY / geometry.height,
+          geometry.height,
+          geometry.centerY / geometry.height,
+        );
+        return single ? [{ role: 'baseline' as const, path: single }] : [];
+      })();
+  if (paths.length === 0) return null;
 
   // advanceWidth (khong tinh letterSpacing) — dong bo voi textGeometry.ts's
-  // warpShapesFromPath, de handle keo tay khong lech khoi hinh warp thuc te.
+  // warpShapesFromPath/warpShapesOnDistort, de handle keo tay khong lech khoi
+  // hinh warp thuc te.
   const box = { width: geometry.advanceWidth, height: geometry.height };
   const originX = node.transform.originX ?? 0;
   const originY = node.transform.originY ?? 0;
@@ -139,13 +155,11 @@ export function WarpHandlesOverlay({
     return projectLocalPoint(local, pivot, node.transform, viewport);
   };
 
-  const startDrag = (ref: HandleRef) => (downEvent: ReactPointerEvent) => {
+  // role: path nao dang bi keo. startPath: path CHOT tai thoi diem bat dau keo
+  // (khong doi trong suot gesture — path hien thi chinh la path duoc luu).
+  const startDrag = (role: PathRole, ref: HandleRef, startPath: WarpPath) => (downEvent: ReactPointerEvent) => {
     downEvent.stopPropagation();
     const startWorld = viewport.toWorld({ x: downEvent.clientX, y: downEvent.clientY });
-    // Chốt path tại thời điểm bắt đầu kéo. Path hiển thị chính là path được
-    // lưu — không còn khái niệm bake/fit, nên khi ghi vào warp.paths, hình
-    // hiển thị không đổi — điều user thấy lúc thả tay chính là điều được lưu.
-    const startPath = path;
 
     const onMove = (moveEvent: PointerEvent) => {
       const currentWorld = viewport.toWorld({ x: moveEvent.clientX, y: moveEvent.clientY });
@@ -156,83 +170,102 @@ export function WarpHandlesOverlay({
         y: local.y / (node.transform.scaleY || 1) / box.height,
       };
       const nextPath = clampPathX(movePathPoint(startPath, ref, delta));
-      store.getState().dispatch({
-        type: 'UpdateProps',
-        pageId: activePageId,
-        nodeId: node.id,
-        patch: {
-          warp: {
+      const nextWarp: Warp = distortPaths
+        ? {
+            // Distort: ghi DUNG path dang keo, GIU NGUYEN path bien con lai —
+            // khac warp con lai (chi co 1 path nen ghi de toan bo mang). Khong
+            // co slider Curve% cho Distort nen curveHeight khong dung toi,
+            // giu nguyen gia tri cu cho du schema.
+            type: node.warp?.type ?? 'distort',
+            curveHeight: node.warp?.curveHeight ?? 0.5,
+            directionInverted: node.warp?.directionInverted ?? false,
+            paths:
+              role === 'top' ? [nextPath, distortPaths.bottom] : [distortPaths.top, nextPath],
+          }
+        : {
             type: node.warp?.type ?? 'wave',
             // Slider phai theo kip path vua keo, neu khong lan keo slider ke
             // tiep se sinh lai preset tu con so cu va hinh nhay.
             curveHeight: curveHeightOf(nextPath, box.height, node.font.size),
+            directionInverted: node.warp?.directionInverted ?? false,
             paths: [nextPath],
-          },
-        } as Partial<Node>,
+          };
+      store.getState().dispatch({
+        type: 'UpdateProps',
+        pageId: activePageId,
+        nodeId: node.id,
+        patch: { warp: nextWarp } as Partial<Node>,
       });
     };
     startPointerGesture(store, `warp-handle:${node.id}`, onMove);
   };
 
-  const polyline = path.anchors
-    .flatMap((anchor, index) => {
-      const next = path.anchors[index + 1];
-      if (!next) return [];
-      const p0 = toScreen(anchor);
-      const p1 = toScreen(anchor.out ?? anchor);
-      const p2 = toScreen(next.in ?? next);
-      const p3 = toScreen(next);
-      return [`M ${p0.x} ${p0.y} C ${p1.x} ${p1.y}, ${p2.x} ${p2.y}, ${p3.x} ${p3.y}`];
-    })
-    .join(' ');
-
   return (
     <>
       <svg className="pointer-events-none absolute inset-0 h-full w-full">
-        <path d={polyline} fill="none" stroke="#8ec9f2" strokeWidth={1.5} />
-        {path.anchors.map((anchor, index) => {
-          const a = toScreen(anchor);
+        {paths.map(({ role, path }) => {
+          const polyline = path.anchors
+            .flatMap((anchor, index) => {
+              const next = path.anchors[index + 1];
+              if (!next) return [];
+              const p0 = toScreen(anchor);
+              const p1 = toScreen(anchor.out ?? anchor);
+              const p2 = toScreen(next.in ?? next);
+              const p3 = toScreen(next);
+              return [`M ${p0.x} ${p0.y} C ${p1.x} ${p1.y}, ${p2.x} ${p2.y}, ${p3.x} ${p3.y}`];
+            })
+            .join(' ');
           return (
-            <g key={index}>
-              {anchor.in && (
-                <line
-                  x1={a.x}
-                  y1={a.y}
-                  x2={toScreen(anchor.in).x}
-                  y2={toScreen(anchor.in).y}
-                  stroke="#8ec9f2"
-                  strokeWidth={1}
-                />
-              )}
-              {anchor.out && (
-                <line
-                  x1={a.x}
-                  y1={a.y}
-                  x2={toScreen(anchor.out).x}
-                  y2={toScreen(anchor.out).y}
-                  stroke="#8ec9f2"
-                  strokeWidth={1}
-                />
-              )}
+            <g key={role}>
+              <path d={polyline} fill="none" stroke="#8ec9f2" strokeWidth={1.5} />
+              {path.anchors.map((anchor, index) => {
+                const a = toScreen(anchor);
+                return (
+                  <g key={index}>
+                    {anchor.in && (
+                      <line
+                        x1={a.x}
+                        y1={a.y}
+                        x2={toScreen(anchor.in).x}
+                        y2={toScreen(anchor.in).y}
+                        stroke="#8ec9f2"
+                        strokeWidth={1}
+                      />
+                    )}
+                    {anchor.out && (
+                      <line
+                        x1={a.x}
+                        y1={a.y}
+                        x2={toScreen(anchor.out).x}
+                        y2={toScreen(anchor.out).y}
+                        stroke="#8ec9f2"
+                        strokeWidth={1}
+                      />
+                    )}
+                  </g>
+                );
+              })}
             </g>
           );
         })}
       </svg>
-      {listHandles(path).map((ref) => {
+      {paths.flatMap(({ role, path }) =>
+        listHandles(path).map((ref) => {
         const anchor = path.anchors[ref.anchor];
         const point = ref.kind === 'anchor' ? anchor : ref.kind === 'in' ? anchor.in! : anchor.out!;
         const screen = toScreen(point);
         return (
           <div
-            key={`${ref.anchor}-${ref.kind}`}
-            onPointerDown={startDrag(ref)}
+            key={`${role}-${ref.anchor}-${ref.kind}`}
+            onPointerDown={startDrag(role, ref, path)}
             className={`pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 bg-white ${
               ref.kind === 'anchor' ? 'h-[7px] w-[7px]' : 'h-2.5 w-2.5'
             }`}
             style={{ left: screen.x, top: screen.y, borderColor: '#78bde8' }}
           />
         );
-      })}
+        }),
+      )}
     </>
   );
 }

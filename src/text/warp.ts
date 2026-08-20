@@ -729,6 +729,80 @@ function warpContour(contour: Contour, map: WarpMap): Contour {
 // mieng roi nhau (hiem, thuong la path bi keo rat ngan giua mot glyph rong)
 // moi can dung containsPoint (dung lai logic groupIntoShapes cua
 // glyphOutlines.ts) de biet mieng hole nao thuoc mieng outer nao.
+// Distort: bien PHANG mac dinh cho MOT bien (top hoac bottom) — 3 anchor + 2
+// handle cua anchor giua, tat ca cung y = edgeRatio (khong bump, khac Custom —
+// xem implement.md muc 3: Distort co 2 bien tach biet nen khong co van de
+// "handle chong len nhau" can ne nhu Custom chi co 1 path).
+export function buildDistortEdgePath(role: 'top' | 'bottom', edgeRatio: number): WarpPath {
+  return {
+    role,
+    closed: false,
+    anchors: [
+      { x: 0, y: edgeRatio },
+      { x: 0.5, y: edgeRatio, in: { x: 0.25, y: edgeRatio }, out: { x: 0.75, y: edgeRatio } },
+      { x: 1, y: edgeRatio },
+    ],
+  };
+}
+
+// Khung noi suy cho Distort: 2 duong cong doc lap (bien tren/duoi), moi diem
+// glyph phang duoc lerp giua vi tri THAT tren 2 duong do — xem implement.md
+// muc 4 (thiet ke rieng, Kittl khong lo cong thuc that, xem
+// docs/kittl-distort-reverse-engineered.md §5).
+//
+// s = (x/advanceWidth) * frame.L (TI LE KHIT, khong phai s = x nhu buildWarpMap)
+// vi Distort khong co khai niem overflow/clip — text luon bien dang vua khit
+// khung, khac han warp family (giu nguyen co chu, cat khi path ngan hon text).
+//
+// frame null (bien CHUA bi keo, buildPathFrame tra null cho path phang) roi ve
+// diem THAT tren duong bien phang (x khong doi, y = edgeFlatY) — dam bao khi
+// CA HAI bien con phang thi p' = p (dong nhat tuyet doi), khop hanh vi da do
+// tren Kittl (mac dinh khong bien dang gi cho toi khi nguoi dung keo tay).
+export interface EnvelopeFrame {
+  top: PathFrame | null;
+  bottom: PathFrame | null;
+  topFlatY: number;
+  bottomFlatY: number;
+  advanceWidth: number;
+}
+
+export function envelopePoint(x: number, y: number, envelope: EnvelopeFrame): Point {
+  const { top, bottom, topFlatY, bottomFlatY, advanceWidth } = envelope;
+  const frac = advanceWidth > 0 ? x / advanceWidth : 0;
+  const topPoint = top ? { x: top.X(frac * top.L), y: top.Y(frac * top.L) } : { x, y: topFlatY };
+  const bottomPoint = bottom
+    ? { x: bottom.X(frac * bottom.L), y: bottom.Y(frac * bottom.L) }
+    : { x, y: bottomFlatY };
+  const span = bottomFlatY - topFlatY;
+  const t = span !== 0 ? (y - topFlatY) / span : 0;
+  return {
+    x: topPoint.x + (bottomPoint.x - topPoint.x) * t,
+    y: topPoint.y + (bottomPoint.y - topPoint.y) * t,
+  };
+}
+
+// Ap envelopePoint cho TUNG diem contour (on-curve VA control nhu nhau),
+// KHONG lam adaptive subdivision nhu warpSegment — ponytail: chap nhan meo
+// nhe hinh bezier o muc distort lon cho v1 (ban do o day khong cuc bo-affine
+// nhu warp family nen subdivision dung cach ton kem hon dang ke), nang cap
+// neu qua browser-test thay ro artefact. Khong clip (khac warpContours) —
+// Distort khong co khai niem overflow.
+function warpContourEnvelope(contour: Contour, envelope: EnvelopeFrame): Contour {
+  const out: number[] = [];
+  for (let i = 0; i < contour.length; i += 2) {
+    const p = envelopePoint(contour[i], contour[i + 1], envelope);
+    out.push(p.x, p.y);
+  }
+  return out;
+}
+
+export function warpContoursEnvelope(shapes: GlyphShape[], envelope: EnvelopeFrame): GlyphShape[] {
+  return shapes.map((shape) => ({
+    outer: warpContourEnvelope(shape.outer, envelope),
+    holes: shape.holes.map((hole) => warpContourEnvelope(hole, envelope)),
+  }));
+}
+
 export function warpContours(shapes: GlyphShape[], map: WarpMap): GlyphShape[] {
   const out: GlyphShape[] = [];
   for (const shape of shapes) {

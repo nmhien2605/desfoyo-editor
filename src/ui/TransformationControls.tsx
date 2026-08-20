@@ -1,5 +1,7 @@
 import type { TextNode, Warp, WarpType } from '../schema';
 import { useEditorStoreApi } from './EditorContext';
+import { getLoadedFont } from '../text/fontService';
+import { measureText } from '../text/textGeometry';
 
 export const DEFAULT_WARP_CURVE_HEIGHT = 0.5;
 
@@ -21,6 +23,7 @@ export const ENABLED_WARP_TYPES: WarpType[] = [
   'flag',
   'angle',
   'circle',
+  'distort',
   'custom',
 ];
 
@@ -54,6 +57,25 @@ export function toggleCircleDirectionInverted(warp: Warp | undefined): Warp {
   };
 }
 
+// Doi warp.type dong nghia doi warped (true/false) trong textGeometry.ts, ma
+// warped quyet dinh pivotWidth = advanceWidth (co warp) hay width (khong
+// warp, tinh ca letterSpacing) — hai cong thuc khac nhau. Neu patch chi co
+// warp (khong do lai size), node.size giu gia tri CU (theo cong thuc TRUOC
+// khi doi type) cho toi khi component khac (PropertiesPanel.tsx's
+// reconcileStaleSize, chay khi CHON LAI node) phat hien lech va tu sua — luc
+// do pivot doi dot ngot, nhin nhu node "nhay" vi tri ngay luc click chon.
+// Do lai va ghi thang size cung patch (giong applyWithMeasure trong
+// PropertiesPanel.tsx) de node.size khong bao gio bi stale. Tach rieng khoi
+// component de test duoc doc lap (khong can render React).
+export function warpUpdatePatch(
+  node: TextNode,
+  font: Parameters<typeof measureText>[1] | null,
+  next: Warp,
+): Partial<TextNode> {
+  const size = font ? measureText({ ...node, warp: next }, font) : undefined;
+  return (size ? { warp: next, size } : { warp: next }) as Partial<TextNode>;
+}
+
 export function TransformationControls({
   node,
   activePageId,
@@ -66,11 +88,12 @@ export function TransformationControls({
   const active = warp?.type ?? 'none';
 
   const apply = (next: Warp) => {
+    const font = getLoadedFont(node.font.family)?.font ?? null;
     store.getState().dispatch({
       type: 'UpdateProps',
       pageId: activePageId,
       nodeId: node.id,
-      patch: { warp: next } as Partial<TextNode>,
+      patch: warpUpdatePatch(node, font, next),
     });
   };
 
@@ -102,7 +125,7 @@ export function TransformationControls({
         })}
       </div>
 
-      {active !== 'none' && active !== 'circle' && active !== 'custom' && (
+      {active !== 'none' && active !== 'circle' && active !== 'custom' && active !== 'distort' && (
         <>
           <label className="mt-3 flex flex-col gap-1 capitalize text-xs" style={{ color: 'var(--text-muted)' }}>
             {active} Curve — {Math.round((warp?.curveHeight ?? 0) * 100)}%
