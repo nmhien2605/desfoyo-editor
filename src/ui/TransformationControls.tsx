@@ -3,7 +3,6 @@ import { useEditorStoreApi } from './EditorContext';
 
 export const DEFAULT_WARP_CURVE_HEIGHT = 0.5;
 
-// Đúng lưới 4 cột x 2 hàng của panel Transformation trong docs/text-effect.md.
 export const WARP_TYPES: WarpType[] = [
   'custom',
   'distort',
@@ -15,10 +14,6 @@ export const WARP_TYPES: WarpType[] = [
   'flag',
 ];
 
-// wave/arch/rise/flag/angle dùng chung engine (buildWarpMap/warpContours);
-// circle dùng engine riêng (circleWarp.ts, rigid-transform-per-glyph) — xem
-// docs/text-future-work.md mục 5 và docs/kittl-circle-reverse-engineered.md.
-// distort/custom cần envelope warp riêng, vẫn khoá.
 export const ENABLED_WARP_TYPES: WarpType[] = [
   'wave',
   'arch',
@@ -30,8 +25,6 @@ export const ENABLED_WARP_TYPES: WarpType[] = [
 ];
 
 export function setWarpType(warp: Warp | undefined, type: WarpType): Warp {
-  // paths bị xoá khi đổi kiểu: một path do user chỉnh cho Wave không còn ý
-  // nghĩa gì với Arch hay Circle. circle cũng bị xoá cùng lý do.
   return {
     type,
     curveHeight: warp?.curveHeight ?? DEFAULT_WARP_CURVE_HEIGHT,
@@ -39,8 +32,6 @@ export function setWarpType(warp: Warp | undefined, type: WarpType): Warp {
   };
 }
 
-// Kéo slider = quay về chế độ preset, nên paths bị xoá. Đây là cách slider và
-// handle không tranh nhau một nguồn dữ liệu (spec §4.2).
 export function setWarpCurveHeight(warp: Warp | undefined, curveHeight: number): Warp {
   return {
     type: warp?.type ?? 'wave',
@@ -53,9 +44,6 @@ export function resetWarp(warp: Warp | undefined): Warp {
   return { type: warp?.type ?? 'none', curveHeight: DEFAULT_WARP_CURVE_HEIGHT, directionInverted: false };
 }
 
-// directionInverted nam ngang hang curveHeight (khong trong `circle`) de doi
-// duoc thuan tuy — khong can load font/layout de tinh preset center/radius
-// truoc, khac voi setWarpCurveHeight/setWarpType von deu xoa paths/circle.
 export function toggleCircleDirectionInverted(warp: Warp | undefined): Warp {
   return {
     type: warp?.type ?? 'circle',
@@ -87,22 +75,26 @@ export function TransformationControls({
   };
 
   return (
-    <div className="flex flex-col gap-2 border-t border-gray-200 pt-2">
-      <span className="font-medium">Transformation</span>
+    <section className="kittl-section">
+      <div className="kittl-section-title">Transformation</div>
 
-      <div className="grid grid-cols-4 gap-1">
-        {WARP_TYPES.map((type) => {
-          const enabled = ENABLED_WARP_TYPES.includes(type);
+      <div className="grid grid-cols-4 gap-1.5">
+        {ENABLED_WARP_TYPES.map((type) => {
+          const isActive = active === type;
           return (
             <button
               key={type}
               type="button"
-              disabled={!enabled}
-              title={enabled ? type : `${type} — chua build`}
+              title={type}
               onClick={() => apply(setWarpType(warp, type))}
-              className={`rounded px-1 py-1 text-xs capitalize disabled:opacity-40 ${
-                active === type ? 'bg-blue-500 text-white' : 'bg-gray-100'
-              }`}
+              className="flex flex-col items-center justify-center rounded-lg text-[11px] font-semibold uppercase"
+              style={{
+                width: 50,
+                height: 52,
+                background: isActive ? '#263442' : '#252c37',
+                border: isActive ? '2px solid #58a8de' : '1px solid #303846',
+                color: 'var(--text-muted)',
+              }}
             >
               {type}
             </button>
@@ -112,7 +104,7 @@ export function TransformationControls({
 
       {active !== 'none' && active !== 'circle' && active !== 'custom' && (
         <>
-          <label className="flex flex-col gap-1 capitalize">
+          <label className="mt-3 flex flex-col gap-1 capitalize text-xs" style={{ color: 'var(--text-muted)' }}>
             {active} Curve — {Math.round((warp?.curveHeight ?? 0) * 100)}%
             <input
               type="range"
@@ -120,57 +112,36 @@ export function TransformationControls({
               max={4}
               step={0.01}
               value={warp?.curveHeight ?? 0}
+              className="kittl-range"
               onPointerDown={() => store.getState().beginGesture(`warp-curve:${node.id}`)}
               onPointerUp={() => store.getState().endGesture()}
               onChange={(e) => apply(setWarpCurveHeight(warp, Number(e.target.value)))}
             />
           </label>
-
-          <button
-            type="button"
-            onClick={() => apply(resetWarp(warp))}
-            className="rounded bg-gray-100 px-2 py-1 text-xs"
-          >
-            Reset
-          </button>
         </>
       )}
 
-      {/* Custom: khong co curveHeight/slider (path luon do tay keo, khong co
-          cong thuc preset) — chi Reset, dua warp.paths ve rong (flat) qua
-          resetWarp() co san. Khong co nut Confirm — xem implement.md ly do:
-          app khong co khai niem "che do edit" rieng cho bat ky warp type nao,
-          handle luon hien khi type dang active, giong Wave/Arch/Circle. */}
-      {active === 'custom' && (
+      {active === 'circle' && (
+        <label className="mt-3 flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+          <input
+            type="checkbox"
+            checked={warp?.directionInverted ?? false}
+            onChange={() => apply(toggleCircleDirectionInverted(warp))}
+          />
+          Direction Inverted
+        </label>
+      )}
+
+      {(active !== 'none' || warp) && (
         <button
           type="button"
           onClick={() => apply(resetWarp(warp))}
-          className="rounded bg-gray-100 px-2 py-1 text-xs"
+          className="mt-3 w-full rounded-lg px-3 py-2 text-xs"
+          style={{ background: '#252c37', border: '1px solid #303846', color: 'var(--text-muted)' }}
         >
           Reset
         </button>
       )}
-
-      {active === 'circle' && (
-        <>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={warp?.directionInverted ?? false}
-              onChange={() => apply(toggleCircleDirectionInverted(warp))}
-            />
-            Direction Inverted
-          </label>
-
-          <button
-            type="button"
-            onClick={() => apply(resetWarp(warp))}
-            className="rounded bg-gray-100 px-2 py-1 text-xs"
-          >
-            Reset
-          </button>
-        </>
-      )}
-    </div>
+    </section>
   );
 }

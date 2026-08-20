@@ -125,7 +125,7 @@ export function CircleHandlesOverlay({
           cy={circleCenter.y}
           r={screenRadius}
           fill="none"
-          stroke="#2563eb"
+          stroke="#8ec9f2"
           strokeWidth={1.5}
         />
       </svg>
@@ -135,8 +135,8 @@ export function CircleHandlesOverlay({
           <div
             key={ref}
             onPointerDown={startDrag(ref)}
-            className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 border-blue-600 bg-white"
-            style={{ left: screen.x, top: screen.y }}
+            className="pointer-events-auto absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 bg-white"
+            style={{ left: screen.x, top: screen.y, borderColor: '#78bde8' }}
           />
         );
       })}

@@ -247,14 +247,13 @@ function SingleSelectionOverlay({
             }),
           );
         }}
-        className={`absolute border-2 border-blue-500 ${
-          node.type === 'image' || node.type === 'text' ? 'pointer-events-auto' : ''
-        }`}
+        className={`absolute border-2 ${node.type === 'image' || node.type === 'text' ? 'pointer-events-auto' : ''}`}
         style={{
           left: topLeftScreen.x,
           top: topLeftScreen.y,
           width: box.width * camera.zoom,
           height: box.height * camera.zoom,
+          borderColor: '#8ec9f2',
           // Pixi rotates around the pivot in *unwarped* local space
           // (originX/Y * node.size — see applyTransform.ts), but `box` is
           // the warped bbox and may be offset/sized differently from
@@ -279,16 +278,16 @@ function SingleSelectionOverlay({
             <div
               key={handle}
               onPointerDown={startResize(handle)}
-              className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-blue-500 bg-white"
-              style={{ left: pos.x, top: pos.y, cursor: `${handle}-resize` }}
+              className="pointer-events-auto absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 rounded-full border bg-white"
+              style={{ left: pos.x, top: pos.y, cursor: `${handle}-resize`, borderColor: '#78bde8' }}
             />
           );
         })}
       {!isCropping && !isEditingText && (
         <div
           onPointerDown={startRotate}
-          className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border border-blue-500 bg-white"
-          style={{ left: rotateHandlePos.x, top: rotateHandlePos.y }}
+          className="pointer-events-auto absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border bg-white"
+          style={{ left: rotateHandlePos.x, top: rotateHandlePos.y, borderColor: '#78bde8' }}
         />
       )}
       {isCropping && node.type === 'image' && (
@@ -400,8 +399,8 @@ function ImageCropHandles({
           <div
             key={handle}
             onPointerDown={startDrag(handle)}
-            className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-emerald-500 bg-white"
-            style={{ left: pos.x, top: pos.y, cursor: `${handle}-resize` }}
+            className="pointer-events-auto absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 rounded-full border bg-white"
+            style={{ left: pos.x, top: pos.y, cursor: `${handle}-resize`, borderColor: '#78bde8' }}
           />
         );
       })}
@@ -455,18 +454,19 @@ function MultiSelectionOverlay({ nodes, activePageId }: { nodes: Node[]; activeP
   return (
     <div className="pointer-events-none absolute inset-0">
       <div
-        className="absolute border-2 border-dashed border-blue-500"
+        className="absolute border-2 border-dashed"
         style={{
           left: screenMin.x,
           top: screenMin.y,
           width: (bounds.max.x - bounds.min.x) * camera.zoom,
           height: (bounds.max.y - bounds.min.y) * camera.zoom,
+          borderColor: '#8ec9f2',
         }}
       />
       <div
         onPointerDown={startRotate}
-        className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border border-blue-500 bg-white"
-        style={{ left: rotateHandlePos.x, top: rotateHandlePos.y }}
+        className="pointer-events-auto absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border bg-white"
+        style={{ left: rotateHandlePos.x, top: rotateHandlePos.y, borderColor: '#78bde8' }}
       />
     </div>
   );
@@ -477,12 +477,13 @@ function Marquee({ rect, viewport }: { rect: Rect; viewport: Viewport }) {
   const bottomRight = viewport.toScreen({ x: rect.x + rect.width, y: rect.y + rect.height });
   return (
     <div
-      className="absolute border border-dashed border-blue-400 bg-blue-400/10"
+      className="absolute border border-dashed bg-[#8ec9f2]/10"
       style={{
         left: topLeft.x,
         top: topLeft.y,
         width: bottomRight.x - topLeft.x,
         height: bottomRight.y - topLeft.y,
+        borderColor: '#8ec9f2',
       }}
     />
   );

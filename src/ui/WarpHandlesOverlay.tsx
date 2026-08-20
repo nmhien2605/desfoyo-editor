@@ -189,7 +189,7 @@ export function WarpHandlesOverlay({
   return (
     <>
       <svg className="pointer-events-none absolute inset-0 h-full w-full">
-        <path d={polyline} fill="none" stroke="#2563eb" strokeWidth={1.5} />
+        <path d={polyline} fill="none" stroke="#8ec9f2" strokeWidth={1.5} />
         {path.anchors.map((anchor, index) => {
           const a = toScreen(anchor);
           return (
@@ -200,7 +200,7 @@ export function WarpHandlesOverlay({
                   y1={a.y}
                   x2={toScreen(anchor.in).x}
                   y2={toScreen(anchor.in).y}
-                  stroke="#2563eb"
+                  stroke="#8ec9f2"
                   strokeWidth={1}
                 />
               )}
@@ -210,7 +210,7 @@ export function WarpHandlesOverlay({
                   y1={a.y}
                   x2={toScreen(anchor.out).x}
                   y2={toScreen(anchor.out).y}
-                  stroke="#2563eb"
+                  stroke="#8ec9f2"
                   strokeWidth={1}
                 />
               )}
@@ -226,10 +226,10 @@ export function WarpHandlesOverlay({
           <div
             key={`${ref.anchor}-${ref.kind}`}
             onPointerDown={startDrag(ref)}
-            className={`pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 border-blue-600 bg-white ${
-              ref.kind === 'anchor' ? 'h-3 w-3' : 'h-2.5 w-2.5'
+            className={`pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 bg-white ${
+              ref.kind === 'anchor' ? 'h-[7px] w-[7px]' : 'h-2.5 w-2.5'
             }`}
-            style={{ left: screen.x, top: screen.y }}
+            style={{ left: screen.x, top: screen.y, borderColor: '#78bde8' }}
           />
         );
       })}

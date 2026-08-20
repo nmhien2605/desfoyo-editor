@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "immer": "^11.1.11",
+    "lucide-react": "^1.33.0",
     "nanoid": "^6.0.0",
     "opentype.js": "^2.0.0",
     "pixi-filters": "^6.1.5",

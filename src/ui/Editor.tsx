@@ -3,15 +3,15 @@ import type { Application, Container } from 'pixi.js';
 import { activePage, createEditorStore, type EditorStoreApi } from '../core/store';
 import { DocumentSchema, type Document } from '../schema';
 import { EditorStoreProvider, CanvasProvider, type CanvasContextValue } from './EditorContext';
+import { EditorUIProvider, type DevMenuConfig } from './EditorUIContext';
 import { CanvasHost } from './CanvasHost';
 import { SelectionOverlay } from './SelectionOverlay';
-import { Rulers } from './Rulers';
-import { Toolbar } from './Toolbar';
-import { PageTabs } from './PageTabs';
-import { LayersPanel } from './LayersPanel';
-import { PropertiesPanel } from './PropertiesPanel';
-import { AssetPanel, ASSET_DRAG_TYPE } from './AssetPanel';
-import { defaultImageNode, defaultSvgNode, loadImageSize, svgNaturalSize } from './Toolbar';
+import { FloatingContextToolbar } from './FloatingContextToolbar';
+import { LeftSidebar } from './LeftSidebar';
+import { Workspace } from './Workspace';
+import { InspectorPanel } from './InspectorPanel';
+import { defaultImageNode, defaultSvgNode, loadImageSize, svgNaturalSize } from './toolActions';
+import { ASSET_DRAG_TYPE } from './AssetPanel';
 import { decodeSvgText } from '../render/renderers/svgRenderer';
 import { createViewport } from '../render/viewport';
 import type { SceneReconciler } from '../render/SceneReconciler';
@@ -34,10 +34,23 @@ export interface EditorProps {
   document: Document;
   onChange?: (doc: Document) => void;
   className?: string;
+  devMenu?: DevMenuConfig;
+  onExport?: (format: 'png' | 'svg') => void;
+  initialSelectedNodeIds?: string[];
 }
 
 export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(props, ref) {
-  const [store] = useState<EditorStoreApi>(() => createEditorStore(DocumentSchema.parse(props.document)));
+  const [store] = useState<EditorStoreApi>(() => {
+    const parsed = DocumentSchema.parse(props.document);
+    const api = createEditorStore(parsed);
+    if (props.initialSelectedNodeIds?.length) {
+      api.getState().select(props.initialSelectedNodeIds[0], 'replace');
+      for (const id of props.initialSelectedNodeIds.slice(1)) {
+        api.getState().select(id, 'toggle');
+      }
+    }
+    return api;
+  });
   const canvasValueRef = useRef<CanvasContextValue>({ app: null, pageContainer: null, canvas: null });
   const [canvasValue, setCanvasValue] = useState<CanvasContextValue>(canvasValueRef.current);
   const reconcilerRef = useRef<SceneReconciler | null>(null);
@@ -86,11 +99,6 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     [store],
   );
 
-  // Drop target for AssetPanel's drag source — adds a node referencing the
-  // dropped asset's existing assetId (no re-upload/duplicate asset), sized
-  // via the same loadImageSize()/svgNaturalSize() the Toolbar's file-upload
-  // flow uses and positioned via the same screen->world conversion
-  // SelectionOverlay uses for click-to-select (viewport.ts's toWorld).
   const handleAssetDrop = async (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const assetId = e.dataTransfer.getData(ASSET_DRAG_TYPE);
@@ -111,39 +119,35 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
 
   return (
     <EditorStoreProvider value={store}>
-      <CanvasProvider value={canvasValue}>
-        <div className={props.className}>
-          <Toolbar />
-          <PageTabs />
-          <div className="flex">
-            {/* select-none: mọi thao tác kéo trên canvas đều bắt đầu bằng một
-                pointerdown ở vùng này, và mặc định trình duyệt coi đó là bắt
-                đầu bôi đen văn bản — kéo một node là bôi xanh cả toolbar, rồi
-                lần kéo sau bấm trúng vùng đã bôi sẽ khởi động drag-and-drop
-                gốc của trình duyệt (con trỏ đổi thành biểu tượng thả) và node
-                không nhúc nhích. Textarea sửa chữ bật lại select-text riêng. */}
-            <div
-              className="relative select-none"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => void handleAssetDrop(e)}
-            >
-              <CanvasHost
-                reconcilerRef={reconcilerRef}
-                onReady={(app: Application, pageContainer: Container) => {
-                  const value = { app, pageContainer, canvas: app.canvas as HTMLCanvasElement };
-                  canvasValueRef.current = value;
-                  setCanvasValue(value);
-                }}
-              />
-              <SelectionOverlay />
-              <Rulers />
-            </div>
-            <LayersPanel />
-            <PropertiesPanel />
-            <AssetPanel />
+      <EditorUIProvider devMenu={props.devMenu ?? null} onExport={props.onExport ?? null}>
+        <CanvasProvider value={canvasValue}>
+          <div
+            className={`grid h-screen overflow-hidden ${props.className ?? ''}`}
+            style={{ gridTemplateColumns: '44px minmax(0, 1fr) 250px', background: 'var(--app-bg)' }}
+          >
+            <LeftSidebar />
+            <Workspace>
+              <div
+                className="relative select-none"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => void handleAssetDrop(e)}
+              >
+                <CanvasHost
+                  reconcilerRef={reconcilerRef}
+                  onReady={(app: Application, pageContainer: Container) => {
+                    const value = { app, pageContainer, canvas: app.canvas as HTMLCanvasElement };
+                    canvasValueRef.current = value;
+                    setCanvasValue(value);
+                  }}
+                />
+                <SelectionOverlay />
+                <FloatingContextToolbar />
+              </div>
+            </Workspace>
+            <InspectorPanel />
           </div>
-        </div>
-      </CanvasProvider>
+        </CanvasProvider>
+      </EditorUIProvider>
     </EditorStoreProvider>
   );
 });

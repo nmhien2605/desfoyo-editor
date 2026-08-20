@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
 import { activePage } from '../core/store';
 import { findNodeInTree } from '../core/tree';
@@ -74,68 +74,101 @@ export function PropertiesPanel() {
   const activePageId = useEditorStore((s) => s.activePageId);
   const selectedNodeIds = useEditorStore((s) => s.selectedNodeIds);
   const node = useEditorStore(singleSelectedNode);
-  if (selectedNodeIds.size !== 1 || !node) return <div className="w-64 border-l border-gray-200 p-2 text-sm text-gray-400">No selection</div>;
+  if (selectedNodeIds.size !== 1 || !node) return null;
 
   const updateProps = (patch: Partial<Node>) => {
     store.getState().dispatch({ type: 'UpdateProps', pageId: activePageId, nodeId: node.id, patch });
   };
 
   return (
-    <div className="flex w-64 flex-col gap-3 border-l border-gray-200 p-2 text-sm">
-      {hasFill(node) && <FillControls fill={node.fill} onChange={(fill) => updateProps({ fill })} />}
-
-      <label className="flex flex-col gap-1">
-        Opacity
+    <>
+      <section className="kittl-section">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="kittl-section-title mb-0">Layer</span>
+          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            {Math.round(node.opacity * 100)}%
+          </span>
+        </div>
         <input
           type="range"
           min={0}
           max={1}
           step={0.01}
           value={node.opacity}
+          className="kittl-range w-full"
           onPointerDown={() => store.getState().beginGesture('opacity')}
           onPointerUp={() => store.getState().endGesture()}
           onChange={(e) => updateProps({ opacity: Number(e.target.value) })}
         />
-      </label>
+      </section>
 
-      <label className="flex flex-col gap-1">
-        Blend Mode
-        <select
-          value={node.blendMode ?? 'normal'}
-          onChange={(e) => updateProps({ blendMode: e.target.value as BlendMode })}
-          className="rounded border border-gray-300 px-1 py-0.5"
-        >
-          {BLEND_MODES.map((mode) => (
-            <option key={mode} value={mode}>
-              {mode}
-            </option>
-          ))}
-        </select>
-      </label>
+      {hasFill(node) && (
+        <section className="kittl-section">
+          <div className="kittl-section-title">Text Colors</div>
+          <FillControls fill={node.fill} onChange={(fill) => updateProps({ fill })} />
+        </section>
+      )}
 
       {node.type === 'shape' && (
-        <StrokeControls
-          stroke={node.stroke}
-          onChange={(stroke) => updateProps({ stroke } as Partial<Node>)}
-        />
+        <CollapsibleSection title="Border">
+          <StrokeControls stroke={node.stroke} onChange={(stroke) => updateProps({ stroke } as Partial<Node>)} />
+        </CollapsibleSection>
       )}
 
-      {node.type === 'text' && (
-        <TextControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />
-      )}
+      {node.type === 'text' && <TextControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />}
 
       {node.type === 'text' && <TransformationControls node={node} activePageId={activePageId} />}
 
       {node.type === 'image' && (
-        <ImageControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />
+        <CollapsibleSection title="Image">
+          <ImageControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />
+        </CollapsibleSection>
       )}
 
       {node.type === 'svg' && (
-        <SvgControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />
+        <CollapsibleSection title="Recolor">
+          <SvgControls node={node} onChange={(patch) => updateProps(patch as Partial<Node>)} />
+        </CollapsibleSection>
       )}
 
-      <EffectsControls effects={node.effects} onChange={(effects) => updateProps({ effects })} />
-    </div>
+      <CollapsibleSection title="Text Shadow">
+        <EffectsControls effects={node.effects} onChange={(effects) => updateProps({ effects })} />
+      </CollapsibleSection>
+
+      <section className="kittl-section">
+        <label className="flex flex-col gap-1">
+          <span className="kittl-section-title">Blend Mode</span>
+          <select
+            value={node.blendMode ?? 'normal'}
+            onChange={(e) => updateProps({ blendMode: e.target.value as BlendMode })}
+            className="kittl-input w-full"
+          >
+            {BLEND_MODES.map((mode) => (
+              <option key={mode} value={mode}>
+                {mode}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
+    </>
+  );
+}
+
+function CollapsibleSection({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="kittl-section">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between text-left"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="kittl-section-title mb-0">{title}</span>
+        <span style={{ color: 'var(--text-muted)' }}>{open ? '−' : '+'}</span>
+      </button>
+      {open && <div className="mt-3">{children}</div>}
+    </section>
   );
 }
 
@@ -381,12 +414,11 @@ function FillControls({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) =
   };
 
   return (
-    <fieldset className="flex flex-col gap-1">
-      <legend className="font-medium">Fill</legend>
+    <fieldset className="flex flex-col gap-2">
       <select
         value={fill.type}
         onChange={(e) => setType(e.target.value as Fill['type'])}
-        className="rounded border border-gray-300 px-1 py-0.5"
+        className="kittl-input w-full"
       >
         <option value="solid">Solid</option>
         <option value="linear-gradient">Linear Gradient</option>
@@ -394,7 +426,15 @@ function FillControls({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) =
       </select>
 
       {fill.type === 'solid' && (
-        <input type="color" value={fill.color} onChange={(e) => onChange({ ...fill, color: e.target.value })} />
+        <div className="flex items-center gap-2">
+          <input type="color" value={fill.color} onChange={(e) => onChange({ ...fill, color: e.target.value })} />
+          <span className="text-xs uppercase" style={{ color: 'var(--text-muted)' }}>
+            {fill.color.replace('#', '')}
+          </span>
+          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            100%
+          </span>
+        </div>
       )}
 
       {(fill.type === 'linear-gradient' || fill.type === 'radial-gradient') && (
@@ -636,25 +676,23 @@ function TextControls({ node, onChange }: { node: TextNode; onChange: (patch: Pa
   }, [node.id]);
 
   return (
-    <div className="flex flex-col gap-2 border-t border-gray-200 pt-2">
-      <span className="font-medium">Text</span>
+    <section className="kittl-section">
+      <div className="kittl-section-title">Text Style</div>
 
-      <label className="flex flex-col gap-1">
-        Content
+      <label className="mb-2 flex flex-col gap-1">
         <textarea
           value={node.text}
           rows={2}
           onChange={(e) => applyWithMeasure({ text: e.target.value })}
-          className="resize-none rounded border border-gray-300 px-1 py-0.5"
+          className="kittl-input-sm resize-none"
         />
       </label>
 
-      <label className="flex flex-col gap-1">
-        Font
+      <label className="mb-2 flex flex-col gap-1">
         <select
           value={node.font.family}
           onChange={(e) => applyWithMeasure({ font: { ...node.font, family: e.target.value } })}
-          className="rounded border border-gray-300 px-1 py-0.5"
+          className="kittl-input w-full"
         >
           {families.map((family) => (
             <option key={family} value={family}>
@@ -664,54 +702,63 @@ function TextControls({ node, onChange }: { node: TextNode; onChange: (patch: Pa
         </select>
       </label>
 
-      <label className="flex flex-col gap-1">
-        Size
-        <input
-          type="number"
-          min={1}
-          value={node.font.size}
-          onChange={(e) => applyWithMeasure({ font: { ...node.font, size: Math.max(1, Number(e.target.value)) } })}
-          className="rounded border border-gray-300 px-1 py-0.5"
-        />
-      </label>
-
-      <label className="flex flex-col gap-1">
-        Align
+      <label className="mb-2 flex flex-col gap-1">
         <select
-          value={node.align}
-          onChange={(e) => applyWithMeasure({ align: e.target.value as TextNode['align'] })}
-          className="rounded border border-gray-300 px-1 py-0.5"
+          value={node.font.weight}
+          onChange={(e) => applyWithMeasure({ font: { ...node.font, weight: Number(e.target.value) } })}
+          className="kittl-input w-full"
         >
-          {(['left', 'center', 'right'] as const).map((align) => (
-            <option key={align} value={align}>
-              {align}
-            </option>
-          ))}
+          <option value={400}>Regular</option>
+          <option value={700}>Bold</option>
         </select>
       </label>
 
-      <label className="flex flex-col gap-1">
-        Letter Spacing
-        <input
-          type="number"
-          step={0.5}
-          value={node.letterSpacing}
-          onChange={(e) => applyWithMeasure({ letterSpacing: Number(e.target.value) })}
-          className="rounded border border-gray-300 px-1 py-0.5"
-        />
-      </label>
+      <div className="mb-2 grid grid-cols-3 gap-2">
+        <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+          Tt
+          <input
+            type="number"
+            min={1}
+            value={node.font.size}
+            onChange={(e) => applyWithMeasure({ font: { ...node.font, size: Math.max(1, Number(e.target.value)) } })}
+            className="kittl-input-sm w-full"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+          AV
+          <input
+            type="number"
+            step={0.5}
+            value={node.letterSpacing}
+            onChange={(e) => applyWithMeasure({ letterSpacing: Number(e.target.value) })}
+            className="kittl-input-sm w-full"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+          ↕
+          <input
+            type="number"
+            min={0.1}
+            step={0.1}
+            value={Math.round(node.lineHeight * 100)}
+            onChange={(e) => applyWithMeasure({ lineHeight: Math.max(0.1, Number(e.target.value) / 100) })}
+            className="kittl-input-sm w-full"
+          />
+        </label>
+      </div>
 
-      <label className="flex flex-col gap-1">
-        Line Height
-        <input
-          type="number"
-          min={0.1}
-          step={0.1}
-          value={node.lineHeight}
-          onChange={(e) => applyWithMeasure({ lineHeight: Math.max(0.1, Number(e.target.value)) })}
-          className="rounded border border-gray-300 px-1 py-0.5"
-        />
-      </label>
-    </div>
+      <div className="flex gap-1">
+        {(['left', 'center', 'right'] as const).map((align) => (
+          <button
+            key={align}
+            type="button"
+            className={`kittl-inspector-btn flex-1 ${node.align === align ? 'active' : ''}`}
+            onClick={() => applyWithMeasure({ align })}
+          >
+            {align[0].toUpperCase()}
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }

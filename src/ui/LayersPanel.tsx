@@ -8,17 +8,22 @@ function labelFor(node: Node): string {
   return `${node.type[0].toUpperCase()}${node.type.slice(1)}`;
 }
 
-// The store's children array order *is* the list order *is* the z-order —
-// no separate/duplicated ordering state. Rendered reversed so the top of
-// the list corresponds to the topmost (last-drawn) object, matching the
-// universal layers-panel UX convention. Group rows recurse into their own
-// children the same way.
-export function LayersPanel() {
+export function LayersPanel({ onClose }: { onClose?: () => void }) {
   const activePageId = useEditorStore((s) => s.activePageId);
   const children = useEditorStore((s) => activePage(s)?.children ?? []);
 
   return (
-    <div className="w-56 border-l border-gray-200 p-2">
+    <div className="flex h-full flex-col p-3 text-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
+          Layers
+        </span>
+        {onClose && (
+          <button type="button" onClick={onClose} className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            Close
+          </button>
+        )}
+      </div>
       <ul className="flex flex-col gap-1">
         {[...children].reverse().map((node) => (
           <LayerRow key={node.id} node={node} depth={0} pageId={activePageId} />
@@ -44,14 +49,16 @@ function LayerRow({ node, depth, pageId }: { node: Node; depth: number; pageId: 
   return (
     <li>
       <div
-        className={`flex items-center justify-between gap-1 rounded px-2 py-1 text-sm ${
-          isSelected ? 'bg-blue-100' : 'bg-gray-50'
-        }`}
-        style={{ paddingLeft: 8 + depth * 12 }}
+        className="flex items-center justify-between gap-1 rounded px-2 py-1 text-sm"
+        style={{
+          paddingLeft: 8 + depth * 12,
+          background: isSelected ? '#29313f' : '#151b25',
+          color: isSelected ? 'var(--text-primary)' : 'var(--text-muted)',
+        }}
         onClick={onRowClick}
       >
         <span className="truncate">{labelFor(node)}</span>
-        <span className="flex gap-1">
+        <span className="flex gap-1 text-xs">
           <button type="button" onClick={() => reorder('top')} title="Bring to front">
             ⤒
           </button>

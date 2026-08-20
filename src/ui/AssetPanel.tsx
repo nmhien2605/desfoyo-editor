@@ -1,5 +1,5 @@
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
-import { defaultImageNode, defaultSvgNode, loadImageSize, svgNaturalSize } from './Toolbar';
+import { defaultImageNode, defaultSvgNode, loadImageSize, svgNaturalSize } from './toolActions';
 import { decodeSvgText } from '../render/renderers/svgRenderer';
 
 // Drag payload key shared with Editor.tsx's canvas drop target.
@@ -15,7 +15,7 @@ function sizeTuple(size: { width: number; height: number }): [number, number] {
 // image/svg assets are node-representable; fonts live in the same dict but
 // aren't listed here. Browsers render an SVG data URI in <img> the same as
 // a raster one, so no special thumbnail code is needed for 'svg' assets.
-export function AssetPanel() {
+export function AssetPanel({ onClose }: { onClose?: () => void }) {
   const store = useEditorStoreApi();
   const activePageId = useEditorStore((s) => s.activePageId);
   const assets = useEditorStore((s) => s.document.assets);
@@ -31,7 +31,17 @@ export function AssetPanel() {
   };
 
   return (
-    <div className="w-56 border-l border-gray-200 p-2">
+    <div className="flex h-full flex-col p-3">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+          Assets
+        </span>
+        {onClose && (
+          <button type="button" onClick={onClose} className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            Close
+          </button>
+        )}
+      </div>
       <div className="grid grid-cols-3 gap-1">
         {visibleAssets.map(([assetId, asset]) => (
           <img
@@ -41,6 +51,7 @@ export function AssetPanel() {
             onDragStart={(e) => e.dataTransfer.setData(ASSET_DRAG_TYPE, assetId)}
             onClick={() => void addAtDefault(assetId, asset.dataUri, asset.type as 'image' | 'svg')}
             className="h-16 w-16 cursor-pointer rounded object-cover"
+            style={{ border: '1px solid var(--panel-border)' }}
           />
         ))}
       </div>
