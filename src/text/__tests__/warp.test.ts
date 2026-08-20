@@ -4,6 +4,7 @@ import {
   buildAnglePath,
   buildArchPath,
   buildFlagPath,
+  buildPathFrame,
   buildRisePath,
   buildWarpMap,
   buildWavePath,
@@ -567,6 +568,69 @@ describe.each(PRESETS)('preset $name (buildXxxPath)', ({ build, anchorCount, has
     for (let i = 1; i < clamped.anchors.length; i++) {
       expect(clamped.anchors[i].x).toBeGreaterThanOrEqual(clamped.anchors[i - 1].x);
     }
+  });
+});
+
+describe('buildPathFrame', () => {
+  const WAVE = () => clampPathX(buildWavePath(1, 0.5, FONT_SIZE, SIZE.height));
+
+  it('path phang dung tai baseline tra null — giong buildWarpMap', () => {
+    expect(buildPathFrame(buildWavePath(0, 0.5, FONT_SIZE, SIZE.height), SIZE, 50)).toBeNull();
+  });
+
+  it('path duoi 2 anchor tra null', () => {
+    const single: WarpPath = { role: 'baseline', closed: false, anchors: [{ x: 0, y: 0.9 }] };
+    expect(buildPathFrame(single, SIZE, 50)).toBeNull();
+  });
+
+  it('X/Y khop voi buildWarpMap tren cung path (Y = D + baselineY)', () => {
+    const path = WAVE();
+    const map = buildWarpMap(path, SIZE, 50)!;
+    const frame = buildPathFrame(path, SIZE, 50)!;
+    for (let s = 0; s <= SIZE.width; s += 10) {
+      expect(frame.X(s)).toBeCloseTo(map.X(s), 9);
+      expect(frame.Y(s)).toBeCloseTo(map.D(s) + 50, 9);
+    }
+  });
+
+  it('L khop voi buildWarpMap tren cung path', () => {
+    const path = WAVE();
+    expect(buildPathFrame(path, SIZE, 50)!.L).toBeCloseTo(buildWarpMap(path, SIZE, 50)!.L, 9);
+  });
+
+  it('doan phang (out/in cung huong ngang) cho goc 0', () => {
+    const flatSegment: WarpPath = {
+      role: 'baseline',
+      closed: false,
+      anchors: [
+        { x: 0, y: 0.5 },
+        { x: 0.3, y: 0.5 },
+        { x: 1, y: 0.9 },
+      ],
+    };
+    const frame = buildPathFrame(flatSegment, SIZE, 50)!;
+    expect(frame.angle(1)).toBeCloseTo(0, 6);
+  });
+
+  it('doan doc xuong (path di xuong ben phai) cho goc duong (quy uoc y-down)', () => {
+    const down: WarpPath = {
+      role: 'baseline',
+      closed: false,
+      anchors: [
+        { x: 0, y: 0.2 },
+        { x: 1, y: 0.8 },
+      ],
+    };
+    const frame = buildPathFrame(down, SIZE, 50)!;
+    expect(frame.angle(frame.L / 2)).toBeGreaterThan(0);
+  });
+
+  it('kep ve dau/cuoi path khi s ra ngoai [0, L], khong throw', () => {
+    const frame = buildPathFrame(WAVE(), SIZE, 50)!;
+    expect(frame.X(-100)).toBe(frame.X(0));
+    expect(frame.X(frame.L + 500)).toBe(frame.X(frame.L));
+    expect(Number.isFinite(frame.angle(-100))).toBe(true);
+    expect(Number.isFinite(frame.angle(frame.L + 500))).toBe(true);
   });
 });
 

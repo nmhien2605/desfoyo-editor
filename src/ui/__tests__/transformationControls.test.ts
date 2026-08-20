@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Warp, WarpPath } from '../../schema';
 import {
+  ENABLED_WARP_TYPES,
   resetWarp,
   setWarpCurveHeight,
   setWarpType,
@@ -34,6 +35,21 @@ describe('setWarpType', () => {
 
   it('giu nguyen curveHeight khi doi kieu', () => {
     expect(setWarpType(edited, 'arch').curveHeight).toBe(0.5);
+  });
+
+  it('doi sang custom cung xoa paths cu — Custom LUON bat dau flat, khong ke thua hinh dang truoc do', () => {
+    expect(setWarpType(edited, 'custom').paths).toBeUndefined();
+    expect(setWarpType(edited, 'custom').type).toBe('custom');
+  });
+});
+
+describe('ENABLED_WARP_TYPES', () => {
+  it('custom da duoc bat', () => {
+    expect(ENABLED_WARP_TYPES).toContain('custom');
+  });
+
+  it('distort van khoa (chua cai dat)', () => {
+    expect(ENABLED_WARP_TYPES).not.toContain('distort');
   });
 });
 

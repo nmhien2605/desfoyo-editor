@@ -343,9 +343,107 @@ function samplePath(
 // Path phang dung tai baseline => phep dong nhat. Phai chan tuong minh: X(x)
 // duoc tra qua bang nen chi bang x trong sai so LUT, khong bang TUYET DOI nhu
 // mo hinh cu (spec §2.5).
-function isFlatAtBaseline(path: WarpPath, size: Size, baselineY: number): boolean {
+//
+// Export: dung chung boi buildWarpMap (linear family) VA buildPathFrame
+// (custom, xem duoi) — path khoi tao flat cua Custom (resolveWarpPath's
+// nhanh 'custom') cung dung baseline lam duong phang, nen chung mot dieu
+// kien "chua warp gi ca" cho ca hai engine.
+export function isFlatAtBaseline(path: WarpPath, size: Size, baselineY: number): boolean {
   const flatY = (p: { y: number }) => Math.abs(p.y * size.height - baselineY) <= EPSILON;
   return path.anchors.every((a) => flatY(a) && (!a.in || flatY(a.in)) && (!a.out || flatY(a.out)));
+}
+
+interface PathLUT {
+  xs: number[];
+  ys: number[];
+  us: number[];
+  L: number;
+}
+
+// Bang tra theo do dai cung (xs/ys/us) — tach rieng khoi buildWarpMap de
+// dung chung duoc voi buildPathFrame (custom): ca hai can DUNG MOT bang tra
+// hinh hoc, chi khac nhau o cach dung no (buildWarpMap warp tung diem contour
+// qua X/D, buildPathFrame tra vi tri+goc tiep tuyen cho rigid transform tung
+// glyph). Doc lap voi baselineY (khong nhu WarpMap.D) vi PathFrame tra Y
+// TUYET DOI, khong phai offset.
+function buildPathLUT(path: WarpPath, size: Size): PathLUT | null {
+  const xs: number[] = [];
+  const ys: number[] = [];
+  const us: number[] = [];
+  const segments = segmentsOf(path, size);
+  segments.forEach((s, i) => {
+    if (i === 0) {
+      xs.push(s.p0.x);
+      ys.push(s.p0.y);
+      us.push(0);
+    }
+    samplePath(xs, ys, us, [s.p0.x, s.c1.x, s.c2.x, s.p3.x], [s.p0.y, s.c1.y, s.c2.y, s.p3.y], 0);
+  });
+  const L = us[us.length - 1];
+  if (!(L > EPSILON)) return null;
+  return { xs, ys, us, L };
+}
+
+// Nhi phan tra doan LUT chua s, roi noi suy tuyen tinh trong doan do — dung
+// chung boi buildWarpMap.lookup (truoc day noi bo) va buildPathFrame. Tra
+// them low/high (chi so doan) de goi angle() tinh huong tiep tuyen tu CHINH
+// doan da tra, khong can epsilon xap xi rieng — cung do chinh xac voi X/Y.
+function lookupLUT(
+  lut: PathLUT,
+  s: number,
+): { x: number; y: number; low: number; high: number } {
+  const clamped = Math.min(Math.max(s, 0), lut.L);
+  if (clamped <= 0) return { x: lut.xs[0], y: lut.ys[0], low: 0, high: Math.min(1, lut.xs.length - 1) };
+  if (clamped >= lut.L) {
+    const n = lut.xs.length - 1;
+    return { x: lut.xs[n], y: lut.ys[n], low: Math.max(0, n - 1), high: n };
+  }
+  let low = 0;
+  let high = lut.us.length - 1;
+  while (high - low > 1) {
+    const mid = (low + high) >> 1;
+    if (lut.us[mid] <= clamped) low = mid;
+    else high = mid;
+  }
+  const span = lut.us[high] - lut.us[low];
+  const r = span < EPSILON ? 0 : (clamped - lut.us[low]) / span;
+  return {
+    x: lut.xs[low] + (lut.xs[high] - lut.xs[low]) * r,
+    y: lut.ys[low] + (lut.ys[high] - lut.ys[low]) * r,
+    low,
+    high,
+  };
+}
+
+export interface PathFrame {
+  L: number;
+  X(s: number): number;
+  Y(s: number): number;
+  // Goc tiep tuyen (radian) tai do dai cung s — dung de xoay cung tung glyph
+  // trong customWarp.ts's warpContoursOnPath. Lay tu HUONG cua chinh doan LUT
+  // chua s (khong phai dao ham giai tich rieng) — cung do chinh xac voi X/Y.
+  angle(s: number): number;
+}
+
+// Rigid-per-glyph (Custom) can vi tri + goc tiep tuyen TUYET DOI tren path —
+// khac WarpMap (D la offset so voi baselineY, dung cho warp tung diem). Dung
+// chung buildPathLUT/lookupLUT voi buildWarpMap nen ket qua vi tri khop
+// tuyet doi giua hai engine tren cung mot path.
+export function buildPathFrame(path: WarpPath, size: Size, baselineY: number): PathFrame | null {
+  if (size.width <= 0 || size.height <= 0) return null;
+  if (path.anchors.length < 2) return null;
+  if (isFlatAtBaseline(path, size, baselineY)) return null;
+  const lut = buildPathLUT(path, size);
+  if (!lut) return null;
+  return {
+    L: lut.L,
+    X: (s) => lookupLUT(lut, s).x,
+    Y: (s) => lookupLUT(lut, s).y,
+    angle: (s) => {
+      const { low, high } = lookupLUT(lut, s);
+      return Math.atan2(lut.ys[high] - lut.ys[low], lut.xs[high] - lut.xs[low]);
+    },
+  };
 }
 
 // Bang tra theo DO DAI CUNG cho phep bien doi warp:
@@ -371,46 +469,13 @@ export function buildWarpMap(path: WarpPath, size: Size, baselineY: number): War
   if (size.width <= 0 || size.height <= 0) return null;
   if (path.anchors.length < 2) return null;
   if (isFlatAtBaseline(path, size, baselineY)) return null;
-
-  const xs: number[] = [];
-  const ys: number[] = [];
-  const us: number[] = [];
-  const segments = segmentsOf(path, size);
-  segments.forEach((s, i) => {
-    if (i === 0) {
-      xs.push(s.p0.x);
-      ys.push(s.p0.y);
-      us.push(0);
-    }
-    samplePath(xs, ys, us, [s.p0.x, s.c1.x, s.c2.x, s.p3.x], [s.p0.y, s.c1.y, s.c2.y, s.p3.y], 0);
-  });
-
-  const L = us[us.length - 1];
-  if (!(L > EPSILON)) return null;
-
-  const lookup = (x: number): { x: number; y: number } => {
-    const s = Math.min(Math.max(x, 0), L);
-    if (s <= 0) return { x: xs[0], y: ys[0] };
-    if (s >= L) return { x: xs[xs.length - 1], y: ys[ys.length - 1] };
-    let low = 0;
-    let high = us.length - 1;
-    while (high - low > 1) {
-      const mid = (low + high) >> 1;
-      if (us[mid] <= s) low = mid;
-      else high = mid;
-    }
-    const span = us[high] - us[low];
-    const r = span < EPSILON ? 0 : (s - us[low]) / span;
-    return {
-      x: xs[low] + (xs[high] - xs[low]) * r,
-      y: ys[low] + (ys[high] - ys[low]) * r,
-    };
-  };
+  const lut = buildPathLUT(path, size);
+  if (!lut) return null;
 
   return {
-    L,
-    X: (x) => lookup(x).x,
-    D: (x) => lookup(x).y - baselineY,
+    L: lut.L,
+    X: (x) => lookupLUT(lut, x).x,
+    D: (x) => lookupLUT(lut, x).y - baselineY,
   };
 }
 

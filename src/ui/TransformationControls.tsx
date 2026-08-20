@@ -19,7 +19,15 @@ export const WARP_TYPES: WarpType[] = [
 // circle dùng engine riêng (circleWarp.ts, rigid-transform-per-glyph) — xem
 // docs/text-future-work.md mục 5 và docs/kittl-circle-reverse-engineered.md.
 // distort/custom cần envelope warp riêng, vẫn khoá.
-export const ENABLED_WARP_TYPES: WarpType[] = ['wave', 'arch', 'rise', 'flag', 'angle', 'circle'];
+export const ENABLED_WARP_TYPES: WarpType[] = [
+  'wave',
+  'arch',
+  'rise',
+  'flag',
+  'angle',
+  'circle',
+  'custom',
+];
 
 export function setWarpType(warp: Warp | undefined, type: WarpType): Warp {
   // paths bị xoá khi đổi kiểu: một path do user chỉnh cho Wave không còn ý
@@ -102,7 +110,7 @@ export function TransformationControls({
         })}
       </div>
 
-      {active !== 'none' && active !== 'circle' && (
+      {active !== 'none' && active !== 'circle' && active !== 'custom' && (
         <>
           <label className="flex flex-col gap-1 capitalize">
             {active} Curve — {Math.round((warp?.curveHeight ?? 0) * 100)}%
@@ -126,6 +134,21 @@ export function TransformationControls({
             Reset
           </button>
         </>
+      )}
+
+      {/* Custom: khong co curveHeight/slider (path luon do tay keo, khong co
+          cong thuc preset) — chi Reset, dua warp.paths ve rong (flat) qua
+          resetWarp() co san. Khong co nut Confirm — xem implement.md ly do:
+          app khong co khai niem "che do edit" rieng cho bat ky warp type nao,
+          handle luon hien khi type dang active, giong Wave/Arch/Circle. */}
+      {active === 'custom' && (
+        <button
+          type="button"
+          onClick={() => apply(resetWarp(warp))}
+          className="rounded bg-gray-100 px-2 py-1 text-xs"
+        >
+          Reset
+        </button>
       )}
 
       {active === 'circle' && (

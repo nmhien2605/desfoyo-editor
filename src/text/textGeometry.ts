@@ -2,18 +2,26 @@ import type { Font } from 'opentype.js';
 import type { CircleParams, TextNode, WarpPath } from '../schema';
 import { evalCubic, extrema } from './bezier';
 import { warpContoursCircle } from './circleWarp';
+import { warpContoursOnPath } from './customWarp';
 import type { GlyphShape } from './glyphOutlines';
 import { layoutText, type TextLayout } from './layout';
 import {
   buildAnglePath,
   buildArchPath,
   buildFlagPath,
+  buildPathFrame,
   buildRisePath,
   buildWarpMap,
   buildWavePath,
   clampPathX,
   warpContours,
 } from './warp';
+
+// Bien do (boi so fontSize) cua path khoi tao cho Custom — xem giai thich o
+// nhanh 'custom' cua resolveWarpPath. 0.15 la gia tri chon tay: du nho de
+// khong trong nhu da bi warp that su, du lon de 7 handle tach roi nhau tren
+// man hinh.
+const CUSTOM_INIT_CURVE_HEIGHT = 0.5;
 
 export interface TextGeometry {
   shapes: GlyphShape[];
@@ -34,6 +42,7 @@ export interface TextGeometry {
   pivotWidth: number;
   height: number;
   baselineY: number;
+  centerY: number;
   // Bbox thật của hình SAU warp. Chỉ để vẽ khung chọn — không đụng transform.
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
 }
@@ -84,6 +93,7 @@ export function resolveWarpPath(
   node: TextNode,
   baselineRatio: number,
   boxHeight: number,
+  centerRatio: number,
 ): WarpPath | null {
   const warp = node.warp;
   if (!warp || warp.type === 'none') return null;
@@ -96,8 +106,42 @@ export function resolveWarpPath(
   const stored = warp.paths?.find((path) => path.role === 'baseline');
   if (stored) return stored.anchors.length >= 2 ? clampPathX(stored) : null;
 
-  const { curveHeight } = warp;
   const size = node.font.size;
+  // Custom: path khoi tao tai CENTER (khong phai baseline nhu 5 preset kia)
+  // — vi engine cua Custom (warpShapesOnCustomPath/warpContoursOnPath) neo
+  // pivot tung glyph vao centerY, khong phai baselineY. Neu sinh path flat
+  // tai baselineRatio (nhu truoc day) thi: (1) path/handle hien thi duoi
+  // chan chu thay vi giua dong — sai yeu cau "path nam giua dong chu ngay tu
+  // dau"; (2) ngay khi user vua nhich 1 diem, toan bo cac diem CHUA dong tren
+  // path van con o baselineY trong khi engine dat chung theo centerY — lech
+  // (baselineY - centerY) px, chu nhay vi tri dot ngot ngay lan keo dau tien.
+  // Dung centerRatio giai quyet ca hai: path ve dung giua chu tu dau, va
+  // diem chua dong luon khop voi cho engine se dat (centerY), khong con buoc
+  // nhay nao.
+  //
+  // CUSTOM_INIT_CURVE_HEIGHT (khong phai 0): nang RIENG anchor giua len mot
+  // chut ngay tu dau, 2 anchor dau/cuoi giu nguyen tai centerRatio — path
+  // flat tuyet doi (curveHeight=0) khien ca 7 diem nam thang hang chong len
+  // nhau tren cung 1 duong ngang, kho nhin ra duong cong lan kho bam chuot
+  // dung tay cam. Khong tai dung buildWavePath: bang toa do cua no LECH ca
+  // hai dau khoi baseline theo curveHeight (khong doi xung quanh center),
+  // trong khi yeu cau o day chi la "nang giua len", 2 dau phai dung yen tai
+  // centerRatio — nen dung mot bo anchor rieng, doi xung, chi minh anchor
+  // giua doi.
+  if (warp.type === 'custom') {
+    const bump = boxHeight > 0 ? (CUSTOM_INIT_CURVE_HEIGHT * size) / boxHeight : 0;
+    const mid = centerRatio - bump;
+    return clampPathX({
+      role: 'baseline',
+      closed: false,
+      anchors: [
+        { x: 0, y: centerRatio, out: { x: 0.25, y: centerRatio } },
+        { x: 0.5, y: mid, in: { x: 0.35, y: mid }, out: { x: 0.65, y: mid } },
+        { x: 1, y: centerRatio, in: { x: 0.75, y: centerRatio } },
+      ],
+    });
+  }
+  const { curveHeight } = warp;
   if (warp.type === 'wave') return clampPathX(buildWavePath(curveHeight, baselineRatio, size, boxHeight));
   if (warp.type === 'arch') return clampPathX(buildArchPath(curveHeight, baselineRatio, size, boxHeight));
   if (warp.type === 'rise') return clampPathX(buildRisePath(curveHeight, baselineRatio, size, boxHeight));
@@ -163,6 +207,10 @@ export function textGeometry(node: TextNode, font: Font): TextGeometry {
       directionInverted: node.warp?.directionInverted ?? false,
     });
     warped = true;
+  } else if (node.warp?.type === 'custom') {
+    const result = warpShapesOnCustomPath(node, layout);
+    shapes = result.shapes;
+    warped = result.warped;
   } else {
     const result = warpShapesFromPath(node, layout);
     shapes = result.shapes;
@@ -179,7 +227,7 @@ function warpShapesFromPath(
 ): { shapes: GlyphShape[]; warped: boolean } {
   const path =
     layout.height > 0
-      ? resolveWarpPath(node, layout.baselineY / layout.height, layout.height)
+      ? resolveWarpPath(node, layout.baselineY / layout.height, layout.height, layout.centerY / layout.height)
       : null;
   // buildWarpMap tra null khi path phang dung tai baseline — khi ay bo qua warp
   // hoan toan de curveHeight = 0 la phep dong nhat TUYET DOI, khong dinh sai so
@@ -191,6 +239,36 @@ function warpShapesFromPath(
     : null;
   return map
     ? { shapes: warpContours(layout.shapes, map), warped: true }
+    : { shapes: layout.shapes, warped: false };
+}
+
+// Custom: rigid-transform-per-glyph theo path mo (khac warpShapesFromPath
+// uon tung diem contour) — xem customWarp.ts va docs/kittl-custom-reverse-
+// engineered.md §4b. Cung dung layout.advanceWidth (khong phai layout.width)
+// lam mau so chuan hoa X, giong het warpShapesFromPath — bat bien
+// letterSpacing (pivotWidth) ap dung tu dong qua co `warped` chung, khong
+// can code rieng cho Custom.
+function warpShapesOnCustomPath(
+  node: TextNode,
+  layout: TextLayout,
+): { shapes: GlyphShape[]; warped: boolean } {
+  const path =
+    layout.height > 0
+      ? resolveWarpPath(node, layout.baselineY / layout.height, layout.height, layout.centerY / layout.height)
+      : null;
+  // centerY (khong phai baselineY) lam moc "phang": day la truc ma engine
+  // rigid-transform-per-glyph neo pivot vao (xem warpContoursOnPath) — path
+  // khoi tao cung dat flat tai centerY (resolveWarpPath o tren), nen hai ben
+  // phai dung CHUNG mot truc thi moi khong bi lech/nhay vi tri (xem giai
+  // thich chi tiet o nhanh 'custom' cua resolveWarpPath).
+  const frame = path
+    ? buildPathFrame(path, { width: layout.advanceWidth, height: layout.height }, layout.centerY)
+    : null;
+  return frame
+    ? {
+        shapes: warpContoursOnPath(layout.shapes, layout.shapePivotX, layout.centerY, frame),
+        warped: true,
+      }
     : { shapes: layout.shapes, warped: false };
 }
 

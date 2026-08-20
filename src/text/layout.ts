@@ -16,6 +16,12 @@ export interface TextLayout {
   advanceWidth: number;
   height: number;
   baselineY: number; // baseline của dòng đầu tiên
+  // Trung điểm hộp ascent/descent của DÒNG ĐẦU — pivot xoay dọc cho Custom
+  // (customWarp.ts), khác baselineY vì Custom neo tâm dọc của chữ, không neo
+  // chân chữ như warp/circle. Một giá trị cho cả dòng (không tính riêng bbox
+  // từng glyph) để chữ có dấu xuống dưới (g/y/p) không lệch tâm so với chữ
+  // khác trên cùng path.
+  centerY: number;
 }
 
 export interface LayoutOptions {
@@ -81,5 +87,5 @@ export function layoutText(options: LayoutOptions): TextLayout {
     }
   });
 
-  return { shapes, shapePivotX, width, advanceWidth, height, baselineY: ascent };
+  return { shapes, shapePivotX, width, advanceWidth, height, baselineY: ascent, centerY: (ascent + descent) / 2 };
 }

@@ -69,6 +69,18 @@ describe('layoutText', () => {
     expect(result.baselineY).toBeLessThan(result.height);
   });
 
+  it('centerY la trung diem hop ascent/descent cua dong dau, nam tren baselineY', () => {
+    const result = layout('Ag');
+    expect(result.centerY).toBeGreaterThan(0);
+    expect(result.centerY).toBeLessThan(result.baselineY);
+  });
+
+  it('centerY khong doi khi them dong (chi phu thuoc dong dau, dung cho Custom neo tam doc)', () => {
+    const one = layout('a');
+    const two = layout('a\nb');
+    expect(two.centerY).toBeCloseTo(one.centerY, 6);
+  });
+
   it('text rong khong lam vo layout', () => {
     const result = layout('');
     expect(result.shapes).toEqual([]);

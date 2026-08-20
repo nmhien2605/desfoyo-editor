@@ -53,14 +53,19 @@ function layoutOf(node: TextNode) {
 
 describe('resolveWarpPath', () => {
   it('tra null khi khong co warp hoac warp type none', () => {
-    expect(resolveWarpPath(textNode(), 0.8, 120)).toBeNull();
+    expect(resolveWarpPath(textNode(), 0.8, 120, 0.5)).toBeNull();
     expect(
-      resolveWarpPath(textNode({ warp: { type: 'none', curveHeight: 0.5 } }), 0.8, 120),
+      resolveWarpPath(textNode({ warp: { type: 'none', curveHeight: 0.5 } }), 0.8, 120, 0.5),
     ).toBeNull();
   });
 
   it('sinh path preset cho wave khi chua co paths', () => {
-    const path = resolveWarpPath(textNode({ warp: { type: 'wave', curveHeight: 0.5 } }), 0.8, 120);
+    const path = resolveWarpPath(
+      textNode({ warp: { type: 'wave', curveHeight: 0.5 } }),
+      0.8,
+      120,
+      0.5,
+    );
     expect(path?.anchors).toHaveLength(3);
   });
 
@@ -77,6 +82,7 @@ describe('resolveWarpPath', () => {
       textNode({ warp: { type: 'wave', curveHeight: 0.5, paths: [stored] } }),
       0.8,
       120,
+      0.5,
     );
     expect(path).toEqual(stored);
   });
@@ -100,6 +106,7 @@ describe('resolveWarpPath', () => {
       textNode({ warp: { type: 'wave', curveHeight: 0.5, paths: [stored] } }),
       0.8,
       120,
+      0.5,
     );
     expect(path).not.toBeNull();
     expect(path?.anchors[0].x).toBeCloseTo(0.1, 10);
@@ -113,28 +120,62 @@ describe('resolveWarpPath', () => {
         textNode({ warp: { type: 'wave', curveHeight: 0.5, paths: [broken] } }),
         0.8,
         120,
+        0.5,
       ),
     ).toBeNull();
   });
 
-  it('tra null cho transformation chua co preset (circle/distort/custom can envelope rieng)', () => {
+  it('tra null cho transformation chua co preset (circle/distort can envelope/engine rieng)', () => {
     expect(
-      resolveWarpPath(textNode({ warp: { type: 'circle', curveHeight: 0.5 } }), 0.8, 120),
+      resolveWarpPath(textNode({ warp: { type: 'circle', curveHeight: 0.5 } }), 0.8, 120, 0.5),
     ).toBeNull();
     expect(
-      resolveWarpPath(textNode({ warp: { type: 'distort', curveHeight: 0.5 } }), 0.8, 120),
+      resolveWarpPath(textNode({ warp: { type: 'distort', curveHeight: 0.5 } }), 0.8, 120, 0.5),
     ).toBeNull();
-    expect(
-      resolveWarpPath(textNode({ warp: { type: 'custom', curveHeight: 0.5 } }), 0.8, 120),
-    ).toBeNull();
+  });
+
+  it('custom: sinh path khoi tao tai CENTER (khong phai baseline) — 2 anchor dau/cuoi nam giua dong chu ngay tu dau', () => {
+    // baselineRatio (0.8) va centerRatio (0.3) co tinh khac nhau — assert
+    // 2 anchor dau/cuoi bam theo centerRatio, KHONG phai baselineRatio, moi
+    // bat duoc bug "path khoi tao khong nam giua dong chu" (path bi sinh tai
+    // baseline).
+    const path = resolveWarpPath(
+      textNode({ warp: { type: 'custom', curveHeight: 0.5 } }),
+      0.8,
+      120,
+      0.3,
+    );
+    expect(path?.anchors).toHaveLength(3);
+    expect(path!.anchors[0].y).toBeCloseTo(0.3, 9);
+    expect(path!.anchors[0].out!.y).toBeCloseTo(0.3, 9);
+    expect(path!.anchors[2].y).toBeCloseTo(0.3, 9);
+    expect(path!.anchors[2].in!.y).toBeCloseTo(0.3, 9);
+  });
+
+  it('custom: anchor GIUA nang cao hon 2 dau (goi y duong cong + tach cac handle de de bam)', () => {
+    const path = resolveWarpPath(
+      textNode({ warp: { type: 'custom', curveHeight: 0.5 } }),
+      0.8,
+      120,
+      0.3,
+    )!;
+    // y nho hon = cao hon tren man hinh (quy uoc y-down).
+    expect(path.anchors[1].y).toBeLessThan(path.anchors[0].y);
+    expect(path.anchors[1].in!.y).toBeCloseTo(path.anchors[1].y, 9);
+    expect(path.anchors[1].out!.y).toBeCloseTo(path.anchors[1].y, 9);
   });
 
   it('sinh path preset cho arch/rise/flag/angle khi chua co paths', () => {
     for (const type of ['arch', 'rise', 'flag'] as const) {
-      const path = resolveWarpPath(textNode({ warp: { type, curveHeight: 0.5 } }), 0.8, 120);
+      const path = resolveWarpPath(textNode({ warp: { type, curveHeight: 0.5 } }), 0.8, 120, 0.5);
       expect(path?.anchors).toHaveLength(3);
     }
-    const angle = resolveWarpPath(textNode({ warp: { type: 'angle', curveHeight: 0.5 } }), 0.8, 120);
+    const angle = resolveWarpPath(
+      textNode({ warp: { type: 'angle', curveHeight: 0.5 } }),
+      0.8,
+      120,
+      0.5,
+    );
     expect(angle?.anchors).toHaveLength(2);
   });
 });
@@ -374,6 +415,160 @@ describe('text-on-path', () => {
     const plain = measureText({ ...base, letterSpacing: 0 }, poppins);
     const spaced = measureText({ ...base, letterSpacing: 30 }, poppins);
     expect(spaced.width).toBeGreaterThan(plain.width);
+  });
+});
+
+describe('textGeometry — custom (rigid-transform-per-glyph)', () => {
+  it('chua keo tay: co goi y cong nhe (khong con phang tuyet doi — xem CUSTOM_INIT_CURVE_HEIGHT), nhung van RIGID', () => {
+    const custom = textGeometry(textNode({ warp: { type: 'custom', curveHeight: 0.5 } }), poppins);
+    const plain = textGeometry(textNode(), poppins);
+    // Khong con bang tuyet doi (path khoi tao co bump nhe o giua) — nhung
+    // glyph dau (pivotX gan 0, gan anchor dau chua bi doi) phai LECH RAT IT
+    // so voi layout goc — pivotX cua glyph dau khong dung tuyet doi tai s=0
+    // (la tam glyph, khong phai canh trai) nen van co mot chut xoay/dich,
+    // nguong 30px (tren fontSize=100, CUSTOM_INIT_CURVE_HEIGHT=0.5) du rong
+    // de qua test nhung van chan duoc lech hang tram px cua bug that.
+    const dx = custom.shapes[0].outer[0] - plain.shapes[0].outer[0];
+    const dy = custom.shapes[0].outer[1] - plain.shapes[0].outer[1];
+    expect(Math.hypot(dx, dy)).toBeLessThan(30);
+
+    // Van la rigid transform (dac trung cua Custom) — khoang cach giua 2
+    // diem bat ky tren cung 1 glyph khong doi, ke ca khi da co goi y cong.
+    const before = plain.shapes[0].outer;
+    const after = custom.shapes[0].outer;
+    const dist = (pts: number[], i: number, j: number) =>
+      Math.hypot(pts[i] - pts[j], pts[i + 1] - pts[j + 1]);
+    for (let i = 0; i < before.length; i += 2) {
+      for (let j = i + 2; j < before.length; j += 2) {
+        expect(dist(after, i, j)).toBeCloseTo(dist(before, i, j), 6);
+      }
+    }
+  });
+
+  it('co paths lech khoi baseline: shapes doi, nhung KHONG meo hinh — chi xoay cung glyph', () => {
+    const stored: WarpPath = {
+      role: 'baseline',
+      closed: false,
+      anchors: [
+        { x: 0, y: 0.5 },
+        { x: 0.5, y: 0.2 },
+        { x: 1, y: 0.5 },
+      ],
+    };
+    const node = textNode({
+      text: 'Wave',
+      warp: { type: 'custom', curveHeight: 0.5, paths: [stored] },
+    });
+    const custom = textGeometry(node, poppins);
+    const plain = textGeometry(textNode({ text: 'Wave' }), poppins);
+    expect(custom.shapes[0].outer).not.toEqual(plain.shapes[0].outer);
+
+    // Bat bien rigid: khoang cach giua 2 diem BAT KY tren cung 1 glyph khong
+    // doi truoc/sau — dac trung cua rigid transform, KHONG dung cho Wave (co
+    // the meo). Day la test phan biet Custom voi 5 preset con lai.
+    const before = plain.shapes[0].outer;
+    const after = custom.shapes[0].outer;
+    expect(after.length).toBe(before.length);
+    const dist = (pts: number[], i: number, j: number) =>
+      Math.hypot(pts[i] - pts[j], pts[i + 1] - pts[j + 1]);
+    for (let i = 0; i < before.length; i += 2) {
+      for (let j = i + 2; j < before.length; j += 2) {
+        expect(dist(after, i, j)).toBeCloseTo(dist(before, i, j), 6);
+      }
+    }
+  });
+
+  it('letterSpacing khong doi node.size (pivotWidth) khi da co warp thuc su', () => {
+    const stored: WarpPath = {
+      role: 'baseline',
+      closed: false,
+      anchors: [
+        { x: 0, y: 0.4 },
+        { x: 1, y: 0.6 },
+      ],
+    };
+    const base = textNode({
+      text: 'Headline',
+      warp: { type: 'custom', curveHeight: 0.5, paths: [stored] },
+    });
+    const plain = measureText({ ...base, letterSpacing: 0 }, poppins);
+    const spaced = measureText({ ...base, letterSpacing: 30 }, poppins);
+    expect(spaced).toEqual(plain);
+  });
+
+  it('path khoi tao nam DUNG GIUA dong chu (centerY), khong phai duoi chan (baseline) — bug bao cao 2026-08-20', () => {
+    // Doc lai path khoi tao qua resolveWarpPath (dung centerRatio, khong con
+    // baselineRatio) roi so voi centerY/baselineY thuc te cua layout — day la
+    // phep do TRUC TIEP, khong suy tu hanh vi khac.
+    const node = textNode({ text: 'Headline', warp: { type: 'custom', curveHeight: 0.5 } });
+    const layout = layoutOf(node);
+    const path = resolveWarpPath(
+      node,
+      layout.baselineY / layout.height,
+      layout.height,
+      layout.centerY / layout.height,
+    )!;
+    const pathY = path.anchors[0].y * layout.height;
+    expect(pathY).toBeCloseTo(layout.centerY, 6);
+    expect(pathY).not.toBeCloseTo(layout.baselineY, 1);
+  });
+
+  it('keo 1 diem KHONG lam chu o phan con lai cua path (van con o centerY) nhay vi tri — bug bao cao 2026-08-20', () => {
+    // Truoc fix: path khoi tao flat tai baselineY nhung engine dat pivot tai
+    // centerY — ngay khi 1 diem bat ky bi keo (path khong con flat-tai-
+    // baselineY nua), TOAN BO chu (ke ca phan path con nguyen o baseline) bi
+    // dat lai theo centerY, nhay het mot khoang (baselineY - centerY). Sau
+    // fix: path khoi tao flat tai centerY, nen phan CHUA bi keo van dat dung
+    // cho cu — glyph dau (nam o phan path con nguyen) phai gan nhu KHONG doi
+    // so voi layout chua warp.
+    const text = 'Headline';
+    const node = textNode({ text, warp: { type: 'custom', curveHeight: 0.5 } });
+    const layout = layoutOf(node);
+    const flatPath = resolveWarpPath(
+      node,
+      layout.baselineY / layout.height,
+      layout.height,
+      layout.centerY / layout.height,
+    )!;
+    // Chi keo anchor CUOI (o dau ben phai) lech xuong — anchor dau + handle
+    // cua no van y nguyen gia tri flat centerY, mo phong dung mot cu keo tay
+    // thuc te (chi 1 diem doi, cac diem khac giu nguyen).
+    const dragged: WarpPath = {
+      ...flatPath,
+      anchors: flatPath.anchors.map((a, i) =>
+        i === flatPath.anchors.length - 1 ? { ...a, y: a.y + 0.3 } : a,
+      ),
+    };
+    const warped = textGeometry(
+      { ...node, warp: { type: 'custom', curveHeight: 0.5, paths: [dragged] } },
+      poppins,
+    );
+    const plain = textGeometry(textNode({ text }), poppins);
+    // Glyph dau tien (gan anchor 0, chua bi keo) phai gan nhu trung khop voi
+    // layout goc — sai so nho (khong bang 0 tuyet doi vi path khong CON hoan
+    // toan flat, chi 1 doan gan dau van gan phang) chu KHONG duoc lech hang
+    // chuc px nhu bug cu.
+    const dx = warped.shapes[0].outer[0] - plain.shapes[0].outer[0];
+    const dy = warped.shapes[0].outer[1] - plain.shapes[0].outer[1];
+    expect(Math.hypot(dx, dy)).toBeLessThan(10);
+  });
+
+  it('ky tu vuot qua 2 dau path bi loai het (khong hien ra ngoai path)', () => {
+    const shortPath: WarpPath = {
+      role: 'baseline',
+      closed: false,
+      anchors: [
+        { x: 0, y: 0.4 },
+        { x: 0.1, y: 0.6 },
+      ],
+    };
+    const node = textNode({
+      text: 'Headline',
+      warp: { type: 'custom', curveHeight: 0.5, paths: [shortPath] },
+    });
+    const geometry = textGeometry(node, poppins);
+    const plain = textGeometry(textNode({ text: 'Headline' }), poppins);
+    expect(geometry.shapes.length).toBeLessThan(plain.shapes.length);
   });
 });
 

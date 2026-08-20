@@ -11,7 +11,10 @@ export interface CircleWarpParams {
 // warp.ts: co so Bernstein tong bang 1 nen ap R(theta) len tung control point
 // giu duong cong Bezier CHINH XAC, du la rigid transform chu khong phai warp
 // diem-theo-diem nhu warp.ts.
-function transformContour(
+// Export: customWarp.ts (Custom text transform) dung lai dung phep affine
+// nay cho rigid-transform-per-glyph theo path mo, thay vi theo vong tron —
+// xem implement.md.
+export function transformContour(
   contour: Contour,
   cos: number,
   sin: number,

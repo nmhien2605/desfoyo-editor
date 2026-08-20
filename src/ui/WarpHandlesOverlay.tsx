@@ -116,7 +116,12 @@ export function WarpHandlesOverlay({
   if (geometry.height <= 0) return null;
   // Cung nguon voi textGeometry: path o day chinh la path dang dung de warp,
   // nen handle nam dung tren duong ma chu dang chay.
-  const path = resolveWarpPath(node, geometry.baselineY / geometry.height, geometry.height);
+  const path = resolveWarpPath(
+    node,
+    geometry.baselineY / geometry.height,
+    geometry.height,
+    geometry.centerY / geometry.height,
+  );
   if (!path) return null;
 
   // advanceWidth (khong tinh letterSpacing) — dong bo voi textGeometry.ts's
