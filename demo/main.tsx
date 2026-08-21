@@ -16,8 +16,8 @@ function App() {
   const [sampleName, setSampleName] = useState<keyof typeof samples>('Kittl showcase');
   const editorRef = useRef<EditorHandle>(null);
 
-  const handleExport = async (format: 'png' | 'svg') => {
-    const blob = await editorRef.current?.export(format);
+  const handleExport = async (format: 'png' | 'svg', scale?: number) => {
+    const blob = await editorRef.current?.export(format, scale);
     if (!blob) return;
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

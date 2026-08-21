@@ -25,7 +25,7 @@ function toSizeTuple(size: { width: number; height: number }): [number, number] 
 export interface EditorHandle {
   getDocument(): Document;
   loadDocument(doc: Document): void;
-  export(format: 'png' | 'svg'): Promise<Blob>;
+  export(format: 'png' | 'svg', scale?: number): Promise<Blob>;
   undo(): void;
   redo(): void;
 }
@@ -80,10 +80,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
           future: [],
         });
       },
-      export: async (format) => {
+      export: async (format, scale = 1) => {
         const { app, pageContainer } = canvasValueRef.current;
         if (!app || !pageContainer) throw new Error('Editor is not mounted yet');
-        if (format === 'png') return exportPng(app, pageContainer);
+        if (format === 'png') return exportPng(app, pageContainer, scale);
 
         const reconciler = reconcilerRef.current;
         if (!reconciler) throw new Error('Editor is not mounted yet');

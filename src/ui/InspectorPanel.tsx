@@ -6,10 +6,13 @@ import {
   AlignStartVertical,
   AlignVerticalJustifyCenter,
 } from 'lucide-react';
+import { useState } from 'react';
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
 import { createToolActions } from './toolActions';
 import { PropertiesPanel, singleSelectedNode } from './PropertiesPanel';
 import { useEditorUI } from './EditorUIContext';
+
+const EXPORT_SCALES = [1, 2, 3, 4];
 
 export function InspectorPanel() {
   const store = useEditorStoreApi();
@@ -18,6 +21,7 @@ export function InspectorPanel() {
   const title = useEditorStore((s) => s.document.meta.title);
   const actions = createToolActions(store, null);
   const { onExport } = useEditorUI();
+  const [exportScale, setExportScale] = useState(1);
 
   return (
     <aside
@@ -27,11 +31,22 @@ export function InspectorPanel() {
       <div className="p-3">
         <div className="mb-3 flex items-center gap-2">
           <div className="h-6 w-6 rounded-full" style={{ background: '#4ba3df' }} />
+          <select
+            value={exportScale}
+            onChange={(e) => setExportScale(Number(e.target.value))}
+            className="kittl-input ml-auto w-14 text-xs"
+          >
+            {EXPORT_SCALES.map((scale) => (
+              <option key={scale} value={scale}>
+                {scale}×
+              </option>
+            ))}
+          </select>
           <button
             type="button"
-            className="ml-auto rounded-md px-3 py-1 text-xs font-medium"
+            className="rounded-md px-3 py-1 text-xs font-medium"
             style={{ background: '#f2f2f2', color: '#20242b' }}
-            onClick={() => onExport?.('png')}
+            onClick={() => onExport?.('png', exportScale)}
           >
             Export
           </button>

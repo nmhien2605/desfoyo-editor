@@ -111,9 +111,13 @@ Circle/Distort/Custom) cần thêm envelope warp (mục 4) trước khi làm đ�
 | drop | `DropShadowFilter` của pixi-filters — áp dụng trong `buildFilters.ts` |
 | line | vẽ lại `Contour[]` lệch theo `angle`/`distance`, chỉ stroke, không fill |
 | block | vẽ `Contour[]` lệch đi rồi fill đặc, đặt dưới lớp chữ chính |
-| 3D | vẽ `Contour[]` lệch dần N bước (`steps`) để tạo khối đùn |
+| 3D | quét ribbon liên tục theo từng đoạn bezier (Minkowski sum) + lớp đáy, không còn discretize theo `steps` |
 
 Schema định nghĩa ở spec §4.3. `distance` chuẩn hoá theo `font.size` để bóng tự co giãn theo cỡ chữ.
+
+Ribbon 3D cần chuẩn hoá chiều (dấu diện tích) cho từng đoạn trước khi ghép — nếu không, các ribbon
+ngược chiều nhau sẽ tự triệt tiêu dưới `fill-rule="nonzero"` khi SVG export gộp chúng vào một
+`<path>` duy nhất, tạo lỗ thủng trong file xuất ra dù hiển thị trên canvas vẫn đúng.
 
 Ba kiểu hình học đều đọc `Contour[]` **sau warp**, nên bóng tự động cong theo chữ — đó chính là lợi ích của việc gom mọi thứ về một pipeline hình học.
 

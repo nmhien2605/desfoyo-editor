@@ -20,7 +20,6 @@ export const EffectSchema = z.discriminatedUnion('type', [
     distance: z.number(),
     blur: z.number().optional(),
     thickness: z.number().optional(),
-    steps: z.number().int().min(1).optional(),
   }),
   z.object({
     type: z.literal('glow'),

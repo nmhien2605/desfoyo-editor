@@ -6,15 +6,17 @@ import { serializeNode, type RasterizedMap } from './svgSerializer';
 
 // Extracts the page container specifically (not app.stage), so any future
 // selection/UI chrome doesn't leak into the exported image.
-export function exportPng(app: Application, pageContainer: Container): Promise<Blob> {
-  // resolution: 1 ghim tường minh — mặc định extract lấy resolution của
-  // renderer, mà renderer giờ chạy theo devicePixelRatio (CanvasHost.tsx, để
-  // chữ trên màn retina không mờ). Không ghim thì file xuất ra to gấp đôi trên
-  // máy retina và bằng 1x trên máy thường: cùng một tài liệu cho hai kết quả
-  // khác nhau tuỳ màn hình người dùng.
+export function exportPng(app: Application, pageContainer: Container, scale = 1): Promise<Blob> {
+  // resolution mac dinh 1, khong doc devicePixelRatio — mac dinh extract lay
+  // resolution cua renderer, ma renderer giờ chạy theo devicePixelRatio
+  // (CanvasHost.tsx, để chữ trên màn retina không mờ). Không ghim thì file
+  // xuất ra to gấp đôi trên máy retina và bằng 1x trên máy thường: cùng một
+  // tài liệu cho hai kết quả khác nhau tuỳ màn hình người dùng. `scale` là
+  // lựa chọn tường minh của người dùng (1x/2x/3x/4x), không phải suy ra từ
+  // màn hình đang mở — vẫn tất định.
   const canvas = app.renderer.extract.canvas({
     target: pageContainer,
-    resolution: 1,
+    resolution: scale,
   }) as HTMLCanvasElement;
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {

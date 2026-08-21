@@ -16,7 +16,7 @@ type EditorUIContextValue = {
   activeTool: ActiveTool;
   setActiveTool: (tool: ActiveTool) => void;
   devMenu: DevMenuConfig | null;
-  onExport: ((format: 'png' | 'svg') => void) | null;
+  onExport: ((format: 'png' | 'svg', scale?: number) => void) | null;
 };
 
 const EditorUIContext = createContext<EditorUIContextValue | null>(null);
@@ -28,7 +28,7 @@ export function EditorUIProvider({
 }: {
   children: ReactNode;
   devMenu?: DevMenuConfig | null;
-  onExport?: ((format: 'png' | 'svg') => void) | null;
+  onExport?: ((format: 'png' | 'svg', scale?: number) => void) | null;
 }) {
   const [drawer, setDrawer] = useState<DrawerPanel>(null);
   const [activeTool, setActiveTool] = useState<ActiveTool>('select');

@@ -49,14 +49,21 @@ export function buildFilters(effects: Effect[] | undefined, fontSize?: number): 
         // 'custom' voi shaderId khong ton tai.
         if (effect.style !== 'drop' || !fontSize) break;
         const offsetPx = effect.distance * fontSize;
-        filters.push(
-          new DropShadowFilter({
-            color: effect.color,
-            blur: effect.blur ?? 4,
-            offset: { x: Math.cos(effect.angle) * offsetPx, y: Math.sin(effect.angle) * offsetPx },
-            alpha: 1,
-          }),
-        );
+        const dropShadowFilter = new DropShadowFilter({
+          color: effect.color,
+          blur: effect.blur ?? 4,
+          offset: { x: Math.cos(effect.angle) * offsetPx, y: Math.sin(effect.angle) * offsetPx },
+          alpha: 1,
+          quality: 12, // quality:3 mac dinh bi bac thang khi blur
+        });
+        // DropShadowFilterOptions khong forward 'antialias'/'resolution' tu
+        // constructor toi Filter goc (chi 'resolution' duoc forward, nhung
+        // typed sai la number) — phai gan sau khi tao instance. Thieu 2 dong
+        // nay: Filter.defaultOptions khien filter luon tat AA va render o
+        // resolution:1 bat ke devicePixelRatio.
+        dropShadowFilter.antialias = 'inherit';
+        dropShadowFilter.resolution = 'inherit';
+        filters.push(dropShadowFilter);
         break;
       }
       case 'glow':

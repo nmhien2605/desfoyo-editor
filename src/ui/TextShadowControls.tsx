@@ -124,19 +124,6 @@ export function TextShadowControls({
               />
             </label>
           )}
-
-          {shadow.style === '3d' && (
-            <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-              Steps
-              <input
-                type="number"
-                min={1}
-                value={shadow.steps ?? 6}
-                onChange={(e) => update({ steps: Math.max(1, Math.round(Number(e.target.value))) })}
-                className="kittl-input"
-              />
-            </label>
-          )}
         </>
       )}
     </div>

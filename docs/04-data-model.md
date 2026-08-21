@@ -150,7 +150,7 @@ Danh sách hiệu ứng, áp theo thứ tự. Mỗi effect map tới một filte
 ```ts
 type Effect =
   | { type: 'shadow'; color: string; blur: number; offset: [number, number]; alpha: number }
-  | { type: 'text-shadow'; style: 'drop' | 'line' | 'block' | '3d'; color: string; angle: number; distance: number; blur?: number; thickness?: number; steps?: number }
+  | { type: 'text-shadow'; style: 'drop' | 'line' | 'block' | '3d'; color: string; angle: number; distance: number; blur?: number; thickness?: number }
   | { type: 'glow'; color: string; strength: number; outer: boolean }
   | { type: 'outline'; color: string; thickness: number }
   | { type: 'extrude3d'; depth: number; angle: number; color: string }
