@@ -1,4 +1,6 @@
 // Public API of the library.
+import './ui/styles.css';
+
 export * from './schema';
 export { Editor } from './ui/Editor';
 export type { EditorProps, EditorHandle } from './ui/Editor';
