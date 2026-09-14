@@ -1,11 +1,14 @@
 {
-  "name": "desfoyo-editor",
-  "version": "0.0.1",
+  "name": "@desfoyo/editor",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -18,7 +21,8 @@
     "build:demo": "vite build --config vite.demo.config.ts",
     "test": "vitest run",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "prepare": "npm run build"
   },
   "peerDependencies": {
     "pixi.js": "^8.0.0",
