@@ -140,6 +140,15 @@ export function selectAll(store: EditorStoreApi): void {
   for (let i = 1; i < page.children.length; i++) store.getState().select(page.children[i].id, 'toggle');
 }
 
+// Replaces the whole selection with exactly these ids — an empty array
+// clears it. Shared by Editor.tsx's initialSelectedNodeIds mount logic and
+// EditorHandle.selectNode, which both need "set selection to this list"
+// rather than selectAll's "everything on the page".
+export function replaceSelection(store: EditorStoreApi, nodeIds: string[]): void {
+  store.getState().select(nodeIds[0] ?? null, 'replace');
+  for (const id of nodeIds.slice(1)) store.getState().select(id, 'toggle');
+}
+
 export function nudgeSelection(store: EditorStoreApi, dx: number, dy: number): void {
   const state = store.getState();
   const { selectedNodeIds } = state;

@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type DragEvent } from 'react';
 import type { Application, Container } from 'pixi.js';
-import { activePage, createEditorStore, type EditorStoreApi } from '../core/store';
-import { DocumentSchema, type Document } from '../schema';
+import { activePage, createEditorStore, setsEqual, type EditorStoreApi } from '../core/store';
+import { DocumentSchema, type Document, type Node, type Transform } from '../schema';
 import { EditorStoreProvider, CanvasProvider, type CanvasContextValue } from './EditorContext';
 import { EditorUIProvider, type DevMenuConfig } from './EditorUIContext';
 import { CanvasHost } from './CanvasHost';
@@ -17,6 +17,8 @@ import { createViewport } from '../render/viewport';
 import type { SceneReconciler } from '../render/SceneReconciler';
 import { exportPng, exportSvg } from '../services/exportService';
 import { attachShortcuts } from '../services/shortcuts';
+import { deleteSelection, groupSelection, ungroupSelection, replaceSelection } from '../core/actions';
+import { duplicateSelection, copySelection, cutSelection, pasteClipboard } from '../services/clipboard';
 
 function toSizeTuple(size: { width: number; height: number }): [number, number] {
   return [size.width, size.height];
@@ -28,15 +30,32 @@ export interface EditorHandle {
   export(format: 'png' | 'svg', scale?: number): Promise<Blob>;
   undo(): void;
   redo(): void;
+  addNode(node: Node, opts?: { pageId?: string; parentId?: string | null; index?: number }): void;
+  removeNode(nodeId: string, opts?: { pageId?: string; parentId?: string | null }): void;
+  updateNodeProps(nodeId: string, patch: Partial<Node>, opts?: { pageId?: string }): void;
+  updateNodeTransform(nodeId: string, patch: Partial<Transform>, opts?: { pageId?: string }): void;
+  reorderNode(nodeId: string, to: 'up' | 'down' | 'top' | 'bottom', opts?: { pageId?: string; parentId?: string | null }): void;
+  /** Replaces the current selection; an empty array clears it. */
+  selectNode(nodeIds: string[]): void;
+  groupSelection(): void;
+  ungroupSelection(): void;
+  deleteSelection(): void;
+  duplicateSelection(): void;
+  copySelection(): void;
+  cutSelection(): void;
+  pasteClipboard(): void;
 }
 
 export interface EditorProps {
   document: Document;
   onChange?: (doc: Document) => void;
+  onSelectionChange?: (nodeIds: string[]) => void;
   className?: string;
   devMenu?: DevMenuConfig;
   onExport?: (format: 'png' | 'svg') => void;
   initialSelectedNodeIds?: string[];
+  /** undefined keeps every built-in keyboard shortcut, false disables them all, a string[] whitelists which stay active. */
+  shortcuts?: false | string[];
 }
 
 export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(props, ref) {
@@ -44,10 +63,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     const parsed = DocumentSchema.parse(props.document);
     const api = createEditorStore(parsed);
     if (props.initialSelectedNodeIds?.length) {
-      api.getState().select(props.initialSelectedNodeIds[0], 'replace');
-      for (const id of props.initialSelectedNodeIds.slice(1)) {
-        api.getState().select(id, 'toggle');
-      }
+      replaceSelection(api, props.initialSelectedNodeIds);
     }
     return api;
   });
@@ -55,7 +71,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   const [canvasValue, setCanvasValue] = useState<CanvasContextValue>(canvasValueRef.current);
   const reconcilerRef = useRef<SceneReconciler | null>(null);
 
-  useEffect(() => attachShortcuts(store), [store]);
+  useEffect(() => attachShortcuts(store, props.shortcuts), [store, props.shortcuts]);
 
   useEffect(() => {
     if (!props.onChange) return;
@@ -63,6 +79,20 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
       if (state.document !== prev.document) props.onChange?.(state.document);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- store is stable, onChange read via closure is acceptable for Phase 1
+  }, [store]);
+
+  useEffect(() => {
+    if (!props.onSelectionChange) return;
+    return store.subscribe((state, prev) => {
+      // store.dispatch() always rebuilds `selectedNodeIds` as a fresh Set
+      // (see core/store.ts) even when it's unmodified — so reference
+      // inequality alone would fire on every document edit, not just real
+      // selection changes. Content comparison is required.
+      if (!setsEqual(state.selectedNodeIds, prev.selectedNodeIds)) {
+        props.onSelectionChange?.(Array.from(state.selectedNodeIds));
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- store is stable, onSelectionChange read via closure is acceptable for Phase 1
   }, [store]);
 
   useImperativeHandle(
@@ -95,6 +125,51 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
       },
       undo: () => store.getState().undo(),
       redo: () => store.getState().redo(),
+      addNode: (node, opts) =>
+        store.getState().dispatch({
+          type: 'AddNode',
+          pageId: opts?.pageId ?? store.getState().activePageId,
+          node,
+          parentId: opts?.parentId,
+          index: opts?.index,
+        }),
+      removeNode: (nodeId, opts) =>
+        store.getState().dispatch({
+          type: 'RemoveNode',
+          pageId: opts?.pageId ?? store.getState().activePageId,
+          nodeId,
+          parentId: opts?.parentId,
+        }),
+      updateNodeProps: (nodeId, patch, opts) =>
+        store.getState().dispatch({
+          type: 'UpdateProps',
+          pageId: opts?.pageId ?? store.getState().activePageId,
+          nodeId,
+          patch,
+        }),
+      updateNodeTransform: (nodeId, patch, opts) =>
+        store.getState().dispatch({
+          type: 'UpdateTransform',
+          pageId: opts?.pageId ?? store.getState().activePageId,
+          nodeId,
+          patch,
+        }),
+      reorderNode: (nodeId, to, opts) =>
+        store.getState().dispatch({
+          type: 'Reorder',
+          pageId: opts?.pageId ?? store.getState().activePageId,
+          nodeId,
+          to,
+          parentId: opts?.parentId,
+        }),
+      selectNode: (nodeIds) => replaceSelection(store, nodeIds),
+      groupSelection: () => groupSelection(store),
+      ungroupSelection: () => ungroupSelection(store),
+      deleteSelection: () => deleteSelection(store),
+      duplicateSelection: () => duplicateSelection(store),
+      copySelection: () => copySelection(store),
+      cutSelection: () => cutSelection(store),
+      pasteClipboard: () => pasteClipboard(store),
     }),
     [store],
   );
@@ -122,7 +197,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
       <EditorUIProvider devMenu={props.devMenu ?? null} onExport={props.onExport ?? null}>
         <CanvasProvider value={canvasValue}>
           <div
-            className={`grid h-screen overflow-hidden ${props.className ?? ''}`}
+            className={`grid h-full w-full overflow-hidden ${props.className ?? ''}`}
             style={{ gridTemplateColumns: '44px minmax(0, 1fr) 250px', background: 'var(--app-bg)' }}
           >
             <LeftSidebar />

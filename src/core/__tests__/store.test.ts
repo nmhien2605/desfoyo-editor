@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEditorStore } from '../store';
+import { createEditorStore, setsEqual } from '../store';
 import { computeSelectionBounds, applyGroupRotate } from '../../render/interactions/groupTransformMath';
 import type { Document, Node, Page, ShapeNode } from '../../schema';
 
@@ -217,5 +217,39 @@ describe('group 10 objects, rotate, ungroup (DoD)', () => {
     store.getState().undo();
 
     expect(store.getState().document).toEqual(originalSnapshot);
+  });
+});
+
+describe('setsEqual', () => {
+  it('is true for sets with the same members regardless of order/reference', () => {
+    expect(setsEqual(new Set(['a', 'b']), new Set(['b', 'a']))).toBe(true);
+  });
+
+  it('is false for sets with different members', () => {
+    expect(setsEqual(new Set(['a']), new Set(['a', 'b']))).toBe(false);
+  });
+});
+
+// The mechanism Editor.tsx's onSelectionChange prop relies on: dispatch()
+// always rebuilds selectedNodeIds as a *new* Set even when unchanged (see
+// dispatch() above), so a subscriber must compare contents (setsEqual), not
+// reference, to fire only on real selection changes.
+describe('selection change notifications', () => {
+  it('notifies subscribers exactly when the selection contents change', () => {
+    const store = createEditorStore(makeDocument([shapeNode('a'), shapeNode('b')]));
+    const seen: string[][] = [];
+    const unsubscribe = store.subscribe((state, prev) => {
+      if (!setsEqual(state.selectedNodeIds, prev.selectedNodeIds)) seen.push(Array.from(state.selectedNodeIds));
+    });
+
+    store.getState().select('a');
+    store.getState().select('b', 'toggle');
+    store.getState().select(null);
+    // A document-only change (no selection change) shouldn't add another entry,
+    // even though dispatch() internally rebuilds the Set.
+    store.getState().dispatch({ type: 'UpdateTransform', pageId: PAGE_ID, nodeId: 'a', patch: { x: 5 } });
+
+    unsubscribe();
+    expect(seen).toEqual([['a'], ['a', 'b'], []]);
   });
 });

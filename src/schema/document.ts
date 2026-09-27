@@ -11,6 +11,11 @@ import { PageSchema } from './page';
 export const AssetRefSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('image'), dataUri: z.string() }),
   z.object({ type: z.literal('svg'), dataUri: z.string() }),
+  // Remote-hosted alternative to embedding a data URI — for large raster
+  // images where base64-in-JSON would bloat the stored document. Only
+  // covers 'image' for now; 'svg' stays data-URI-only until a real need
+  // for remote SVG assets shows up (SVGs are small enough already).
+  z.object({ type: z.literal('image-url'), src: z.string().url() }),
 ]);
 export type AssetRef = z.infer<typeof AssetRefSchema>;
 

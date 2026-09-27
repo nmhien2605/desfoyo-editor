@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createEditorStore } from '../store';
-import { alignSelection, distributeSelection } from '../actions';
+import { alignSelection, distributeSelection, replaceSelection } from '../actions';
 import type { Document, Node, ShapeNode } from '../../schema';
 
 function shapeNode(id: string, x: number, y: number, width = 20, height = 20): ShapeNode {
@@ -99,5 +99,21 @@ describe('distributeSelection', () => {
     store.getState().select('b', 'toggle');
     distributeSelection(store, 'horizontal');
     expect(store.getState().past.length).toBe(0);
+  });
+});
+
+describe('replaceSelection', () => {
+  it('selects exactly the given ids, replacing any prior selection', () => {
+    const store = createEditorStore(makeDocument([shapeNode('a', 0, 0), shapeNode('b', 50, 0), shapeNode('c', 100, 0)]));
+    store.getState().select('c');
+    replaceSelection(store, ['a', 'b']);
+    expect(store.getState().selectedNodeIds).toEqual(new Set(['a', 'b']));
+  });
+
+  it('clears the selection when given an empty array', () => {
+    const store = createEditorStore(makeDocument([shapeNode('a', 0, 0)]));
+    store.getState().select('a');
+    replaceSelection(store, []);
+    expect(store.getState().selectedNodeIds.size).toBe(0);
   });
 });

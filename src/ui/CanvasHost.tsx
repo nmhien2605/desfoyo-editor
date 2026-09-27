@@ -4,14 +4,10 @@ import { SceneReconciler } from '../render/SceneReconciler';
 import { attachDrag } from '../render/interactions/drag';
 import { attachViewportControls, attachPan } from '../render/interactions/viewportControls';
 import { attachMarquee } from '../render/interactions/marquee';
-import { fillToColor } from '../render/fillToColor';
+import { backgroundColor } from '../render/backgroundColor';
 import { useEditorStoreApi } from './EditorContext';
 import { activePage, type GridSettings } from '../core/store';
-import type { Document, Page, PageBackground, Size } from '../schema';
-
-function backgroundColor(bg: PageBackground) {
-  return bg.type === 'color' ? bg.value : fillToColor(bg.value);
-}
+import type { Document, Page, Size } from '../schema';
 
 function drawGrid(graphics: Graphics, pageSize: Size, grid: GridSettings): void {
   graphics.clear();

@@ -12,3 +12,4 @@ export {
   onFontLoaded,
 } from './text/fontService';
 export type { LoadedFont } from './text/fontService';
+export { renderPageToPng, renderPageToSvg } from './services/headlessRender';

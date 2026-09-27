@@ -1,6 +1,13 @@
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
 import { defaultImageNode, defaultSvgNode, loadImageSize, svgNaturalSize } from './toolActions';
 import { decodeSvgText } from '../render/renderers/svgRenderer';
+import type { AssetRef } from '../schema';
+
+type EmbeddedAssetRef = Extract<AssetRef, { dataUri: string }>;
+
+function isEmbeddedAsset(asset: AssetRef): asset is EmbeddedAssetRef {
+  return asset.type === 'image' || asset.type === 'svg';
+}
 
 // Drag payload key shared with Editor.tsx's canvas drop target.
 export const ASSET_DRAG_TYPE = 'text/desfoyo-asset-id';
@@ -19,7 +26,7 @@ export function AssetPanel({ onClose }: { onClose?: () => void }) {
   const store = useEditorStoreApi();
   const activePageId = useEditorStore((s) => s.activePageId);
   const assets = useEditorStore((s) => s.document.assets);
-  const visibleAssets = Object.entries(assets).filter(([, asset]) => asset.type === 'image' || asset.type === 'svg');
+  const visibleAssets = Object.entries(assets).filter((entry): entry is [string, EmbeddedAssetRef] => isEmbeddedAsset(entry[1]));
 
   const addAtDefault = async (assetId: string, dataUri: string, type: 'image' | 'svg') => {
     const node =

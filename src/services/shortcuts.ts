@@ -59,10 +59,17 @@ function normalizeCombo(event: KeyboardEvent): string {
 }
 
 // Decoupled from any component — attached once from Editor.tsx's effect.
-export function attachShortcuts(store: EditorStoreApi): () => void {
+// `enabled`: undefined keeps every built-in shortcut (default), false detaches
+// none at all, string[] whitelists which keys stay active — lets a host app
+// that binds its own keyboard shortcuts avoid colliding with these.
+export function attachShortcuts(store: EditorStoreApi, enabled?: false | string[]): () => void {
+  if (enabled === false) return () => {};
+  const allowed = enabled ? new Set(enabled) : null;
   const handler = (event: KeyboardEvent) => {
     if (isTypingInField(event.target)) return;
-    const handlerFn = SHORTCUTS[normalizeCombo(event)];
+    const combo = normalizeCombo(event);
+    if (allowed && !allowed.has(combo)) return;
+    const handlerFn = SHORTCUTS[combo];
     if (handlerFn) {
       event.preventDefault();
       handlerFn(store);

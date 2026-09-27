@@ -391,3 +391,14 @@ export type EditorStoreApi = ReturnType<typeof createEditorStore>;
 export function activePage(state: Pick<EditorStore, 'document' | 'activePageId'>): Page | undefined {
   return state.document.pages.find((p) => p.id === state.activePageId);
 }
+
+// dispatch() always rebuilds selectedNodeIds as a fresh Set (see dispatch
+// above), even when it isn't touched by the command — so subscribers that
+// care about *actual* selection changes (Editor.tsx's onSelectionChange)
+// can't rely on reference inequality and need this instead.
+export function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
+  if (a === b) return true;
+  if (a.size !== b.size) return false;
+  for (const item of a) if (!b.has(item)) return false;
+  return true;
+}
