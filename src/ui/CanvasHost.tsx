@@ -80,7 +80,6 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
         return;
       }
 
-      app.renderer.background.alpha = backgroundAlpha(page.background);
       hostRef.current?.appendChild(app.canvas);
       app.stage.addChild(pageContainer);
       app.stage.eventMode = 'static';
@@ -106,23 +105,15 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
 
       const gridGraphics = new Graphics();
       gridGraphics.eventMode = 'none';
-      pageContainer.addChild(gridGraphics);
-      drawGrid(gridGraphics, page.size, store.getState().grid);
       unsubscribeGrid = store.subscribe((state, prevState) => {
-        if (state.grid !== prevState.grid) drawGrid(gridGraphics, page.size, state.grid);
+        if (state.grid !== prevState.grid) {
+          drawGrid(gridGraphics, (activePage(state) ?? state.document.pages[0]).size, state.grid);
+        }
       });
 
-      reconciler = new SceneReconciler(pageContainer, (obj, node) => {
-        attachDrag(obj, node, store, app.stage, pageContainer);
-      });
-      reconciler.mount(page, state.document);
-      if (reconcilerRef) reconcilerRef.current = reconciler;
-
-      // Shared by both "load a whole new document" and "switch active
-      // page" below — both need the scene rebuilt against a different
-      // Page, and (unlike a same-size document reload) a page switch can
-      // also change canvas size/background, which the renderer doesn't
-      // pick up on its own.
+      // Shared by the initial mount, "load a whole new document" and "switch
+      // active page" below — all need the scene built against a Page that may
+      // differ in size/background from what the renderer currently has.
       const remountPage = (newPage: Page, doc: Document) => {
         reconciler?.destroy();
         pageContainer.removeChildren();
@@ -140,6 +131,11 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
         reconciler.mount(newPage, doc);
         if (reconcilerRef) reconcilerRef.current = reconciler;
       };
+
+      // Re-read after the await: the host may have called loadDocument/addNode
+      // while Pixi was initialising, and the pre-init snapshot would drop it.
+      const current = store.getState();
+      remountPage(activePage(current) ?? current.document.pages[0], current.document);
 
       unsubscribe = store.subscribe((state, prevState) => {
         if (state.document !== prevState.document && state.lastCommand === null) {

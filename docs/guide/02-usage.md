@@ -105,7 +105,7 @@ function App() {
 | --- | --- |
 | `getDocument(): Document` | Lấy snapshot document hiện tại từ store (đồng bộ, không đợi `onChange`). |
 | `loadDocument(doc: Document): void` | Thay toàn bộ document, reset selection + undo/redo history. Dùng khi load 1 design khác vào editor đang mở. |
-| `export(format: 'png' \| 'svg', scale?: number): Promise<Blob>` | Export page đang active. `scale` chỉ áp dụng cho `'png'` (mặc định 1). Throw nếu gọi trước khi editor mount xong canvas. |
+| `export(format: 'png' \| 'svg', scale?: number): Promise<Blob>` | Export page đang active. `scale` chỉ áp dụng cho `'png'` (mặc định 1). PNG luôn có kích thước đúng `page.size × scale` (khung cả page, không phụ thuộc nội dung hay zoom đang xem). Tự chờ các ảnh/SVG còn đang load xong mới xuất — gọi ngay sau `loadDocument`/`addNode` vẫn ra ảnh đầy đủ. Throw nếu gọi trước khi editor mount xong canvas. |
 | `undo(): void` / `redo(): void` | Điều khiển undo/redo history. |
 | `canUndo(): boolean` / `canRedo(): boolean` | Còn bước undo/redo không — dùng để enable/disable nút. Muốn tự cập nhật theo sự kiện thì dùng prop `onHistoryChange`. |
 | `addAsset(assetId: string, asset: AssetRef): void` | Thêm/ghi đè 1 asset (`image`, `svg`, `image-url`), validate bằng `AssetRefSchema` (sai shape sẽ throw). **Không** tạo history entry — undo `addNode` dùng asset đó chỉ xoá node, asset vẫn giữ để redo được. Xem mục 5. |
@@ -158,6 +158,7 @@ Khi app đã có toolbar/modal riêng và chỉ cần vùng vẽ (vd đặt canv
 ```
 
 - Ở chế độ này container gốc là `inline-block`, kích thước **bằng đúng canvas** — host tự canh vị trí/căn giữa. Không đặt `transform: scale()` lên cha của editor để phóng to/thu nhỏ (hit-test sẽ lệch); dùng `viewScale`.
+- **Scale text**: text có 4 handle góc, kéo sẽ scale đều qua `transform.scaleX/scaleY` (giống fabric) — `font.size` và `node.size` giữ nguyên, hiệu ứng (shadow, outline…) scale theo. 1 lần kéo = 1 bước undo.
 - **Nền trong suốt**: đặt `page.background = { type: 'color', value: 'transparent' }` — canvas sẽ trong suốt, thấy nội dung phía sau. PNG export (`ref.export('png')`, `renderPageToPng`) vốn không bao giờ chứa màu nền page (kể cả nền đục).
 - **Đổi giao diện khung chọn**: override các biến CSS trên `.df-editor` trong CSS của host:
 
@@ -220,9 +221,9 @@ editorRef.current?.addAsset(assetId, { type: 'image-url', src: 'https://cdn.exam
 editorRef.current?.addNode({ id: nodeId, type: 'image', assetId, /* transform, size... */ });
 ```
 
-Với document chưa mount (lưu DB, `loadDocument`, headless render) thì cứ ghi thẳng vào `document.assets`. URL không cần có đuôi file (`.png`/`.jpg`) — editor luôn load asset ảnh như texture.
+Với document chưa mount (lưu DB, `loadDocument`, headless render) thì cứ ghi thẳng vào `document.assets`. URL không cần có đuôi file (`.png`/`.jpg`). URL `.svg` (hoặc `data:image/svg+xml`) cũng dùng được: editor rasterize SVG ở 2× kích thước gốc để vẫn nét khi phóng to.
 
-Node ảnh (`ImageNode.assetId`) trỏ tới asset này y hệt như với `image` — không cần đổi gì ở phía node. Lưu ý: ảnh remote cross-origin cần server ảnh set CORS header đúng, nếu không `export()`/`renderPageToPng` (mục 6) sẽ lỗi "tainted canvas" khi rasterize — đây là việc phía hạ tầng ảnh, không phải của editor. Hiện chỉ `image` có biến thể URL; `svg` vẫn chỉ nhúng base64 (SVG thường đã nhỏ, chưa cần).
+Node ảnh (`ImageNode.assetId`) trỏ tới asset này y hệt như với `image` — không cần đổi gì ở phía node. Lưu ý: ảnh remote cross-origin cần server ảnh set CORS header đúng (editor load với `crossOrigin="anonymous"`), nếu không ảnh sẽ không hiển thị — đây là việc phía hạ tầng ảnh, không phải của editor. Hiện chỉ `image` có biến thể URL; `svg` vẫn chỉ nhúng base64 (SVG thường đã nhỏ, chưa cần).
 
 ## 6. Render ảnh không cần mount `<Editor>` (headless)
 

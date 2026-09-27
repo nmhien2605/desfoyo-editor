@@ -1,12 +1,17 @@
-import type { Application, Container } from 'pixi.js';
-import type { Document, Page } from '../schema';
+import { Rectangle, type Application, type Container } from 'pixi.js';
+import type { Document, Page, Size } from '../schema';
+import { loadsSettled } from '../render/pendingLoads';
 import type { SceneReconciler } from '../render/SceneReconciler';
 import { walkTree } from '../core/tree';
 import { serializeNode, type RasterizedMap } from './svgSerializer';
 
 // Extracts the page container specifically (not app.stage), so any future
-// selection/UI chrome doesn't leak into the exported image.
-export function exportPng(app: Application, pageContainer: Container, scale = 1): Promise<Blob> {
+// selection/UI chrome doesn't leak into the exported image. `frame` pins the
+// output to the page rect (pageContainer-local units) — without it Pixi uses
+// the content bounds, so a lone node in a corner exported node-sized.
+// Waits for in-flight texture/SVG loads first, else a fresh document exports blank.
+export async function exportPng(app: Application, pageContainer: Container, pageSize: Size, scale = 1): Promise<Blob> {
+  await loadsSettled();
   // resolution mac dinh 1, khong doc devicePixelRatio — mac dinh extract lay
   // resolution cua renderer, ma renderer giờ chạy theo devicePixelRatio
   // (CanvasHost.tsx, để chữ trên màn retina không mờ). Không ghim thì file
@@ -16,6 +21,7 @@ export function exportPng(app: Application, pageContainer: Container, scale = 1)
   // màn hình đang mở — vẫn tất định.
   const canvas = app.renderer.extract.canvas({
     target: pageContainer,
+    frame: new Rectangle(0, 0, pageSize.width, pageSize.height),
     resolution: scale,
   }) as HTMLCanvasElement;
   return new Promise((resolve, reject) => {
@@ -57,6 +63,7 @@ async function rasterizeTextAndSvgNodes(app: Application, page: Page, reconciler
 // callers decide how to package it — Editor.tsx wraps it as a
 // `Blob([svg], {type:'image/svg+xml'})` to match exportPng's return shape.
 export async function exportSvg(app: Application, page: Page, doc: Document, reconciler: SceneReconciler): Promise<string> {
+  await loadsSettled();
   const rasterized = await rasterizeTextAndSvgNodes(app, page, reconciler);
   const defs: string[] = [];
   const body = page.children.map((node) => serializeNode(node, doc, defs, rasterized)).join('');

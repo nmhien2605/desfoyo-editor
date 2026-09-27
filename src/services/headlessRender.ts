@@ -42,7 +42,7 @@ async function withRenderedPage<T>(page: Page, doc: Document, render: (app: Appl
 }
 
 export function renderPageToPng(page: Page, doc: Document, scale = 1): Promise<Blob> {
-  return withRenderedPage(page, doc, (app, pageContainer) => exportPng(app, pageContainer, scale));
+  return withRenderedPage(page, doc, (app, pageContainer) => exportPng(app, pageContainer, page.size, scale));
 }
 
 export function renderPageToSvg(page: Page, doc: Document): Promise<string> {

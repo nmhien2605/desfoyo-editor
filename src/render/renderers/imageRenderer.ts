@@ -1,4 +1,4 @@
-import { Assets, BlurFilter, Container, type Filter, Graphics, Sprite, Texture } from 'pixi.js';
+import { BlurFilter, Container, type Filter, Graphics, Sprite, Texture } from 'pixi.js';
 import { AdjustmentFilter } from 'pixi-filters';
 import type { Document, ImageNode, Node } from '../../schema';
 import { applyTransform } from '../applyTransform';
@@ -6,6 +6,7 @@ import { buildFilters } from '../../effects/buildFilters';
 import { resolveAsset } from '../../services/assetResolver';
 import { findNodeInPage } from '../../core/tree';
 import { drawPath } from './shapeRenderer';
+import { trackLoad } from '../pendingLoads';
 
 // The display object is a wrapper Container (not a bare Sprite): the wrapper
 // gets the ordinary applyTransform() treatment (position/rotation/pivot in
@@ -26,24 +27,63 @@ const loadedAssetId = new WeakMap<Sprite, string>();
 // applyMask() can remove/destroy the previous one before rebuilding.
 const maskChild = new WeakMap<Container, Container>();
 
+const SVG_SRC = /^data:image\/svg\+xml|\.svg([?#]|$)/i;
+const SVG_RASTER_SCALE = 2;
+const SVG_MAX_SIDE = 4096;
+// ponytail: never evicts (same as Pixi's own Assets cache); add LRU if hosts
+// churn through many large images.
+const textureCache = new Map<string, Promise<Texture>>();
+
+// Decodes through an <img> rather than Pixi Assets: Assets picks a parser
+// from the URL extension (extension-less CDN/blob: URLs fail) and its
+// texture parser uses createImageBitmap, which rejects SVG. SVG is drawn to a
+// canvas at 2× its natural size so it stays sharp when the node is scaled up.
+async function decodeImage(src: string): Promise<Texture> {
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.src = src;
+  await img.decode();
+  if (!SVG_SRC.test(src)) return Texture.from(img);
+  // An SVG without width/height has no natural size in some browsers.
+  const w = img.naturalWidth || 512;
+  const h = img.naturalHeight || 512;
+  const k = Math.min(SVG_RASTER_SCALE, SVG_MAX_SIDE / Math.max(w, h));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(w * k);
+  canvas.height = Math.round(h * k);
+  canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return Texture.from(canvas);
+}
+
+function loadImage(src: string): Promise<Texture> {
+  let p = textureCache.get(src);
+  if (!p) {
+    p = decodeImage(src);
+    textureCache.set(src, p);
+    p.catch(() => textureCache.delete(src)); // allow a retry
+  }
+  return p;
+}
+
 function loadTexture(sprite: Sprite, node: ImageNode, doc: Document): void {
   loadedAssetId.set(sprite, node.assetId);
-  const dataUri = resolveAsset(node.assetId, doc);
-  // Force the texture parser: Pixi picks a parser from the URL's extension,
-  // so extension-less image-url assets (CDN/resize URLs, blob:) otherwise fail
-  // with "don't know how to parse it". Pixi < 8.x without `parser` ignores it.
-  Assets.load<Texture>({ src: dataUri, parser: 'texture' })
-    .then((texture: Texture) => {
-      if (sprite.destroyed) return;
-      sprite.texture = texture;
-      applyCrop(sprite, node);
-      applySizeAndCrop(sprite, node);
-    })
-    .catch((err: unknown) => {
-      // A broken/undecodable asset shouldn't crash the editor — leave the
-      // sprite showing Texture.EMPTY (an empty placeholder).
-      console.error(`Failed to load image asset ${node.assetId}:`, err);
-    });
+  const src = resolveAsset(node.assetId, doc);
+  trackLoad(
+    loadImage(src)
+      .then((texture: Texture) => {
+        if (sprite.destroyed) return;
+        // Own Texture per sprite over the shared source: applyCrop mutates
+        // texture.frame, which must not leak to other nodes using this asset.
+        sprite.texture = new Texture({ source: texture.source });
+        applyCrop(sprite, node);
+        applySizeAndCrop(sprite, node);
+      })
+      .catch((err: unknown) => {
+        // A broken/undecodable asset shouldn't crash the editor — leave the
+        // sprite showing Texture.EMPTY (an empty placeholder).
+        console.error(`Failed to load image asset ${node.assetId}:`, err);
+      }),
+  );
 }
 
 // node.crop is normalized 0..1 fractions of the source image's own raw

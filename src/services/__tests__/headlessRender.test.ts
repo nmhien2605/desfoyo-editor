@@ -74,7 +74,7 @@ describe('renderPageToPng', () => {
 
     expect(initMock).toHaveBeenCalledWith(expect.objectContaining({ width: 200, height: 100, background: '#ffffff' }));
     expect(mountMock).toHaveBeenCalledWith(page, doc);
-    expect(exportPngMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), 2);
+    expect(exportPngMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), page.size, 2);
     expect(destroyMock).toHaveBeenCalledWith(true);
     expect(reconcilerDestroyMock).toHaveBeenCalled();
     expect(blob).toBeInstanceOf(Blob);

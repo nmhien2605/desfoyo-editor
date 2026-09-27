@@ -92,3 +92,46 @@ export function computeResize(
     },
   };
 }
+
+export type CornerHandle = 'nw' | 'ne' | 'se' | 'sw';
+const OPPOSITE: Record<CornerHandle, CornerHandle> = { nw: 'se', ne: 'sw', se: 'nw', sw: 'ne' };
+const MIN_SCALE = 0.01;
+
+// Proportional corner scaling for text (L14): writes transform.scaleX/Y (like
+// fabric) instead of node.size, which for text is the measured layout box.
+// `box` is the node's selection box in local unscaled units (the warped
+// bounds for text); the opposite corner of that box stays fixed in world
+// space. The pointer is projected onto the box diagonal, so the existing
+// scaleX:scaleY ratio is kept.
+export function computeScaleResize(
+  node: Node,
+  handle: CornerHandle,
+  worldDelta: { x: number; y: number },
+  box: { x: number; y: number; width: number; height: number },
+): { scaleX: number; scaleY: number; x: number; y: number } {
+  const { transform, size } = node;
+  const { scaleX: sx, scaleY: sy, rotation } = transform;
+  const pivot = { x: (transform.originX ?? 0) * size.width, y: (transform.originY ?? 0) * size.height };
+  const corner = (h: CornerHandle) => ({
+    x: box.x + (h.includes('e') ? box.width : 0),
+    y: box.y + (h.includes('s') ? box.height : 0),
+  });
+  const anchor = corner(OPPOSITE[handle]);
+  const dragged = corner(handle);
+
+  // Diagonal anchor→dragged and anchor→pointer, both in scaled, unrotated space.
+  const d = { x: (dragged.x - anchor.x) * sx, y: (dragged.y - anchor.y) * sy };
+  const local = rotateVector(worldDelta, -rotation);
+  const v = { x: d.x + local.x, y: d.y + local.y };
+  const minF = MIN_SCALE / Math.min(Math.abs(sx), Math.abs(sy));
+  const f = Math.max(minF, (v.x * d.x + v.y * d.y) / (d.x * d.x + d.y * d.y));
+
+  const anchorOffsetOld = rotateVector({ x: (anchor.x - pivot.x) * sx, y: (anchor.y - pivot.y) * sy }, rotation);
+  const anchorOffsetNew = rotateVector({ x: (anchor.x - pivot.x) * sx * f, y: (anchor.y - pivot.y) * sy * f }, rotation);
+  return {
+    scaleX: sx * f,
+    scaleY: sy * f,
+    x: transform.x + anchorOffsetOld.x - anchorOffsetNew.x,
+    y: transform.y + anchorOffsetOld.y - anchorOffsetNew.y,
+  };
+}

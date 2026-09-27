@@ -3,7 +3,13 @@ import { useShallow } from 'zustand/react/shallow';
 import { useEditorStore, useEditorStoreApi, useCanvasContext } from './EditorContext';
 import { useEditorUI } from './EditorUIContext';
 import { createViewport, type Point, type Viewport } from '../render/viewport';
-import { rotateVector, computeResize, type ResizeHandle } from '../render/interactions/resizeMath';
+import {
+  rotateVector,
+  computeResize,
+  computeScaleResize,
+  type CornerHandle,
+  type ResizeHandle,
+} from '../render/interactions/resizeMath';
 import { angleBetween, computeRotation } from '../render/interactions/rotate';
 import {
   computeSelectionBounds,
@@ -22,6 +28,9 @@ import { WarpHandlesOverlay } from './WarpHandlesOverlay';
 import { CircleHandlesOverlay } from './CircleHandlesOverlay';
 
 const HANDLES: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+// Text scales proportionally from corners only (side handles would mean
+// re-wrapping, which text layout doesn't do).
+const TEXT_HANDLES: CornerHandle[] = ['nw', 'ne', 'se', 'sw'];
 
 function localCorner(handle: ResizeHandle, width: number, height: number): Point {
   const x = handle.includes('e') ? width : handle.includes('w') ? 0 : width / 2;
@@ -157,13 +166,16 @@ function SingleSelectionOverlay({
   const isEditingText = node.type === 'text' && editingNodeId === node.id;
   const originX = node.transform.originX ?? 0;
   const originY = node.transform.originY ?? 0;
+  const { scaleX, scaleY } = node.transform;
   const box = selectionBox(node);
   // Un-rotated top-left corner in world space; CSS `transform: rotate()`
   // with transformOrigin does the visual rotation, so this only needs the
-  // camera's zoom/pan applied, not the node's own rotation.
+  // node's scale and the camera's zoom/pan applied, not its rotation.
+  // ponytail: negative scale (flip) isn't handled — the box would get a
+  // negative width; mirror left/top when flip support lands.
   const topLeftScreen = viewport.toScreen({
-    x: node.transform.x - originX * node.size.width + box.x,
-    y: node.transform.y - originY * node.size.height + box.y,
+    x: node.transform.x + (box.x - originX * node.size.width) * scaleX,
+    y: node.transform.y + (box.y - originY * node.size.height) * scaleY,
   });
   const rotationDeg = (node.transform.rotation * 180) / Math.PI;
 
@@ -174,6 +186,15 @@ function SingleSelectionOverlay({
     const onMove = (moveEvent: PointerEvent) => {
       const currentWorld = viewport.toWorld({ x: moveEvent.clientX, y: moveEvent.clientY });
       const delta = { x: currentWorld.x - startWorld.x, y: currentWorld.y - startWorld.y };
+      if (node.type === 'text') {
+        store.getState().dispatch({
+          type: 'UpdateTransform',
+          pageId: activePageId,
+          nodeId: node.id,
+          patch: computeScaleResize(node, handle as CornerHandle, delta, box),
+        });
+        return;
+      }
       const result = computeResize(node, handle, delta);
       store.getState().dispatch({
         type: 'UpdateProps',
@@ -210,7 +231,8 @@ function SingleSelectionOverlay({
     startPointerGesture(store, `rotate:${node.id}`, onMove);
   };
 
-  const rotateHandleLocal = { x: node.size.width / 2, y: -24 / camera.zoom };
+  // 24 screen px above the box: worldPoint applies scaleY, so divide it back out.
+  const rotateHandleLocal = { x: node.size.width / 2, y: -24 / (camera.zoom * scaleY) };
   const rotateHandlePos = viewport.toScreen(worldPoint(node, rotateHandleLocal));
 
   return (
@@ -256,8 +278,8 @@ function SingleSelectionOverlay({
         style={{
           left: topLeftScreen.x,
           top: topLeftScreen.y,
-          width: box.width * camera.zoom,
-          height: box.height * camera.zoom,
+          width: box.width * scaleX * camera.zoom,
+          height: box.height * scaleY * camera.zoom,
           // Pixi rotates around the pivot in *unwarped* local space
           // (originX/Y * node.size — see applyTransform.ts), but `box` is
           // the warped bbox and may be offset/sized differently from
@@ -266,18 +288,19 @@ function SingleSelectionOverlay({
           // a % of the div's own box — % of box.width/height would only
           // coincide with the real pivot when box === node.size (i.e.
           // non-text nodes, where this reduces back to originX*100%).
-          transformOrigin: `${(originX * node.size.width - box.x) * camera.zoom}px ${
-            (originY * node.size.height - box.y) * camera.zoom
+          transformOrigin: `${(originX * node.size.width - box.x) * scaleX * camera.zoom}px ${
+            (originY * node.size.height - box.y) * scaleY * camera.zoom
           }px`,
           transform: `rotate(${rotationDeg}deg)`,
         }}
       />
       {!isCropping &&
-        node.type !== 'text' &&
-        HANDLES.map((handle) => {
-          const pos = viewport.toScreen(
-            worldPoint(node, localCorner(handle, node.size.width, node.size.height)),
-          );
+        !isEditingText &&
+        (node.type === 'text' ? TEXT_HANDLES : HANDLES).map((handle) => {
+          // Text handles sit on the (warped) selection box, not node.size.
+          const isText = node.type === 'text';
+          const c = isText ? localCorner(handle, box.width, box.height) : localCorner(handle, node.size.width, node.size.height);
+          const pos = viewport.toScreen(worldPoint(node, isText ? { x: box.x + c.x, y: box.y + c.y } : c));
           return (
             <div
               key={handle}

@@ -2,6 +2,7 @@ import { Graphics } from 'pixi.js';
 import type { Document, Fill, SvgNode } from '../../schema';
 import { applyTransform } from '../applyTransform';
 import { resolveAsset } from '../../services/assetResolver';
+import { trackLoad } from '../pendingLoads';
 
 // asset.dataUri is an uploaded-file data URI (base64 or plain) holding raw
 // SVG markup — fetch() decodes either form back to text in one line, no
@@ -76,13 +77,15 @@ export const svgRenderer = {
     return obj;
   },
   update(obj: Graphics, node: SvgNode, doc: Document): void {
-    void decodeSvgText(resolveAsset(node.assetId, doc)).then((svgText) => {
-      if (obj.destroyed) return;
-      obj.clear();
-      obj.svg(applyOverrides(svgText, node.overrides));
-      applyTransform(obj, node);
-      applySizeAndOrigin(obj, node);
-    });
+    trackLoad(
+      decodeSvgText(resolveAsset(node.assetId, doc)).then((svgText) => {
+        if (obj.destroyed) return;
+        obj.clear();
+        obj.svg(applyOverrides(svgText, node.overrides));
+        applyTransform(obj, node);
+        applySizeAndOrigin(obj, node);
+      }),
+    );
     applyTransform(obj, node);
   },
 };
