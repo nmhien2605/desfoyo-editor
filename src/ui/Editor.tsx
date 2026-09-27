@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type DragEvent } from 'react';
 import type { Application, Container } from 'pixi.js';
-import { activePage, createEditorStore, setsEqual, type EditorStoreApi } from '../core/store';
-import { DocumentSchema, type Document, type Node, type Transform } from '../schema';
+import { activePage, createEditorStore, setsEqual, type EditorStoreApi, type HistoryAction } from '../core/store';
+import { AssetRefSchema, DocumentSchema, type AssetRef, type Document, type Node, type Transform } from '../schema';
 import { EditorStoreProvider, CanvasProvider, type CanvasContextValue } from './EditorContext';
 import { EditorUIProvider, type DevMenuConfig } from './EditorUIContext';
 import { CanvasHost } from './CanvasHost';
@@ -30,6 +30,10 @@ export interface EditorHandle {
   export(format: 'png' | 'svg', scale?: number): Promise<Blob>;
   undo(): void;
   redo(): void;
+  canUndo(): boolean;
+  canRedo(): boolean;
+  /** Adds or overwrites an asset. Not undoable (undoing the AddNode that uses it keeps the asset, so redo works). */
+  addAsset(assetId: string, asset: AssetRef): void;
   addNode(node: Node, opts?: { pageId?: string; parentId?: string | null; index?: number }): void;
   removeNode(nodeId: string, opts?: { pageId?: string; parentId?: string | null }): void;
   updateNodeProps(nodeId: string, patch: Partial<Node>, opts?: { pageId?: string }): void;
@@ -56,12 +60,30 @@ export interface EditorProps {
   initialSelectedNodeIds?: string[];
   /** undefined keeps every built-in keyboard shortcut, false disables them all, a string[] whitelists which stay active. */
   shortcuts?: false | string[];
+  /** Default true. false renders only the canvas + selection overlay (no sidebar, inspector, toolbars). */
+  chrome?: boolean;
+  /** When set, the canvas is page.size × viewScale CSS px and wheel zoom / pan / zoom shortcuts are disabled. Live-updatable. */
+  viewScale?: number;
+  /** Called on double-click of a selected node. When provided, the built-in behaviour (inline text edit, image crop) runs only if it returns true. */
+  onNodeDoubleClick?: (nodeId: string, nodeType: Node['type']) => boolean | void;
+  /** Fires after every history change: a new edit ('push'), undo, redo, or loadDocument ('reset'). */
+  onHistoryChange?: (history: HistoryState) => void;
+}
+
+export interface HistoryState {
+  canUndo: boolean;
+  canRedo: boolean;
+  pastLength: number;
+  reason: HistoryAction;
 }
 
 export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(props, ref) {
   const [store] = useState<EditorStoreApi>(() => {
     const parsed = DocumentSchema.parse(props.document);
     const api = createEditorStore(parsed);
+    // Seeded here, not only in the effect below: CanvasHost sizes its canvas
+    // in its own (earlier-running) mount effect.
+    if (props.viewScale != null) api.getState().setViewScale(props.viewScale);
     if (props.initialSelectedNodeIds?.length) {
       replaceSelection(api, props.initialSelectedNodeIds);
     }
@@ -71,29 +93,40 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   const [canvasValue, setCanvasValue] = useState<CanvasContextValue>(canvasValueRef.current);
   const reconcilerRef = useRef<SceneReconciler | null>(null);
 
+  // Callbacks are read from this ref at call time, so the host always gets its
+  // latest closure, including callbacks first passed on a later render.
+  const propsRef = useRef(props);
+  propsRef.current = props;
+
   useEffect(() => attachShortcuts(store, props.shortcuts), [store, props.shortcuts]);
 
   useEffect(() => {
-    if (!props.onChange) return;
-    return store.subscribe((state, prev) => {
-      if (state.document !== prev.document) props.onChange?.(state.document);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- store is stable, onChange read via closure is acceptable for Phase 1
-  }, [store]);
+    store.getState().setViewScale(props.viewScale ?? null);
+  }, [store, props.viewScale]);
 
-  useEffect(() => {
-    if (!props.onSelectionChange) return;
-    return store.subscribe((state, prev) => {
-      // store.dispatch() always rebuilds `selectedNodeIds` as a fresh Set
-      // (see core/store.ts) even when it's unmodified — so reference
-      // inequality alone would fire on every document edit, not just real
-      // selection changes. Content comparison is required.
-      if (!setsEqual(state.selectedNodeIds, prev.selectedNodeIds)) {
-        props.onSelectionChange?.(Array.from(state.selectedNodeIds));
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- store is stable, onSelectionChange read via closure is acceptable for Phase 1
-  }, [store]);
+  useEffect(
+    () =>
+      store.subscribe((state, prev) => {
+        const { onChange, onSelectionChange, onHistoryChange } = propsRef.current;
+        if (state.document !== prev.document) onChange?.(state.document);
+        // store.dispatch() always rebuilds `selectedNodeIds` as a fresh Set
+        // (see core/store.ts) even when it's unmodified — so reference
+        // inequality alone would fire on every document edit, not just real
+        // selection changes. Content comparison is required.
+        if (!setsEqual(state.selectedNodeIds, prev.selectedNodeIds)) {
+          onSelectionChange?.(Array.from(state.selectedNodeIds));
+        }
+        if ((state.past !== prev.past || state.future !== prev.future) && state.lastHistoryAction) {
+          onHistoryChange?.({
+            canUndo: state.past.length > 0,
+            canRedo: state.future.length > 0,
+            pastLength: state.past.length,
+            reason: state.lastHistoryAction,
+          });
+        }
+      }),
+    [store],
+  );
 
   useImperativeHandle(
     ref,
@@ -108,6 +141,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
           lastCommand: null,
           past: [],
           future: [],
+          lastHistoryAction: 'reset',
         });
       },
       export: async (format, scale = 1) => {
@@ -125,6 +159,9 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
       },
       undo: () => store.getState().undo(),
       redo: () => store.getState().redo(),
+      canUndo: () => store.getState().past.length > 0,
+      canRedo: () => store.getState().future.length > 0,
+      addAsset: (assetId, asset) => store.getState().addAssetRef(assetId, AssetRefSchema.parse(asset)),
       addNode: (node, opts) =>
         store.getState().dispatch({
           type: 'AddNode',
@@ -192,35 +229,46 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     store.getState().select(node.id);
   };
 
+  const chrome = props.chrome !== false;
+  const canvasArea = (
+    <div
+      className="relative select-none"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => void handleAssetDrop(e)}
+    >
+      <CanvasHost
+        reconcilerRef={reconcilerRef}
+        onReady={(app: Application, pageContainer: Container) => {
+          const value = { app, pageContainer, canvas: app.canvas as HTMLCanvasElement };
+          canvasValueRef.current = value;
+          setCanvasValue(value);
+        }}
+      />
+      <SelectionOverlay />
+      {chrome && <FloatingContextToolbar />}
+    </div>
+  );
+
   return (
     <EditorStoreProvider value={store}>
-      <EditorUIProvider devMenu={props.devMenu ?? null} onExport={props.onExport ?? null}>
+      <EditorUIProvider
+        devMenu={props.devMenu ?? null}
+        onExport={props.onExport ?? null}
+        onNodeDoubleClick={props.onNodeDoubleClick ?? null}
+      >
         <CanvasProvider value={canvasValue}>
-          <div
-            className={`grid h-full w-full overflow-hidden ${props.className ?? ''}`}
-            style={{ gridTemplateColumns: '44px minmax(0, 1fr) 250px', background: 'var(--app-bg)' }}
-          >
-            <LeftSidebar />
-            <Workspace>
-              <div
-                className="relative select-none"
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => void handleAssetDrop(e)}
-              >
-                <CanvasHost
-                  reconcilerRef={reconcilerRef}
-                  onReady={(app: Application, pageContainer: Container) => {
-                    const value = { app, pageContainer, canvas: app.canvas as HTMLCanvasElement };
-                    canvasValueRef.current = value;
-                    setCanvasValue(value);
-                  }}
-                />
-                <SelectionOverlay />
-                <FloatingContextToolbar />
-              </div>
-            </Workspace>
-            <InspectorPanel />
-          </div>
+          {chrome ? (
+            <div
+              className={`df-editor grid h-full w-full overflow-hidden ${props.className ?? ''}`}
+              style={{ gridTemplateColumns: '44px minmax(0, 1fr) 250px', background: 'var(--app-bg)' }}
+            >
+              <LeftSidebar />
+              <Workspace>{canvasArea}</Workspace>
+              <InspectorPanel />
+            </div>
+          ) : (
+            <div className={`df-editor relative inline-block align-top ${props.className ?? ''}`}>{canvasArea}</div>
+          )}
         </CanvasProvider>
       </EditorUIProvider>
     </EditorStoreProvider>

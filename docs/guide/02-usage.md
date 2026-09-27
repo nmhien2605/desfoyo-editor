@@ -15,6 +15,8 @@ import {
   getLoadedFont,
   registeredFamilies,
   onFontLoaded,
+  measureText, // đo size TextNode (xem mục 4)
+  type HistoryState, // payload của onHistoryChange
   // headless render (không cần mount <Editor>)
   renderPageToPng,
   renderPageToSvg,
@@ -24,7 +26,7 @@ import '@desfoyo/editor/styles.css';
 
 ## 1. Render component `Editor`
 
-`Editor` là **controlled component** — bạn giữ `document` (JSON thuần, validate bằng Zod) ở state của app, editor không tự lưu trữ gì ngoài React tree.
+`Editor` là **uncontrolled**: prop `document` chỉ được đọc **một lần lúc mount**, sau đó editor tự giữ document trong store nội bộ và báo thay đổi qua `onChange`. Đổi prop `document` sau khi mount **không có tác dụng** — muốn thay document dùng `ref.loadDocument()`, muốn thêm asset dùng `ref.addAsset()` (mục 2, 5).
 
 ```tsx
 import { useState } from 'react';
@@ -59,7 +61,8 @@ function App() {
 ```
 
 - `document` phải khớp `DocumentSchema` — component sẽ `parse()` bằng Zod lúc mount, document sai shape sẽ throw.
-- `onChange` bắn mỗi khi document trong store đổi (thêm/xoá node, sửa transform, undo/redo, v.v.) — dùng để lưu vào DB/localStorage.
+- `onChange` bắn mỗi khi document trong store đổi (thêm/xoá node, sửa transform, undo/redo, v.v.) — dùng để lưu vào DB/localStorage. Truyền `setDoc` như ví dụ là để **lưu**, không phải để điều khiển editor.
+- Mọi callback prop (`onChange`, `onSelectionChange`, `onHistoryChange`, `onNodeDoubleClick`) luôn gọi bản **mới nhất** của hàm ở lần render gần nhất — closure đọc React state của host không bị cũ, và callback truyền vào sau lần render đầu vẫn chạy.
 - `Editor` fill 100% theo container cha (`h-full w-full`) — **cần container cha có height xác định** (như `style={{ height: 600 }}` ở trên, hoặc `h-screen` nếu muốn full-screen). Không tự set kích thước cố định nữa.
 - `className` áp thêm vào container gốc của `Editor` (nối sau class mặc định) — dùng cho spacing/border/v.v., không bắt buộc để set kích thước.
 
@@ -104,6 +107,8 @@ function App() {
 | `loadDocument(doc: Document): void` | Thay toàn bộ document, reset selection + undo/redo history. Dùng khi load 1 design khác vào editor đang mở. |
 | `export(format: 'png' \| 'svg', scale?: number): Promise<Blob>` | Export page đang active. `scale` chỉ áp dụng cho `'png'` (mặc định 1). Throw nếu gọi trước khi editor mount xong canvas. |
 | `undo(): void` / `redo(): void` | Điều khiển undo/redo history. |
+| `canUndo(): boolean` / `canRedo(): boolean` | Còn bước undo/redo không — dùng để enable/disable nút. Muốn tự cập nhật theo sự kiện thì dùng prop `onHistoryChange`. |
+| `addAsset(assetId: string, asset: AssetRef): void` | Thêm/ghi đè 1 asset (`image`, `svg`, `image-url`), validate bằng `AssetRefSchema` (sai shape sẽ throw). **Không** tạo history entry — undo `addNode` dùng asset đó chỉ xoá node, asset vẫn giữ để redo được. Xem mục 5. |
 | `addNode(node: Node, opts?: { pageId?, parentId?, index? }): void` | Thêm node vào document. `node` phải khớp `NodeSchema` (build tay hoặc validate bằng `NodeSchema.parse`). `pageId` mặc định là page đang active. |
 | `removeNode(nodeId, opts?: { pageId?, parentId? }): void` | Xoá node theo id. |
 | `updateNodeProps(nodeId, patch: Partial<Node>, opts?: { pageId? }): void` | Patch field bất kỳ của node (fill, opacity, font...). |
@@ -129,6 +134,47 @@ Tất cả method add/update/remove/reorder ở trên đi qua cùng hệ thống
 | `shortcuts` | `false \| string[]` | | `undefined` (mặc định) giữ nguyên toàn bộ phím tắt tích hợp sẵn (`mod+z`, `mod+d`, `delete`, `mod+g`...). `false` tắt hết — dùng khi host tự bind phím riêng và gọi qua `EditorHandle`. `string[]` whitelist các key muốn giữ (vd `['mod+z', 'mod+shift+z']`), tắt phần còn lại — tránh đụng độ với shortcut app đã có. |
 | `onExport` | `(format: 'png' \| 'svg') => void` | | Callback khi user bấm nút export trong toolbar (không thay thế `ref.export`, chỉ là hook UI). |
 | `devMenu` | `DevMenuConfig` | | Chỉ dùng nội bộ để demo chuyển đổi giữa các sample document — bỏ qua trong app thật. |
+| `chrome` | `boolean` | | Mặc định `true` (UI đầy đủ: sidebar, inspector, toolbar). `false` = chỉ render canvas + khung chọn, không có gì khác — xem mục 3b. |
+| `viewScale` | `number` | | Zoom cố định do host quyết định: canvas có kích thước CSS = `page.size × viewScale`, tắt wheel-zoom, pan (Space/chuột giữa), phím tắt zoom và "Fit". Đổi giá trị lúc runtime sẽ resize canvas tại chỗ (không remount, giữ history). Không truyền = hành vi zoom/pan bình thường. |
+| `onNodeDoubleClick` | `(nodeId, nodeType) => boolean \| void` | | Gọi khi double-click node đang chọn. Khi có prop này, hành vi mặc định (sửa text inline, crop ảnh) **chỉ chạy nếu callback trả `true`** — dùng để mở modal sửa text của host. |
+| `onHistoryChange` | `(h: HistoryState) => void` | | Bắn sau mỗi thay đổi history: `{ canUndo, canRedo, pastLength, reason }`, `reason` là `'push'` (edit mới), `'undo'`, `'redo'` hoặc `'reset'` (`loadDocument`). Một lần kéo/resize/rotate = đúng 1 `'push'` lúc thả chuột. |
+
+## 3b. Nhúng chỉ canvas (host tự làm UI)
+
+Khi app đã có toolbar/modal riêng và chỉ cần vùng vẽ (vd đặt canvas lên ảnh mockup sản phẩm):
+
+```tsx
+<Editor
+  ref={editorRef}
+  document={doc}
+  chrome={false}          // không sidebar/inspector/toolbar
+  viewScale={scale}       // canvas = page.size × scale (px CSS), không zoom/pan
+  shortcuts={false}       // host tự bind phím, gọi qua ref
+  onChange={save}
+  onSelectionChange={setSelectedIds}
+  onHistoryChange={(h) => setHistory(h)}
+  onNodeDoubleClick={(id, type) => { if (type === 'text') openTextModal(id); }}
+/>
+```
+
+- Ở chế độ này container gốc là `inline-block`, kích thước **bằng đúng canvas** — host tự canh vị trí/căn giữa. Không đặt `transform: scale()` lên cha của editor để phóng to/thu nhỏ (hit-test sẽ lệch); dùng `viewScale`.
+- **Nền trong suốt**: đặt `page.background = { type: 'color', value: 'transparent' }` — canvas sẽ trong suốt, thấy nội dung phía sau. PNG export (`ref.export('png')`, `renderPageToPng`) vốn không bao giờ chứa màu nền page (kể cả nền đục).
+- **Đổi giao diện khung chọn**: override các biến CSS trên `.df-editor` trong CSS của host:
+
+```css
+.df-editor {
+  --df-sel-border-color: rgba(88, 177, 56, 1);
+  --df-sel-border-width: 1px;
+  --df-sel-border-style: dashed;
+  --df-handle-size: 8px;
+  --df-handle-radius: 0;
+  --df-handle-bg: rgba(88, 177, 56, 1);
+  --df-handle-border-color: rgba(88, 177, 56, 1);
+  --df-marquee-color: rgba(88, 177, 56, 1); /* khung kéo-chọn nhiều node */
+}
+```
+
+Handle của warp/circle text vẫn dùng màu cố định, chưa theo các biến này.
 
 ## 4. Custom font
 
@@ -149,6 +195,13 @@ Các helper khác:
 - `getLoadedFont(family): LoadedFont | null` — kiểm tra font đã load chưa.
 - `registeredFamilies(): string[]` — danh sách family đã đăng ký.
 - `onFontLoaded(cb): () => void` — subscribe sự kiện font load xong (trả về hàm unsubscribe).
+- `measureText(node: TextNode, font): { width, height }` — tính `size` đúng cho 1 `TextNode` (bắt buộc có trong schema). Dùng khi host tự tạo/sửa text (đổi nội dung, font, line height) để pivot/khung chọn khớp với text thật:
+
+```ts
+const loaded = await loadFont(node.font.family);
+if (loaded) node.size = measureText(node, loaded.font);
+editorRef.current?.addNode(node);
+```
 
 ## 5. Asset ảnh: nhúng base64 hoặc URL
 
@@ -160,14 +213,14 @@ Các helper khác:
 { type: 'image-url', src: string }      // URL ảnh remote — không nhúng vào document
 ```
 
-Dùng `image-url` cho ảnh lớn (in ấn, độ phân giải cao) để tránh document JSON phình to khi lưu DB. Set trực tiếp qua `document`/`onChange`, không có API riêng:
+Dùng `image-url` cho ảnh lớn (in ấn, độ phân giải cao) để tránh document JSON phình to khi lưu DB. Với editor đang mở, thêm asset qua `ref.addAsset()` rồi mới `addNode` (đổi prop `document` không có tác dụng sau khi mount — mục 1):
 
 ```ts
-setDoc((doc) => ({
-  ...doc,
-  assets: { ...doc.assets, [assetId]: { type: 'image-url', src: 'https://cdn.example.com/photo.png' } },
-}));
+editorRef.current?.addAsset(assetId, { type: 'image-url', src: 'https://cdn.example.com/photo.png' });
+editorRef.current?.addNode({ id: nodeId, type: 'image', assetId, /* transform, size... */ });
 ```
+
+Với document chưa mount (lưu DB, `loadDocument`, headless render) thì cứ ghi thẳng vào `document.assets`. URL không cần có đuôi file (`.png`/`.jpg`) — editor luôn load asset ảnh như texture.
 
 Node ảnh (`ImageNode.assetId`) trỏ tới asset này y hệt như với `image` — không cần đổi gì ở phía node. Lưu ý: ảnh remote cross-origin cần server ảnh set CORS header đúng, nếu không `export()`/`renderPageToPng` (mục 6) sẽ lỗi "tainted canvas" khi rasterize — đây là việc phía hạ tầng ảnh, không phải của editor. Hiện chỉ `image` có biến thể URL; `svg` vẫn chỉ nhúng base64 (SVG thường đã nhỏ, chưa cần).
 
@@ -191,5 +244,5 @@ const svgString = await renderPageToSvg(doc.pages[0], doc);
 - Package chỉ export ESM (`"type": "module"`) — không dùng được với `require()`/CommonJS.
 - `pixi.js`, `react`, `react-dom` là peer dependencies — project host tự cài, editor không bundle kèm để tránh duplicate React/WebGL context.
 - `Editor` fill theo container cha (không auto-grow theo content) — bọc trong 1 `div` có height xác định (mục 1).
-- Document là nguồn sự thật duy nhất — mọi thay đổi (kể cả qua `EditorHandle`) đều phản ánh lại qua `onChange`, không có state ẩn nào khác ngoài `document`/`onChange`.
+- Mọi thay đổi document (kể cả qua `EditorHandle`, kể cả `addAsset`) đều phản ánh lại qua `onChange`. Selection, history, zoom là state nội bộ — đọc qua `onSelectionChange`/`onHistoryChange`/`canUndo()`.
 - Chưa test việc mount **nhiều `<Editor>` cùng lúc trên 1 trang** (vd nhiều canvas cạnh nhau) — mỗi instance tự gắn `window` keydown listener riêng cho shortcuts; nếu cần dùng nhiều instance, cân nhắc set `shortcuts={false}` ở tất cả trừ 1 instance để tránh nhiều listener cùng phản ứng 1 phím.

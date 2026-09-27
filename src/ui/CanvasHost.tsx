@@ -4,7 +4,7 @@ import { SceneReconciler } from '../render/SceneReconciler';
 import { attachDrag } from '../render/interactions/drag';
 import { attachViewportControls, attachPan } from '../render/interactions/viewportControls';
 import { attachMarquee } from '../render/interactions/marquee';
-import { backgroundColor } from '../render/backgroundColor';
+import { backgroundAlpha, backgroundColor } from '../render/backgroundColor';
 import { useEditorStoreApi } from './EditorContext';
 import { activePage, type GridSettings } from '../core/store';
 import type { Document, Page, Size } from '../schema';
@@ -51,10 +51,21 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
       const state = store.getState();
       const page = activePage(state) ?? state.document.pages[0];
 
+      // Canvas CSS size = page size × host viewScale (1 when unset); the camera
+      // zoom (pinned to viewScale by the store) scales the content to match.
+      const scaledSize = (size: Size) => {
+        const s = store.getState().viewScale ?? 1;
+        return { width: size.width * s, height: size.height * s };
+      };
+      const initialSize = scaledSize(page.size);
+
       await app.init({
-        width: page.size.width,
-        height: page.size.height,
+        width: initialSize.width,
+        height: initialSize.height,
         background: backgroundColor(page.background),
+        // Always init transparent-capable, then set the real alpha per page —
+        // Pixi can't switch an opaque-initialised canvas to transparent later.
+        backgroundAlpha: 0,
         antialias: true,
         // Thiếu hai dòng này thì backing store chỉ bằng số CSS pixel: trên màn
         // retina (devicePixelRatio = 2) mọi thứ được vẽ ở nửa độ phân giải rồi
@@ -69,6 +80,7 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
         return;
       }
 
+      app.renderer.background.alpha = backgroundAlpha(page.background);
       hostRef.current?.appendChild(app.canvas);
       app.stage.addChild(pageContainer);
       app.stage.eventMode = 'static';
@@ -82,6 +94,11 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
       applyCamera();
       unsubscribeCamera = store.subscribe((state, prevState) => {
         if (state.camera !== prevState.camera) applyCamera();
+        if (state.viewScale !== prevState.viewScale) {
+          const current = activePage(state) ?? state.document.pages[0];
+          const { width, height } = scaledSize(current.size);
+          app.renderer.resize(width, height);
+        }
       });
       detachViewportControls = attachViewportControls(app.canvas as HTMLCanvasElement, store);
       detachPan = attachPan(app.canvas as HTMLCanvasElement, store);
@@ -109,10 +126,12 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
       const remountPage = (newPage: Page, doc: Document) => {
         reconciler?.destroy();
         pageContainer.removeChildren();
-        if (app.renderer.width !== newPage.size.width || app.renderer.height !== newPage.size.height) {
-          app.renderer.resize(newPage.size.width, newPage.size.height);
+        const size = scaledSize(newPage.size);
+        if (app.renderer.width !== size.width || app.renderer.height !== size.height) {
+          app.renderer.resize(size.width, size.height);
         }
         app.renderer.background.color = backgroundColor(newPage.background);
+        app.renderer.background.alpha = backgroundAlpha(newPage.background);
         pageContainer.addChild(gridGraphics);
         drawGrid(gridGraphics, newPage.size, store.getState().grid);
         reconciler = new SceneReconciler(pageContainer, (obj, node) => {

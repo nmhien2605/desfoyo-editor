@@ -1,7 +1,7 @@
 import { Application, Container } from 'pixi.js';
 import type { Document, Page } from '../schema';
 import { SceneReconciler } from '../render/SceneReconciler';
-import { backgroundColor } from '../render/backgroundColor';
+import { backgroundAlpha, backgroundColor } from '../render/backgroundColor';
 import { exportPng, exportSvg } from './exportService';
 
 // Renders a Page to an image without mounting <Editor> — for generating
@@ -26,6 +26,7 @@ async function withRenderedPage<T>(page: Page, doc: Document, render: (app: Appl
     width: page.size.width,
     height: page.size.height,
     background: backgroundColor(page.background),
+    backgroundAlpha: backgroundAlpha(page.background),
     antialias: true,
   });
   const pageContainer = new Container();

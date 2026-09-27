@@ -43,6 +43,8 @@ import '@desfoyo/editor/styles.css';
 
 Thiếu bước này thì `<Editor />` vẫn chạy nhưng UI sẽ vỡ layout / không có màu.
 
+File CSS này **không đụng tới phần còn lại của trang**: không có Tailwind preflight, không có rule `body`, mọi biến màu và reset đều nằm dưới class `.df-editor` (container gốc của `Editor`). Chỉ còn các biến nội bộ của Tailwind (`--tw-*`, `--color-*`, `--spacing`…) trên `:root` — giống hệt giá trị mặc định mà Tailwind của host cũng sinh ra, chỉ xung đột nếu host đã tuỳ biến theme Tailwind.
+
 ## 3. Verify
 
 ```bash

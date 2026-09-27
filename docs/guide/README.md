@@ -5,6 +5,6 @@ Tài liệu cho dev muốn cài `@desfoyo/editor` vào một project React khác
 | File                                             | Nội dung                                                |
 | ------------------------------------------------- | -------------------------------------------------------- |
 | [01-installation.md](./01-installation.md)         | Cài đặt package (private git repo), yêu cầu peer deps    |
-| [02-usage.md](./02-usage.md)                       | Render `<Editor />`, `EditorHandle` (add/update/select/group node...), `onSelectionChange`, tắt shortcuts, asset URL, headless render, custom font |
+| [02-usage.md](./02-usage.md)                       | Render `<Editor />`, `EditorHandle` (add/update/select/group node, `addAsset`, `canUndo`...), callbacks (`onSelectionChange`, `onHistoryChange`, `onNodeDoubleClick`), nhúng chỉ-canvas (`chrome={false}`, `viewScale`, nền trong suốt, đổi màu selection), tắt shortcuts, asset URL, headless render, custom font |
 
 Xem thêm: [../../guide.md](../../guide.md) — kế hoạch đóng gói/publish phía maintainer (không phải phía dev tiêu thụ package).

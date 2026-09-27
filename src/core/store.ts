@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { applyPatches, enablePatches, produceWithPatches, type Patch } from 'immer';
 import { isPageLevelCommand, type Command, type PageLevelCommand } from './commands';
 import { requireNodeInPage, findNodeInTree, deepCloneNode } from './tree';
-import type { Document, GroupNode, Node, Page, Transform } from '../schema';
+import type { AssetRef, Document, GroupNode, Node, Page, Transform } from '../schema';
 import { composeTransform, decomposeTransform } from '../render/applyTransform';
 import { computeSelectionBounds } from '../render/interactions/groupTransformMath';
 import type { Camera } from '../render/viewport';
@@ -35,15 +35,19 @@ export interface EditorStore {
   document: Document;
   lastCommand: Command | null;
   dispatch: (cmd: Command) => void;
-  addAsset: (assetId: string, dataUri: string) => void;
-  // Non-undoable like addAsset — Phase 4 Pass E's SVG upload flow.
-  addSvgAsset: (assetId: string, dataUri: string) => void;
+  // Non-undoable: undoing the AddNode that uses it leaves a harmless orphan
+  // asset, which is exactly what lets redo bring the node back.
+  addAssetRef: (assetId: string, asset: AssetRef) => void;
 
   // History — patch-based via Immer, not command apply/invert (the store
   // already runs every mutation through Immer, so this reuses that instead
   // of retrofitting inverses onto every Command variant).
   past: HistoryEntry[];
   future: HistoryEntry[];
+  // Why past/future last changed — set in the same set() that changes them,
+  // so subscribers (Editor.tsx onHistoryChange) never have to infer it.
+  // 'reset' is stamped by EditorHandle.loadDocument.
+  lastHistoryAction: HistoryAction | null;
   undo: () => void;
   redo: () => void;
 
@@ -61,6 +65,10 @@ export interface EditorStore {
   activePageId: string;
   dragState: DragState | null;
   camera: Camera;
+  // Host-fixed zoom (EditorProps.viewScale). While set, camera is pinned to
+  // {zoom: viewScale, pan 0} and setCamera is a no-op, which disables every
+  // zoom/pan path (wheel, Space-pan, shortcuts, fit-to-screen) at once.
+  viewScale: number | null;
   // World-space marquee (rubber-band select) rect, live while dragging on
   // empty canvas; null otherwise. See src/render/interactions/marquee.ts.
   marqueeRect: Rect | null;
@@ -75,10 +83,13 @@ export interface EditorStore {
   setActivePage: (pageId: string) => void;
   setDragState: (state: DragState | null) => void;
   setCamera: (partial: Partial<Camera>) => void;
+  setViewScale: (viewScale: number | null) => void;
   setMarqueeRect: (rect: Rect | null) => void;
   setActiveGuides: (guides: SnapGuide[]) => void;
   setGrid: (partial: Partial<GridSettings>) => void;
 }
+
+export type HistoryAction = 'push' | 'undo' | 'redo' | 'reset';
 
 export interface GridSettings {
   enabled: boolean;
@@ -289,20 +300,18 @@ export function createEditorStore(initialDocument: Document) {
           activePageId,
           past: pushHistory(s.past, { patches, inversePatches }),
           future: [],
+          lastHistoryAction: 'push',
         };
       });
     },
-    addAsset: (assetId, dataUri) =>
+    addAssetRef: (assetId, asset) =>
       set((s) => ({
-        document: { ...s.document, assets: { ...s.document.assets, [assetId]: { type: 'image', dataUri } } },
-      })),
-    addSvgAsset: (assetId, dataUri) =>
-      set((s) => ({
-        document: { ...s.document, assets: { ...s.document.assets, [assetId]: { type: 'svg', dataUri } } },
+        document: { ...s.document, assets: { ...s.document.assets, [assetId]: asset } },
       })),
 
     past: [],
     future: [],
+    lastHistoryAction: null,
     undo: () =>
       set((s) => {
         if (s.past.length === 0) return {};
@@ -312,6 +321,7 @@ export function createEditorStore(initialDocument: Document) {
           lastCommand: null,
           past: s.past.slice(0, -1),
           future: [...s.future, entry],
+          lastHistoryAction: 'undo',
         };
       }),
     redo: () =>
@@ -323,6 +333,7 @@ export function createEditorStore(initialDocument: Document) {
           lastCommand: null,
           past: [...s.past, entry],
           future: s.future.slice(0, -1),
+          lastHistoryAction: 'redo',
         };
       }),
 
@@ -344,6 +355,7 @@ export function createEditorStore(initialDocument: Document) {
           gestureStartDocument: null,
           past: pushHistory(s.past, { patches, inversePatches }),
           future: [],
+          lastHistoryAction: 'push',
         };
       }),
 
@@ -351,6 +363,7 @@ export function createEditorStore(initialDocument: Document) {
     activePageId: initialDocument.pages[0]?.id ?? '',
     dragState: null,
     camera: { zoom: 1, panX: 0, panY: 0 },
+    viewScale: null,
     marqueeRect: null,
     activeGuides: [],
     grid: { enabled: false, size: 20, snap: false },
@@ -373,13 +386,15 @@ export function createEditorStore(initialDocument: Document) {
     setActivePage: (pageId) => set({ activePageId: pageId }),
     setDragState: (dragState) => set({ dragState }),
     setCamera: (partial) =>
-      set((s) => ({
+      set((s) => (s.viewScale != null ? {} : {
         camera: {
           ...s.camera,
           ...partial,
           ...(partial.zoom !== undefined ? { zoom: clampZoom(partial.zoom) } : {}),
         },
       })),
+    setViewScale: (viewScale) =>
+      set(viewScale == null ? { viewScale: null } : { viewScale, camera: { zoom: viewScale, panX: 0, panY: 0 } }),
   }));
 }
 

@@ -253,3 +253,41 @@ describe('selection change notifications', () => {
     expect(seen).toEqual([['a'], ['a', 'b'], []]);
   });
 });
+
+describe('host embedding (lib-changes L2/L4/L8)', () => {
+  it('lastHistoryAction reports push / undo / redo, and a gesture pushes once', () => {
+    const store = createEditorStore(makeDocument([]));
+    const actions: (string | null)[] = [];
+    store.subscribe((s, prev) => {
+      if (s.past !== prev.past || s.future !== prev.future) actions.push(s.lastHistoryAction);
+    });
+    store.getState().dispatch({ type: 'AddNode', pageId: PAGE_ID, node: shapeNode('a') });
+    store.getState().beginGesture('drag');
+    for (let i = 1; i <= 5; i++) {
+      store.getState().dispatch({ type: 'UpdateTransform', pageId: PAGE_ID, nodeId: 'a', patch: { x: i } });
+    }
+    store.getState().endGesture();
+    store.getState().undo();
+    store.getState().redo();
+    expect(actions).toEqual(['push', 'push', 'undo', 'redo']);
+  });
+
+  it('viewScale pins the camera and blocks setCamera until cleared', () => {
+    const store = createEditorStore(makeDocument([]));
+    store.getState().setCamera({ zoom: 3, panX: 40 });
+    store.getState().setViewScale(1.37);
+    expect(store.getState().camera).toEqual({ zoom: 1.37, panX: 0, panY: 0 });
+    store.getState().setCamera({ zoom: 5, panX: 10 });
+    expect(store.getState().camera).toEqual({ zoom: 1.37, panX: 0, panY: 0 });
+    store.getState().setViewScale(null);
+    store.getState().setCamera({ zoom: 2 });
+    expect(store.getState().camera.zoom).toBe(2);
+  });
+
+  it('addAssetRef stores an image-url asset without a history entry', () => {
+    const store = createEditorStore(makeDocument([]));
+    store.getState().addAssetRef('a1', { type: 'image-url', src: 'https://example.com/a.png' });
+    expect(store.getState().document.assets.a1).toEqual({ type: 'image-url', src: 'https://example.com/a.png' });
+    expect(store.getState().past).toHaveLength(0);
+  });
+});

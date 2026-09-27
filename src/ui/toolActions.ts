@@ -128,7 +128,7 @@ export function createToolActions(store: EditorStoreApi, app: Application | null
     const dataUri = await readAsDataUri(file);
     const { width, height } = await loadImageSize(dataUri);
     const assetId = nanoid();
-    store.getState().addAsset(assetId, dataUri);
+    store.getState().addAssetRef(assetId, { type: 'image', dataUri });
     addNode(defaultImageNode(assetId, width, height));
   };
 
@@ -136,7 +136,7 @@ export function createToolActions(store: EditorStoreApi, app: Application | null
     const dataUri = await readAsDataUri(file);
     const { width, height } = svgNaturalSize(await decodeSvgText(dataUri));
     const assetId = nanoid();
-    store.getState().addSvgAsset(assetId, dataUri);
+    store.getState().addAssetRef(assetId, { type: 'svg', dataUri });
     addNode(defaultSvgNode(assetId, width, height));
   };
 

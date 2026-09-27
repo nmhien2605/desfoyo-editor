@@ -1,6 +1,7 @@
 import { useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useEditorStore, useEditorStoreApi, useCanvasContext } from './EditorContext';
+import { useEditorUI } from './EditorUIContext';
 import { createViewport, type Point, type Viewport } from '../render/viewport';
 import { rotateVector, computeResize, type ResizeHandle } from '../render/interactions/resizeMath';
 import { angleBetween, computeRotation } from '../render/interactions/rotate';
@@ -149,6 +150,7 @@ function SingleSelectionOverlay({
 }) {
   const store = useEditorStoreApi();
   const { canvas } = useCanvasContext();
+  const { onNodeDoubleClick } = useEditorUI();
   const [croppingNodeId, setCroppingNodeId] = useState<string | null>(null);
   const isCropping = node.type === 'image' && croppingNodeId === node.id;
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -215,6 +217,9 @@ function SingleSelectionOverlay({
     <div className="pointer-events-none absolute inset-0">
       <div
         onDoubleClick={() => {
+          // Host-owned double-click (EditorProps.onNodeDoubleClick): built-in
+          // crop / inline text edit only runs if the host returns true.
+          if (onNodeDoubleClick && !onNodeDoubleClick(node.id, node.type)) return;
           if (node.type === 'image') setCroppingNodeId(isCropping ? null : node.id);
           if (node.type === 'text') setEditingNodeId(isEditingText ? null : node.id);
         }}
@@ -247,13 +252,12 @@ function SingleSelectionOverlay({
             }),
           );
         }}
-        className={`absolute border-2 ${node.type === 'image' || node.type === 'text' ? 'pointer-events-auto' : ''}`}
+        className={`df-sel-box absolute ${node.type === 'image' || node.type === 'text' ? 'pointer-events-auto' : ''}`}
         style={{
           left: topLeftScreen.x,
           top: topLeftScreen.y,
           width: box.width * camera.zoom,
           height: box.height * camera.zoom,
-          borderColor: '#8ec9f2',
           // Pixi rotates around the pivot in *unwarped* local space
           // (originX/Y * node.size — see applyTransform.ts), but `box` is
           // the warped bbox and may be offset/sized differently from
@@ -278,16 +282,16 @@ function SingleSelectionOverlay({
             <div
               key={handle}
               onPointerDown={startResize(handle)}
-              className="pointer-events-auto absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 rounded-full border bg-white"
-              style={{ left: pos.x, top: pos.y, cursor: `${handle}-resize`, borderColor: '#78bde8' }}
+              className="pointer-events-auto absolute df-handle -translate-x-1/2 -translate-y-1/2"
+              style={{ left: pos.x, top: pos.y, cursor: `${handle}-resize` }}
             />
           );
         })}
       {!isCropping && !isEditingText && (
         <div
           onPointerDown={startRotate}
-          className="pointer-events-auto absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border bg-white"
-          style={{ left: rotateHandlePos.x, top: rotateHandlePos.y, borderColor: '#78bde8' }}
+          className="pointer-events-auto absolute df-handle -translate-x-1/2 -translate-y-1/2 cursor-grab"
+          style={{ left: rotateHandlePos.x, top: rotateHandlePos.y }}
         />
       )}
       {isCropping && node.type === 'image' && (
@@ -399,8 +403,8 @@ function ImageCropHandles({
           <div
             key={handle}
             onPointerDown={startDrag(handle)}
-            className="pointer-events-auto absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 rounded-full border bg-white"
-            style={{ left: pos.x, top: pos.y, cursor: `${handle}-resize`, borderColor: '#78bde8' }}
+            className="pointer-events-auto absolute df-handle -translate-x-1/2 -translate-y-1/2"
+            style={{ left: pos.x, top: pos.y, cursor: `${handle}-resize` }}
           />
         );
       })}
@@ -454,19 +458,19 @@ function MultiSelectionOverlay({ nodes, activePageId }: { nodes: Node[]; activeP
   return (
     <div className="pointer-events-none absolute inset-0">
       <div
-        className="absolute border-2 border-dashed"
+        className="df-sel-box absolute"
         style={{
           left: screenMin.x,
           top: screenMin.y,
           width: (bounds.max.x - bounds.min.x) * camera.zoom,
           height: (bounds.max.y - bounds.min.y) * camera.zoom,
-          borderColor: '#8ec9f2',
+          borderStyle: 'dashed',
         }}
       />
       <div
         onPointerDown={startRotate}
-        className="pointer-events-auto absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border bg-white"
-        style={{ left: rotateHandlePos.x, top: rotateHandlePos.y, borderColor: '#78bde8' }}
+        className="pointer-events-auto absolute df-handle -translate-x-1/2 -translate-y-1/2 cursor-grab"
+        style={{ left: rotateHandlePos.x, top: rotateHandlePos.y }}
       />
     </div>
   );
@@ -477,13 +481,12 @@ function Marquee({ rect, viewport }: { rect: Rect; viewport: Viewport }) {
   const bottomRight = viewport.toScreen({ x: rect.x + rect.width, y: rect.y + rect.height });
   return (
     <div
-      className="absolute border border-dashed bg-[#8ec9f2]/10"
+      className="df-marquee absolute"
       style={{
         left: topLeft.x,
         top: topLeft.y,
         width: bottomRight.x - topLeft.x,
         height: bottomRight.y - topLeft.y,
-        borderColor: '#8ec9f2',
       }}
     />
   );

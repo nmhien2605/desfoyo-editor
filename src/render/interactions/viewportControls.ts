@@ -10,6 +10,8 @@ function clamp(zoom: number): number {
 // the document — camera changes never go through dispatch/history.
 export function attachViewportControls(canvas: HTMLCanvasElement, store: EditorStoreApi): () => void {
   const handleWheel = (event: WheelEvent) => {
+    // Host-fixed viewScale: leave the wheel to the page (scrolling), don't swallow it.
+    if (store.getState().viewScale != null) return;
     event.preventDefault();
     const { camera } = store.getState();
     const rect = canvas.getBoundingClientRect();
@@ -56,6 +58,7 @@ export function attachPan(canvas: HTMLCanvasElement, store: EditorStoreApi): () 
 
   const handlePointerDown = (event: PointerEvent) => {
     if (event.button !== 1 && !(event.button === 0 && spacePressed)) return;
+    if (store.getState().viewScale != null) return;
     event.preventDefault();
     panning = true;
     last = { x: event.clientX, y: event.clientY };

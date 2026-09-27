@@ -1,6 +1,40 @@
-@import 'tailwindcss';
+/* No preflight and no global rules: importing this file must not restyle the
+   host page. Everything is scoped under .df-editor (the Editor root in both
+   chrome and chromeless mode). */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
 
-:root {
+@layer base {
+  /* Scoped subset of Tailwind preflight that the editor's own panels rely on. */
+  .df-editor *,
+  .df-editor ::before,
+  .df-editor ::after {
+    box-sizing: border-box;
+    border: 0 solid;
+    margin: 0;
+    padding: 0;
+  }
+  .df-editor button,
+  .df-editor input,
+  .df-editor select,
+  .df-editor textarea {
+    font: inherit;
+    color: inherit;
+    background: transparent;
+  }
+  .df-editor img,
+  .df-editor svg,
+  .df-editor canvas {
+    display: block;
+    vertical-align: middle;
+  }
+  .df-editor ul {
+    list-style: none;
+  }
+}
+
+.df-editor {
   --app-bg: #0b1018;
   --sidebar-bg: #0d121a;
   --workspace-bg: #0a0f17;
@@ -17,16 +51,39 @@
   --text-primary: #d8dde6;
   --canvas-bg: #f8f8f7;
   --section-border: #29303b;
-}
 
-body {
-  margin: 0;
-  background: var(--app-bg);
+  /* Selection look — hosts override these on .df-editor. */
+  --df-sel-border-color: #8ec9f2;
+  --df-sel-border-width: 2px;
+  --df-sel-border-style: solid;
+  --df-handle-size: 7px;
+  --df-handle-radius: 9999px;
+  --df-handle-bg: #fff;
+  --df-handle-border-color: #78bde8;
+  --df-marquee-color: #8ec9f2;
+
   color: var(--text-primary);
   font-family:
     system-ui,
     -apple-system,
     sans-serif;
+}
+
+.df-sel-box {
+  border: var(--df-sel-border-width) var(--df-sel-border-style) var(--df-sel-border-color);
+}
+
+.df-handle {
+  width: var(--df-handle-size);
+  height: var(--df-handle-size);
+  border-radius: var(--df-handle-radius);
+  background: var(--df-handle-bg);
+  border: 1px solid var(--df-handle-border-color);
+}
+
+.df-marquee {
+  border: 1px dashed var(--df-marquee-color);
+  background: color-mix(in srgb, var(--df-marquee-color) 10%, transparent);
 }
 
 .kittl-sidebar-btn {

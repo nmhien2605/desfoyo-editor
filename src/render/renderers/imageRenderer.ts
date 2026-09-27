@@ -29,7 +29,10 @@ const maskChild = new WeakMap<Container, Container>();
 function loadTexture(sprite: Sprite, node: ImageNode, doc: Document): void {
   loadedAssetId.set(sprite, node.assetId);
   const dataUri = resolveAsset(node.assetId, doc);
-  Assets.load(dataUri)
+  // Force the texture parser: Pixi picks a parser from the URL's extension,
+  // so extension-less image-url assets (CDN/resize URLs, blob:) otherwise fail
+  // with "don't know how to parse it". Pixi < 8.x without `parser` ignores it.
+  Assets.load<Texture>({ src: dataUri, parser: 'texture' })
     .then((texture: Texture) => {
       if (sprite.destroyed) return;
       sprite.texture = texture;

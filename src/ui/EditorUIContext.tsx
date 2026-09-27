@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
+import type { Node } from '../schema';
 
 export type DrawerPanel = 'layers' | 'assets' | 'dev' | null;
 export type ActiveTool = 'select' | 'grid' | 'shape' | 'text' | 'image';
@@ -17,7 +18,10 @@ type EditorUIContextValue = {
   setActiveTool: (tool: ActiveTool) => void;
   devMenu: DevMenuConfig | null;
   onExport: ((format: 'png' | 'svg', scale?: number) => void) | null;
+  onNodeDoubleClick: NodeDoubleClickHandler | null;
 };
+
+export type NodeDoubleClickHandler = (nodeId: string, nodeType: Node['type']) => boolean | void;
 
 const EditorUIContext = createContext<EditorUIContextValue | null>(null);
 
@@ -25,10 +29,12 @@ export function EditorUIProvider({
   children,
   devMenu = null,
   onExport = null,
+  onNodeDoubleClick = null,
 }: {
   children: ReactNode;
   devMenu?: DevMenuConfig | null;
   onExport?: ((format: 'png' | 'svg', scale?: number) => void) | null;
+  onNodeDoubleClick?: NodeDoubleClickHandler | null;
 }) {
   const [drawer, setDrawer] = useState<DrawerPanel>(null);
   const [activeTool, setActiveTool] = useState<ActiveTool>('select');
@@ -38,7 +44,7 @@ export function EditorUIProvider({
   };
 
   return (
-    <EditorUIContext.Provider value={{ drawer, setDrawer, toggleDrawer, activeTool, setActiveTool, devMenu, onExport: onExport ?? null }}>
+    <EditorUIContext.Provider value={{ drawer, setDrawer, toggleDrawer, activeTool, setActiveTool, devMenu, onExport: onExport ?? null, onNodeDoubleClick }}>
       {children}
     </EditorUIContext.Provider>
   );
