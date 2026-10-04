@@ -159,7 +159,7 @@ Khi app đã có toolbar/modal riêng và chỉ cần vùng vẽ (vd đặt canv
 ```
 
 - Ở chế độ này container gốc là `inline-block`, kích thước **bằng đúng canvas** — host tự canh vị trí/căn giữa. Không đặt `transform: scale()` lên cha của editor để phóng to/thu nhỏ (hit-test sẽ lệch); dùng `viewScale`.
-- **Scale text**: text có 4 handle góc, kéo sẽ scale đều qua `transform.scaleX/scaleY` (giống fabric) — `font.size` và `node.size` giữ nguyên; text-shadow co giãn theo, còn filter effect (outline, glow, blur…) giữ nguyên độ dày px — xem [03-text-effects.md](./03-text-effects.md) §8. 1 lần kéo = 1 bước undo.
+- **Scale text**: text có 8 handle như fabric, đều ghi vào `transform.scaleX/scaleY`: 4 góc scale đều, trên/dưới chỉ đổi `scaleY`, trái/phải chỉ đổi `scaleX` (kéo giãn chữ, không xuống dòng lại như fabric) — `font.size` và `node.size` giữ nguyên; text-shadow co giãn theo, còn filter effect (outline, glow, blur…) giữ nguyên độ dày px — xem [03-text-effects.md](./03-text-effects.md) §8. 1 lần kéo = 1 bước undo.
 - **Nền trong suốt**: đặt `page.background = { type: 'color', value: 'transparent' }` — canvas sẽ trong suốt, thấy nội dung phía sau. PNG export (`ref.export('png')`, `renderPageToPng`) vốn không bao giờ chứa màu nền page (kể cả nền đục).
 - **Đổi giao diện khung chọn**: override các biến CSS trên `.df-editor` trong CSS của host:
 

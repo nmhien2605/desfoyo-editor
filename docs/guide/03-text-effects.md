@@ -326,7 +326,7 @@ ref.updateNodeTransform(id, { rotation: (15 * Math.PI) / 180 }); // radian
 ref.updateNodeTransform(id, { x: 150, y: 200 });                 // vị trí pivot (tâm nếu origin 0.5)
 ```
 
-Người dùng cũng tự làm được trên canvas: kéo để di chuyển, 4 handle góc để scale đều (ghi vào `scaleX/scaleY`, giữ góc đối diện đứng yên), handle tròn phía trên để xoay. Mỗi thao tác kéo = 1 bước undo. Text không có handle cạnh (không đổi độ rộng dòng).
+Người dùng cũng tự làm được trên canvas: kéo để di chuyển, 8 handle để scale (ghi vào `scaleX/scaleY`, điểm đối diện đứng yên): 4 góc scale đều, trên/dưới chỉ đổi `scaleY`, trái/phải chỉ đổi `scaleX`; handle tròn phía trên để xoay. Mỗi thao tác kéo = 1 bước undo. Handle trái/phải kéo giãn chữ chứ không xuống dòng lại như fabric (lib không có auto-wrap).
 
 Lật chữ (`scaleX < 0`) chưa được hỗ trợ ở khung chọn — đừng đưa vào UI.
 

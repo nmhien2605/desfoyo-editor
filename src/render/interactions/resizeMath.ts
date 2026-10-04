@@ -93,44 +93,50 @@ export function computeResize(
   };
 }
 
-export type CornerHandle = 'nw' | 'ne' | 'se' | 'sw';
-const OPPOSITE: Record<CornerHandle, CornerHandle> = { nw: 'se', ne: 'sw', se: 'nw', sw: 'ne' };
 const MIN_SCALE = 0.01;
 
-// Proportional corner scaling for text (L14): writes transform.scaleX/Y (like
-// fabric) instead of node.size, which for text is the measured layout box.
-// `box` is the node's selection box in local unscaled units (the warped
-// bounds for text); the opposite corner of that box stays fixed in world
-// space. The pointer is projected onto the box diagonal, so the existing
-// scaleX:scaleY ratio is kept.
+// Scale-resize for text (L14/L30): writes transform.scaleX/Y (like fabric)
+// instead of node.size, which for text is the measured layout box. `box` is
+// the node's selection box in local unscaled units (the warped bounds for
+// text); the point of that box opposite the handle stays fixed in world space.
+// Corners project the pointer onto the box diagonal, so the existing
+// scaleX:scaleY ratio is kept; n/s change scaleY only, e/w scaleX only (a
+// stretch — there is no wrap width to edit).
 export function computeScaleResize(
   node: Node,
-  handle: CornerHandle,
+  handle: ResizeHandle,
   worldDelta: { x: number; y: number },
   box: { x: number; y: number; width: number; height: number },
 ): { scaleX: number; scaleY: number; x: number; y: number } {
   const { transform, size } = node;
   const { scaleX: sx, scaleY: sy, rotation } = transform;
   const pivot = { x: (transform.originX ?? 0) * size.width, y: (transform.originY ?? 0) * size.height };
-  const corner = (h: CornerHandle) => ({
-    x: box.x + (h.includes('e') ? box.width : 0),
-    y: box.y + (h.includes('s') ? box.height : 0),
-  });
-  const anchor = corner(OPPOSITE[handle]);
-  const dragged = corner(handle);
+  // Handle position on the box as fractions; the anchor is its mirror.
+  const hx = handle.includes('e') ? 1 : handle.includes('w') ? 0 : 0.5;
+  const hy = handle.includes('s') ? 1 : handle.includes('n') ? 0 : 0.5;
+  const anchor = { x: box.x + (1 - hx) * box.width, y: box.y + (1 - hy) * box.height };
 
-  // Diagonal anchor→dragged and anchor→pointer, both in scaled, unrotated space.
-  const d = { x: (dragged.x - anchor.x) * sx, y: (dragged.y - anchor.y) * sy };
+  // anchor→dragged and anchor→pointer, both in scaled, unrotated space.
+  const d = { x: (2 * hx - 1) * box.width * sx, y: (2 * hy - 1) * box.height * sy };
   const local = rotateVector(worldDelta, -rotation);
   const v = { x: d.x + local.x, y: d.y + local.y };
-  const minF = MIN_SCALE / Math.min(Math.abs(sx), Math.abs(sy));
-  const f = Math.max(minF, (v.x * d.x + v.y * d.y) / (d.x * d.x + d.y * d.y));
+  const clamp = (f: number, s: number) => (Number.isFinite(f) ? Math.max(MIN_SCALE / Math.abs(s), f) : 1);
+  let fx = 1;
+  let fy = 1;
+  if (hx !== 0.5 && hy !== 0.5) {
+    const minS = Math.min(Math.abs(sx), Math.abs(sy));
+    fx = fy = clamp((v.x * d.x + v.y * d.y) / (d.x * d.x + d.y * d.y), minS);
+  } else if (hx !== 0.5) {
+    fx = clamp(v.x / d.x, sx);
+  } else {
+    fy = clamp(v.y / d.y, sy);
+  }
 
   const anchorOffsetOld = rotateVector({ x: (anchor.x - pivot.x) * sx, y: (anchor.y - pivot.y) * sy }, rotation);
-  const anchorOffsetNew = rotateVector({ x: (anchor.x - pivot.x) * sx * f, y: (anchor.y - pivot.y) * sy * f }, rotation);
+  const anchorOffsetNew = rotateVector({ x: (anchor.x - pivot.x) * sx * fx, y: (anchor.y - pivot.y) * sy * fy }, rotation);
   return {
-    scaleX: sx * f,
-    scaleY: sy * f,
+    scaleX: sx * fx,
+    scaleY: sy * fy,
     x: transform.x + anchorOffsetOld.x - anchorOffsetNew.x,
     y: transform.y + anchorOffsetOld.y - anchorOffsetNew.y,
   };

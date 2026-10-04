@@ -44,4 +44,26 @@ describe('computeScaleResize', () => {
     const r = computeScaleResize(node({}), 'se', { x: -500, y: -500 }, BOX);
     expect(r.scaleX).toBeCloseTo(0.01);
   });
+
+  it('s drag changes scaleY only, top edge fixed, x delta ignored', () => {
+    const r = computeScaleResize(node({}), 's', { x: 30, y: 50 }, BOX);
+    expect(r).toEqual({ scaleX: 1, scaleY: 2, x: 0, y: 0 });
+  });
+
+  it('e drag on a rotated, centred node changes scaleX only, w edge midpoint fixed', () => {
+    const n = node({ x: 300, y: 200, rotation: 0.7, originX: 0.5, originY: 0.5, scaleY: 1.5 });
+    const before = worldOf(n, n.transform, { x: 0, y: 25 });
+    const r = computeScaleResize(n, 'e', { x: 40, y: 10 }, BOX);
+    const after = worldOf(n, r, { x: 0, y: 25 });
+    expect(after.x).toBeCloseTo(before.x);
+    expect(after.y).toBeCloseTo(before.y);
+    expect(r.scaleY).toBe(1.5);
+    expect(r.scaleX).toBeGreaterThan(1);
+  });
+
+  it('w drag past the anchor clamps instead of flipping', () => {
+    const r = computeScaleResize(node({}), 'w', { x: 500, y: 0 }, BOX);
+    expect(r.scaleX).toBeCloseTo(0.01);
+    expect(r.scaleY).toBe(1);
+  });
 });

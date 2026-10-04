@@ -7,7 +7,6 @@ import {
   rotateVector,
   computeResize,
   computeScaleResize,
-  type CornerHandle,
   type ResizeHandle,
 } from '../render/interactions/resizeMath';
 import { angleBetween, computeRotation } from '../render/interactions/rotate';
@@ -28,9 +27,6 @@ import { WarpHandlesOverlay } from './WarpHandlesOverlay';
 import { CircleHandlesOverlay } from './CircleHandlesOverlay';
 
 const HANDLES: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
-// Text scales proportionally from corners only (side handles would mean
-// re-wrapping, which text layout doesn't do).
-const TEXT_HANDLES: CornerHandle[] = ['nw', 'ne', 'se', 'sw'];
 
 function localCorner(handle: ResizeHandle, width: number, height: number): Point {
   const x = handle.includes('e') ? width : handle.includes('w') ? 0 : width / 2;
@@ -191,7 +187,7 @@ function SingleSelectionOverlay({
           type: 'UpdateTransform',
           pageId: activePageId,
           nodeId: node.id,
-          patch: computeScaleResize(node, handle as CornerHandle, delta, box),
+          patch: computeScaleResize(node, handle, delta, box),
         });
         return;
       }
@@ -296,7 +292,7 @@ function SingleSelectionOverlay({
       />
       {!isCropping &&
         !isEditingText &&
-        (node.type === 'text' ? TEXT_HANDLES : HANDLES).map((handle) => {
+        HANDLES.map((handle) => {
           // Text handles sit on the (warped) selection box, not node.size.
           const isText = node.type === 'text';
           const c = isText ? localCorner(handle, box.width, box.height) : localCorner(handle, node.size.width, node.size.height);
