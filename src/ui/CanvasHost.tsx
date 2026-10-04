@@ -5,6 +5,8 @@ import { attachDrag } from '../render/interactions/drag';
 import { attachViewportControls, attachPan } from '../render/interactions/viewportControls';
 import { attachMarquee } from '../render/interactions/marquee';
 import { backgroundAlpha, backgroundColor } from '../render/backgroundColor';
+import { onLoadSettled } from '../render/pendingLoads';
+import { onFontLoaded } from '../text/fontService';
 import { useEditorStoreApi } from './EditorContext';
 import { activePage, type GridSettings } from '../core/store';
 import type { Document, Page, Size } from '../schema';
@@ -46,6 +48,8 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
     let unsubscribeGrid: (() => void) | null = null;
     let detachViewportControls: (() => void) | null = null;
     let detachPan: (() => void) | null = null;
+    let frame = 0;
+    let unsubscribeRender: (() => void)[] = [];
 
     (async () => {
       const state = store.getState();
@@ -81,6 +85,20 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
       }
 
       hostRef.current?.appendChild(app.canvas);
+
+      // Render on demand: nothing animates, so the scene only changes via the
+      // store, an image/SVG load landing, or a font landing. rAF-deferred, so
+      // it runs after every synchronous subscriber below has updated the scene
+      // and coalesces a burst of changes into one render.
+      app.ticker.stop();
+      const requestRender = () => {
+        if (frame) return;
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          app.render();
+        });
+      };
+      unsubscribeRender = [store.subscribe(requestRender), onLoadSettled(requestRender), onFontLoaded(requestRender)];
       app.stage.addChild(pageContainer);
       app.stage.eventMode = 'static';
       app.stage.hitArea = app.screen;
@@ -136,6 +154,7 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
       // while Pixi was initialising, and the pre-init snapshot would drop it.
       const current = store.getState();
       remountPage(activePage(current) ?? current.document.pages[0], current.document);
+      requestRender();
 
       unsubscribe = store.subscribe((state, prevState) => {
         if (state.document !== prevState.document && state.lastCommand === null) {
@@ -170,6 +189,8 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
       unsubscribeGrid?.();
       detachViewportControls?.();
       detachPan?.();
+      cancelAnimationFrame(frame);
+      for (const off of unsubscribeRender) off();
       reconciler?.destroy();
       if (reconcilerRef) reconcilerRef.current = null;
       if (app.renderer) app.destroy(true);

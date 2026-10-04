@@ -10,7 +10,7 @@ import { serializeNode, type RasterizedMap } from './svgSerializer';
 // output to the page rect (pageContainer-local units) — without it Pixi uses
 // the content bounds, so a lone node in a corner exported node-sized.
 // Waits for in-flight texture/SVG loads first, else a fresh document exports blank.
-export async function exportPng(app: Application, pageContainer: Container, pageSize: Size, scale = 1): Promise<Blob> {
+export async function exportCanvas(app: Application, pageContainer: Container, pageSize: Size, scale = 1): Promise<HTMLCanvasElement> {
   await loadsSettled();
   // resolution mac dinh 1, khong doc devicePixelRatio — mac dinh extract lay
   // resolution cua renderer, ma renderer giờ chạy theo devicePixelRatio
@@ -19,11 +19,15 @@ export async function exportPng(app: Application, pageContainer: Container, page
   // tài liệu cho hai kết quả khác nhau tuỳ màn hình người dùng. `scale` là
   // lựa chọn tường minh của người dùng (1x/2x/3x/4x), không phải suy ra từ
   // màn hình đang mở — vẫn tất định.
-  const canvas = app.renderer.extract.canvas({
+  return app.renderer.extract.canvas({
     target: pageContainer,
     frame: new Rectangle(0, 0, pageSize.width, pageSize.height),
     resolution: scale,
   }) as HTMLCanvasElement;
+}
+
+export async function exportPng(app: Application, pageContainer: Container, pageSize: Size, scale = 1): Promise<Blob> {
+  const canvas = await exportCanvas(app, pageContainer, pageSize, scale);
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);

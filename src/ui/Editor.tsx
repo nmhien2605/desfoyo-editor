@@ -15,7 +15,7 @@ import { ASSET_DRAG_TYPE } from './AssetPanel';
 import { decodeSvgText } from '../render/renderers/svgRenderer';
 import { createViewport } from '../render/viewport';
 import type { SceneReconciler } from '../render/SceneReconciler';
-import { exportPng, exportSvg } from '../services/exportService';
+import { exportCanvas, exportPng, exportSvg } from '../services/exportService';
 import { attachShortcuts } from '../services/shortcuts';
 import { deleteSelection, groupSelection, ungroupSelection, replaceSelection } from '../core/actions';
 import { duplicateSelection, copySelection, cutSelection, pasteClipboard } from '../services/clipboard';
@@ -28,6 +28,8 @@ export interface EditorHandle {
   getDocument(): Document;
   loadDocument(doc: Document): void;
   export(format: 'png' | 'svg', scale?: number): Promise<Blob>;
+  /** The page as a fresh canvas (page.size × scale) — same pixels as export('png') without the PNG encode. */
+  exportCanvas(scale?: number): Promise<HTMLCanvasElement>;
   undo(): void;
   redo(): void;
   canUndo(): boolean;
@@ -143,6 +145,13 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
           future: [],
           lastHistoryAction: 'reset',
         });
+      },
+      exportCanvas: async (scale = 1) => {
+        const { app, pageContainer } = canvasValueRef.current;
+        if (!app || !pageContainer) throw new Error('Editor is not mounted yet');
+        const state = store.getState();
+        const page = activePage(state) ?? state.document.pages[0];
+        return exportCanvas(app, pageContainer, page.size, scale);
       },
       export: async (format, scale = 1) => {
         const { app, pageContainer } = canvasValueRef.current;

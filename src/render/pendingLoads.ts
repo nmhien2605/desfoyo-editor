@@ -4,10 +4,25 @@
 // ponytail: one global set shared by every editor instance — an export may
 // also wait for another editor's loads; scope per reconciler if that matters.
 const pending = new Set<Promise<unknown>>();
+const listeners = new Set<() => void>();
 
 export function trackLoad(p: Promise<unknown>): void {
   pending.add(p);
-  void p.finally(() => pending.delete(p)).catch(() => {});
+  void p
+    .finally(() => {
+      pending.delete(p);
+      for (const cb of [...listeners]) cb();
+    })
+    .catch(() => {});
+}
+
+// CanvasHost renders on demand (no ticker), so it needs to know when a load
+// has changed the scene outside the store.
+export function onLoadSettled(cb: () => void): () => void {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
 }
 
 // Loops so loads started while waiting (e.g. a remount mid-export) count too.

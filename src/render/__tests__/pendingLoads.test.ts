@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { loadsSettled, trackLoad } from '../pendingLoads';
+import { loadsSettled, onLoadSettled, trackLoad } from '../pendingLoads';
 
 it('loadsSettled waits for loads tracked while it is already waiting', async () => {
   const done: string[] = [];
@@ -15,4 +15,16 @@ it('loadsSettled waits for loads tracked while it is already waiting', async () 
   resolveFirst();
   await waiting;
   expect(done).toEqual(['first', 'second']);
+});
+
+it('onLoadSettled fires when a tracked load settles, until unsubscribed', async () => {
+  let calls = 0;
+  const off = onLoadSettled(() => calls++);
+  trackLoad(Promise.resolve());
+  await loadsSettled();
+  expect(calls).toBe(1);
+  off();
+  trackLoad(Promise.resolve());
+  await loadsSettled();
+  expect(calls).toBe(1);
 });

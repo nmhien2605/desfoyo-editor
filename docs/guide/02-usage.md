@@ -106,6 +106,7 @@ function App() {
 | `getDocument(): Document` | Lấy snapshot document hiện tại từ store (đồng bộ, không đợi `onChange`). |
 | `loadDocument(doc: Document): void` | Thay toàn bộ document, reset selection + undo/redo history. Dùng khi load 1 design khác vào editor đang mở. |
 | `export(format: 'png' \| 'svg', scale?: number): Promise<Blob>` | Export page đang active. `scale` chỉ áp dụng cho `'png'` (mặc định 1). PNG luôn có kích thước đúng `page.size × scale` (khung cả page, không phụ thuộc nội dung hay zoom đang xem). Tự chờ các ảnh/SVG còn đang load xong mới xuất — gọi ngay sau `loadDocument`/`addNode` vẫn ra ảnh đầy đủ. Throw nếu gọi trước khi editor mount xong canvas. |
+| `exportCanvas(scale?: number): Promise<HTMLCanvasElement>` | Trả về page đang active dưới dạng một `<canvas>` mới (`page.size × scale`), cùng pixel với `export('png')` nhưng bỏ bước encode PNG. Dùng cái này khi cần đưa ảnh sang canvas/texture khác (ví dụ preview 3D) sau mỗi lần edit. Cũng tự chờ ảnh/SVG load xong; canvas trả về thuộc về host. |
 | `undo(): void` / `redo(): void` | Điều khiển undo/redo history. |
 | `canUndo(): boolean` / `canRedo(): boolean` | Còn bước undo/redo không — dùng để enable/disable nút. Muốn tự cập nhật theo sự kiện thì dùng prop `onHistoryChange`. |
 | `addAsset(assetId: string, asset: AssetRef): void` | Thêm/ghi đè 1 asset (`image`, `svg`, `image-url`), validate bằng `AssetRefSchema` (sai shape sẽ throw). **Không** tạo history entry — undo `addNode` dùng asset đó chỉ xoá node, asset vẫn giữ để redo được. Xem mục 5. |
@@ -158,7 +159,7 @@ Khi app đã có toolbar/modal riêng và chỉ cần vùng vẽ (vd đặt canv
 ```
 
 - Ở chế độ này container gốc là `inline-block`, kích thước **bằng đúng canvas** — host tự canh vị trí/căn giữa. Không đặt `transform: scale()` lên cha của editor để phóng to/thu nhỏ (hit-test sẽ lệch); dùng `viewScale`.
-- **Scale text**: text có 4 handle góc, kéo sẽ scale đều qua `transform.scaleX/scaleY` (giống fabric) — `font.size` và `node.size` giữ nguyên, hiệu ứng (shadow, outline…) scale theo. 1 lần kéo = 1 bước undo.
+- **Scale text**: text có 4 handle góc, kéo sẽ scale đều qua `transform.scaleX/scaleY` (giống fabric) — `font.size` và `node.size` giữ nguyên; text-shadow co giãn theo, còn filter effect (outline, glow, blur…) giữ nguyên độ dày px — xem [03-text-effects.md](./03-text-effects.md) §8. 1 lần kéo = 1 bước undo.
 - **Nền trong suốt**: đặt `page.background = { type: 'color', value: 'transparent' }` — canvas sẽ trong suốt, thấy nội dung phía sau. PNG export (`ref.export('png')`, `renderPageToPng`) vốn không bao giờ chứa màu nền page (kể cả nền đục).
 - **Đổi giao diện khung chọn**: override các biến CSS trên `.df-editor` trong CSS của host:
 
