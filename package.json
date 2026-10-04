@@ -1,6 +1,6 @@
 {
   "name": "@desfoyo/editor",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -22,8 +22,7 @@
     "build:demo": "vite build --config vite.demo.config.ts",
     "test": "vitest run",
     "lint": "eslint .",
-    "format": "prettier --write .",
-    "prepare": "npm run build"
+    "format": "prettier --write ."
   },
   "peerDependencies": {
     "pixi.js": "^8.0.0",
