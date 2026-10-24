@@ -3,6 +3,7 @@ import type { CircleParams, TextNode, WarpPath } from '../schema';
 import { evalCubic, extrema } from './bezier';
 import { warpContoursCircle } from './circleWarp';
 import { warpContoursOnPath } from './customWarp';
+import { resolveFontVariant } from './fontService';
 import type { GlyphShape } from './glyphOutlines';
 import { layoutText, type TextLayout } from './layout';
 import {
@@ -216,10 +217,15 @@ export function resolveDistortPaths(
   };
 }
 
+// `font` là Font caller đang cầm (thường bản thường của family). Với
+// weight/style khác 400/normal, resolveFontVariant đổi sang file biến thể thật
+// nếu đã nạp, không thì giả lập bold/italic trên outline của `font`.
 export function textGeometry(node: TextNode, font: Font): TextGeometry {
+  const variant = resolveFontVariant(node.font, font);
   const layout = layoutText({
     text: node.text,
-    font,
+    font: variant.font,
+    faux: { bold: variant.fauxBold, italic: variant.fauxItalic },
     fontSize: node.font.size,
     letterSpacing: node.letterSpacing,
     lineHeight: node.lineHeight,

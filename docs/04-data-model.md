@@ -60,6 +60,8 @@ interface TextNode extends BaseNode {
   type: 'text';
   text: string;
   font: { family: string; weight: number; style: 'normal' | 'italic'; size: number };
+  // weight/style: chọn file registerFont(family, url, { weight, style }) khớp nhất;
+  // không có thì faux bold (weight >= 600) / faux italic (12°) — src/text/fontService.ts
   align: 'left' | 'center' | 'right' | 'justify';
   letterSpacing: number;
   lineHeight: number;

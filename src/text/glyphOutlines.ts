@@ -62,6 +62,96 @@ export function translateContour(contour: Contour, dx: number, dy: number): Cont
   return out;
 }
 
+// Faux bold/italic: chỉ dùng khi không có file biến thể thật (fontService
+// resolveFontVariant). Bold: nở mỗi phía FAUX_BOLD_EM × fontSize (≈ Skia/
+// FreeType embolden). Italic: nghiêng 12° như trình duyệt tổng hợp italic.
+export const FAUX_BOLD_EM = 0.02;
+export const FAUX_ITALIC_SKEW = Math.tan((12 * Math.PI) / 180);
+
+export interface FauxStyle {
+  bold?: boolean;
+  italic?: boolean;
+}
+
+// Hướng tiếp tuyến tại hai đầu của cung thứ k (bỏ qua control point trùng
+// điểm mút, như đoạn thẳng thoái hoá); [0,0] nếu cả cung suy biến thành điểm.
+function segmentTangents(c: Contour, k: number): { start: [number, number]; end: [number, number] } {
+  const i = k * 6;
+  const pts: [number, number][] = [0, 2, 4, 6].map((o) => [c[i + o], c[i + o + 1]]);
+  const dir = (a: [number, number], b: [number, number]): [number, number] | null =>
+    a[0] !== b[0] || a[1] !== b[1] ? [b[0] - a[0], b[1] - a[1]] : null;
+  const start = dir(pts[0], pts[1]) ?? dir(pts[0], pts[2]) ?? dir(pts[0], pts[3]) ?? [0, 0];
+  const end = dir(pts[2], pts[3]) ?? dir(pts[1], pts[3]) ?? dir(pts[0], pts[3]) ?? [0, 0];
+  return { start, end };
+}
+
+// Pháp tuyến đơn vị phía "ngoài" theo quy ước dấu diện tích signedArea:
+// diện tích dương thì ngoài là (ty, -tx). `sign` = dấu diện tích outer của
+// shape — dùng chung cho lỗ (chiều quay ngược) nên lỗ tự co lại.
+function outwardNormal(t: [number, number], sign: number): [number, number] {
+  const len = Math.hypot(t[0], t[1]);
+  return len === 0 ? [0, 0] : [(sign * t[1]) / len, (-sign * t[0]) / len];
+}
+
+// Nở contour d px: dời mỗi điểm on-curve theo vector miter của hai cung kề
+// nó, kéo control point sát nó đi cùng để giữ nguyên hướng tiếp tuyến. Gần
+// đúng (offset thật của cubic không phải cubic), đủ cho d nhỏ cỡ faux bold.
+export function emboldenContour(c: Contour, d: number, sign: number): Contour {
+  const n = (c.length - 2) / 6;
+  if (n < 1 || d === 0) return c.slice();
+  const tangents = Array.from({ length: n }, (_, k) => segmentTangents(c, k));
+  const out = c.slice();
+  for (let k = 0; k < n; k++) {
+    const a = outwardNormal(tangents[(k + n - 1) % n].end, sign);
+    const b = outwardNormal(tangents[k].start, sign);
+    const aZero = a[0] === 0 && a[1] === 0;
+    const bZero = b[0] === 0 && b[1] === 0;
+    let mx = a[0] + b[0];
+    let my = a[1] + b[1];
+    const len = Math.hypot(mx, my);
+    if (aZero || bZero || len < 1e-9) {
+      // Cung kề suy biến thành điểm (font hay có) hoặc quay đầu 180°: lấy
+      // pháp tuyến của phía còn lại, không tính miter.
+      [mx, my] = aZero ? b : a;
+      mx *= d;
+      my *= d;
+    } else {
+      // Độ dài miter = d / cos(nửa góc) = d·√(2/(1+a·b)), chặn ở 2d cho góc nhọn.
+      const dot = a[0] * b[0] + a[1] * b[1];
+      const miter = Math.min(d * Math.sqrt(2 / Math.max(1 + dot, 1e-9)), 2 * d);
+      mx = (mx / len) * miter;
+      my = (my / len) * miter;
+    }
+    const i = k * 6;
+    out[i] += mx;
+    out[i + 1] += my;
+    out[i + 2] += mx; // c1 của cung k
+    out[i + 3] += my;
+    const prevC2 = ((k + n - 1) % n) * 6 + 4; // c2 của cung k-1
+    out[prevC2] += mx;
+    out[prevC2 + 1] += my;
+  }
+  out[n * 6] = out[0];
+  out[n * 6 + 1] = out[1];
+  return out;
+}
+
+function mapShapes(shapes: GlyphShape[], fn: (c: Contour, sign: number) => Contour): GlyphShape[] {
+  return shapes.map((shape) => {
+    const sign = Math.sign(signedArea(shape.outer)) || 1;
+    return { outer: fn(shape.outer, sign), holes: shape.holes.map((hole) => fn(hole, sign)) };
+  });
+}
+
+// Affine: chính xác tuyệt đối trên bezier. Trục nghiêng đặt ở đáy hộp dòng
+// (y = descent, y xuống) để không điểm nào lệch sang trái gốc x — phần nhô
+// sang phải ≤ (ascent+descent)·tan, layout.ts cộng phần này vào width.
+function skewContour(c: Contour, pivotY: number): Contour {
+  const out = c.slice();
+  for (let i = 0; i < out.length; i += 2) out[i] += (pivotY - out[i + 1]) * FAUX_ITALIC_SKEW;
+  return out;
+}
+
 function commandsToContours(commands: PathCommand[]): Contour[] {
   const contours: Contour[] = [];
   let current: Contour = [];
@@ -184,15 +274,19 @@ function groupIntoShapes(contours: Contour[]): GlyphShape[] {
 // ligature, số glyph ít hơn số ký tự. layout.ts vì vậy tự cắt dòng theo '\n'
 // trước rồi mới gọi hàm này cho từng dòng, để không phải map ngược glyph về
 // ký tự.
-export function getGlyphOutlines(text: string, font: Font, fontSize: number): GlyphOutline[] {
+//
+// `faux`: bold nở outline d = FAUX_BOLD_EM·fontSize mỗi phía, dời glyph +d và
+// cộng 2d vào advance (mực không lấn glyph kế); italic nghiêng quanh đáy dòng.
+export function getGlyphOutlines(text: string, font: Font, fontSize: number, faux: FauxStyle = {}): GlyphOutline[] {
   const scale = fontSize / font.unitsPerEm;
+  const bold = faux.bold ? FAUX_BOLD_EM * fontSize : 0;
+  const descent = -font.descender * scale;
   const glyphs = font.stringToGlyphs(text);
   const outlines = glyphs.map((glyph) => {
-    const advance = (glyph.advanceWidth ?? 0) * scale;
-    return {
-      advance,
-      shapes: groupIntoShapes(commandsToContours(glyph.getPath(0, 0, fontSize).commands)),
-    };
+    let shapes = groupIntoShapes(commandsToContours(glyph.getPath(0, 0, fontSize).commands));
+    if (bold) shapes = mapShapes(shapes, (c, sign) => translateContour(emboldenContour(c, bold, sign), bold, 0));
+    if (faux.italic) shapes = mapShapes(shapes, (c) => skewContour(c, descent));
+    return { advance: (glyph.advanceWidth ?? 0) * scale + 2 * bold, shapes };
   });
   // GPOS/kern cho từng cặp liền kề — cộng thêm vào advance của glyph đứng
   // trước trong cặp, vì pen chỉ tiến sau khi đã "qua" glyph đó. Chỉ cộng dồn,

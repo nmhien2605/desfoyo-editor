@@ -1,5 +1,5 @@
 import type { Font } from 'opentype.js';
-import { getGlyphOutlines, translateContour, type GlyphShape } from './glyphOutlines';
+import { FAUX_ITALIC_SKEW, getGlyphOutlines, translateContour, type FauxStyle, type GlyphShape } from './glyphOutlines';
 
 export interface TextLayout {
   // Đã dịch vào đúng vị trí trong hộp: gốc toạ độ ở góc trên-trái, y xuống.
@@ -31,23 +31,28 @@ export interface LayoutOptions {
   letterSpacing: number;
   lineHeight: number; // bội số của fontSize
   align: 'left' | 'center' | 'right';
+  faux?: FauxStyle; // bold/italic giả khi không có file biến thể (glyphOutlines.ts)
 }
 
 // Không auto-wrap: chỉ ngắt dòng ở '\n'. Có wrap thì node.size.width phải trở
 // thành đầu vào của layout thay vì đầu ra, đảo chiều quan hệ giữa kích thước
 // node và nội dung — xem docs/text-future-work.md mục 2.
 export function layoutText(options: LayoutOptions): TextLayout {
-  const { text, font, fontSize, letterSpacing, lineHeight, align } = options;
+  const { text, font, fontSize, letterSpacing, lineHeight, align, faux } = options;
   const scale = fontSize / font.unitsPerEm;
   const ascent = font.ascender * scale;
   const descent = -font.descender * scale; // descender là số âm trong font units
   const lineStep = fontSize * lineHeight;
   const lines = text.split('\n');
+  // Faux italic nhô sang phải tối đa cả chiều cao dòng × tan — cộng vào width
+  // (không vào advanceWidth: đó là tổng advance thuần cho warp) để khung không cắt mực.
+  const italicOverhang = faux?.italic ? (ascent + descent) * FAUX_ITALIC_SKEW : 0;
 
   const measured = lines.map((line) => {
-    const glyphs = getGlyphOutlines(line, font, fontSize);
+    const glyphs = getGlyphOutlines(line, font, fontSize, faux);
     const advanceWidth = glyphs.reduce((sum, glyph) => sum + glyph.advance, 0);
-    const width = advanceWidth + Math.max(0, glyphs.length - 1) * letterSpacing;
+    const width =
+      advanceWidth + Math.max(0, glyphs.length - 1) * letterSpacing + (glyphs.length > 0 ? italicOverhang : 0);
     return { glyphs, width, advanceWidth };
   });
 

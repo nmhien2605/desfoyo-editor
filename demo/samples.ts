@@ -223,8 +223,8 @@ export const kittlShowcaseSample: Document = baseDoc({
           type: 'text',
           transform: { x: 470, y: 420, scaleX: 1, scaleY: 1, rotation: 0, originX: 0.5, originY: 0.5 },
           // measureText(node, Poppins@72) — khong doan tay, xem comment o
-          // text-fresh o tren.
-          size: { width: 317.952, height: 100.8 },
+          // text-fresh o tren. weight 700 + chi co file Regular => faux bold.
+          size: { width: 340.992, height: 100.8 },
           opacity: 1,
           visible: true,
           locked: false,

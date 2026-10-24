@@ -11,6 +11,6 @@ export {
   registeredFamilies,
   onFontLoaded,
 } from './text/fontService';
-export type { LoadedFont } from './text/fontService';
+export type { LoadedFont, FontVariant, FontStyle } from './text/fontService';
 export { measureText } from './text/textGeometry';
 export { renderPageToPng, renderPageToSvg } from './services/headlessRender';

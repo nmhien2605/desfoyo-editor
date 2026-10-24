@@ -87,12 +87,13 @@ type TextGraphics = Graphics & { textNode?: TextNode; offFontLoaded?: () => void
 
 function draw(obj: TextGraphics, node: TextNode): void {
   obj.clear();
-  const loaded = getLoadedFont(node.font.family);
+  // Biến thể khớp nhất với weight/style của node (fontService.bestFile).
+  const loaded = getLoadedFont(node.font.family, node.font);
   if (!loaded) {
     // Font chưa nạp xong: không vẽ gì và kích hoạt nạp. Callback đăng ký ở
     // create() sẽ vẽ lại khi font sẵn sàng.
     obj.hitArea = null;
-    void loadFont(node.font.family);
+    void loadFont(node.font.family, node.font);
     return;
   }
   const geometry = textGeometry(node, loaded.font);

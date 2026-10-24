@@ -15,8 +15,9 @@ import { exportPng, exportSvg } from './exportService';
 // pan/zoom, marquee, the grid overlay) — this is a one-shot static render,
 // nothing here needs to respond to input. Callers must have already
 // registered/loaded any fonts the page's text nodes use (registerFont/
-// loadFont from '../text/fontService') — mount() below is synchronous and
-// won't wait for a font that isn't ready yet.
+// loadFont from '../text/fontService', one loadFont(family, node.font) per
+// weight/style in use) — mount() below is synchronous and won't wait for a
+// font that isn't ready yet.
 // Application resolution stays at 1 — exportPng/exportSvg take `scale` as an
 // explicit, separate parameter (see exportService.ts), so the app's own
 // backing-store resolution shouldn't also scale the result.

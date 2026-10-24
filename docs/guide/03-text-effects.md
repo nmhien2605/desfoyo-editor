@@ -28,7 +28,7 @@ Mọi thứ đều là field trên `TextNode` (`import type { TextNode } from '@
 | Tính năng | Field | Đo lại `size`? | PNG export | SVG export |
 |---|---|:-:|:-:|:-:|
 | Nội dung | `text` (`\n` = xuống dòng) | ✅ | ✅ | ✅ |
-| Font / cỡ chữ (bold/italic = family riêng, §5) | `font.family`, `font.size` | ✅ | ✅ | ✅ |
+| Font / cỡ chữ / đậm / nghiêng (§5) | `font.family`, `font.size`, `font.weight`, `font.style` | ✅ | ✅ | ✅ |
 | Căn lề | `align: 'left' \| 'center' \| 'right'` | ✅ | ✅ | ✅ |
 | Giãn chữ | `letterSpacing` (px) | ✅ | ✅ | ✅ |
 | Giãn dòng | `lineHeight` (bội số của `font.size`) | ✅ | ✅ | ✅ |
@@ -54,12 +54,16 @@ ref.updateNodeProps(id, { font: { ...node.font, size: 120 } });
 
 **Quy tắc 2 — Đổi hình chữ thì gửi kèm `size` mới trong CÙNG patch.** `node.size` là kết quả layout (pivot xoay/scale và khung chọn đều đọc nó). Tính bằng `measureText(node, font)` với font **đã load**. Gửi 2 patch riêng = 2 bước undo và node "nhảy" giữa chừng. Dùng helper `patchText` ở mục 3.
 
-**Quy tắc 3 — Font phải được đăng ký + load.** `registerFont(family, url)` một lần lúc khởi động, rồi `await loadFont(family)` trước khi đo. Font chưa load thì editor không vẽ chữ đó (tự load và vẽ lại sau), nhưng host sẽ không đo được `size`.
+**Quy tắc 3 — Font phải được đăng ký + load.** `registerFont(family, url)` một lần lúc khởi động, rồi `await loadFont(family)` trước khi đo. Font chưa load thì editor không vẽ chữ đó (tự load và vẽ lại sau), nhưng host sẽ không đo được `size`. Mỗi file đậm/nghiêng đăng ký là một biến thể của CÙNG family (tham số thứ 3, mặc định `{ weight: 400, style: 'normal' }`); node đậm/nghiêng thì `await loadFont(family, node.font)` để nạp đúng file biến thể.
 
 ```ts
 import { registerFont, loadFont } from '@desfoyo/editor';
 registerFont('Anton', '/fonts/Anton-Regular.ttf');
 registerFont('Lobster', '/fonts/Lobster-Regular.ttf');
+registerFont('Poppins', '/fonts/Poppins-Regular.ttf');
+registerFont('Poppins', '/fonts/Poppins-Bold.ttf', { weight: 700 });
+registerFont('Poppins', '/fonts/Poppins-Italic.ttf', { style: 'italic' });
+await loadFont('Poppins', { weight: 700 }); // file khớp nhất cho 700/normal
 ```
 
 ## 3. Helper dùng chung (copy vào host)
@@ -155,7 +159,8 @@ Tất cả dùng `patchText` (có đo lại):
 ```ts
 await patchText(ref, id, { text: 'Hello\nWorld' });
 await patchText(ref, id, { font: { ...node.font, family: 'Lobster' } });   // đổi font: patchText tự load font mới
-await patchText(ref, id, { font: { ...node.font, family: 'Poppins Bold' } }); // bold = family riêng, xem ghi chú
+await patchText(ref, id, { font: { ...node.font, weight: 700 } });          // đậm (file 700 nếu có, không thì faux)
+await patchText(ref, id, { font: { ...node.font, style: 'italic' } });     // nghiêng
 await patchText(ref, id, { font: { ...node.font, size: 120 } });
 await patchText(ref, id, { align: 'right' });
 await patchText(ref, id, { letterSpacing: 10 });  // px, cộng giữa mỗi 2 ký tự
@@ -163,7 +168,7 @@ await patchText(ref, id, { lineHeight: 1.5 });    // 1.5 × font.size
 ```
 
 Ghi chú:
-- `font.weight`/`font.style` chỉ là dữ liệu lưu kèm — renderer **không đọc** chúng: chữ luôn vẽ bằng outline glyph của đúng file đã `registerFont(family, …)`, không có bold/italic giả. Muốn Bold/Italic thật: đăng ký file đó dưới một `family` riêng (vd `registerFont('Anton Bold', …)`) rồi đổi `font.family`.
+- `font.weight`/`font.style` được render (canvas, PNG, SVG, đo `size`). Lib chọn file biến thể khớp nhất của family (cùng style trước, rồi weight gần nhất). Không có file khớp: **faux bold** (nở outline 0.02·`font.size` mỗi phía, mỗi glyph rộng thêm 0.04·`font.size`) khi `weight >= 600`, **faux italic** (nghiêng 12°, `width` cộng thêm (ascent+descent)·tan12°) khi `style: 'italic'`. `weight` 500 trở xuống không có file riêng thì vẽ bằng file thường. File biến thể chưa load thì node đó không vẽ cho tới khi load xong (như font chưa load). Tài liệu 400/normal đo/vẽ y như trước.
 - Không có auto-wrap: chữ chỉ xuống dòng ở `\n`.
 - Muốn chữ to/nhỏ mà không đổi `font.size` (giống kéo góc trong fabric): đổi `transform.scaleX/scaleY` (mục 10) — không cần đo lại.
 
@@ -358,5 +363,5 @@ Rồi bind control vào `selectedText`: `getEffect(selectedText.effects, 'text-s
 - **Slider tạo nhiều bước undo**: `EditorHandle` chưa có `beginGesture/endGesture`, nên mỗi lần `onChange` của slider = 1 bước undo. Cách tạm: cập nhật UI cục bộ khi kéo và chỉ gọi `patchText`/`patchStyle` ở `onPointerUp` (hoặc sự kiện `change` gốc của `<input type="range">`), hoặc chấp nhận nhiều bước. Inspector có sẵn của lib gộp được vì dùng store nội bộ.
 - **Filter effects không vào SVG export** (mục 8). Text-shadow, fill, warp thì có.
 - `fill.alpha`, gradient stop `alpha`, `fill.type: 'texture'` chưa render.
-- Không có bold/italic giả, không auto-wrap, circle chỉ 1 dòng.
-- Font chưa load: chữ không hiện cho tới khi load xong; export (`ref.export`) chờ ảnh nhưng **không** chờ font — hãy `await loadFont` mọi family dùng trong document trước khi export.
+- Bold/italic giả chỉ xấp xỉ (nét nở đều, không như file Bold thật); không auto-wrap, circle chỉ 1 dòng.
+- Font chưa load: chữ không hiện cho tới khi load xong; export (`ref.export`) chờ ảnh nhưng **không** chờ font — hãy `await loadFont(family, node.font)` mọi family/biến thể dùng trong document trước khi export.

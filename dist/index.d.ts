@@ -1267,15 +1267,22 @@ interface HistoryState {
 }
 declare const Editor: react.ForwardRefExoticComponent<EditorProps & react.RefAttributes<EditorHandle>>;
 
+type FontStyle = 'normal' | 'italic';
+interface FontVariant {
+    weight?: number;
+    style?: FontStyle;
+}
 interface LoadedFont {
     family: string;
     font: opentype.Font;
+    weight: number;
+    style: FontStyle;
 }
-declare function registerFont(family: string, source: string | ArrayBuffer): void;
+declare function registerFont(family: string, source: string | ArrayBuffer, variant?: FontVariant): void;
 declare function registeredFamilies(): string[];
-declare function getLoadedFont(family: string): LoadedFont | null;
+declare function getLoadedFont(family: string, variant?: FontVariant): LoadedFont | null;
 declare function onFontLoaded(cb: (family: string) => void): () => void;
-declare function loadFont(family: string): Promise<LoadedFont | null>;
+declare function loadFont(family: string, variant?: FontVariant): Promise<LoadedFont | null>;
 
 declare function measureText(node: TextNode, font: Font): {
     width: number;
@@ -1285,4 +1292,4 @@ declare function measureText(node: TextNode, font: Font): {
 declare function renderPageToPng(page: Page, doc: Document, scale?: number): Promise<Blob>;
 declare function renderPageToSvg(page: Page, doc: Document): Promise<string>;
 
-export { type AssetRef, AssetRefSchema, type BaseNode, BaseNodeSchema, BaseNodeShape, type BlendMode, BlendModeSchema, type CircleParams, CircleParamsSchema, type Document, type DocumentMeta, DocumentMetaSchema, DocumentSchema, Editor, type EditorHandle, type EditorProps, type Effect, EffectSchema, type Fill, FillSchema, type GradientStop, GradientStopSchema, type GroupNode, GroupNodeSchema, type HistoryState, type ImageNode, ImageNodeSchema, type LoadedFont, type Node, NodeSchema, type Page, type PageBackground, PageBackgroundSchema, PageSchema, type ShapeNode, ShapeNodeSchema, type Size, SizeSchema, type Stroke, StrokeSchema, type SvgNode, SvgNodeSchema, type TextNode, TextNodeSchema, type Transform, TransformSchema, type Warp, type WarpAnchor, WarpAnchorSchema, type WarpPath, WarpPathSchema, WarpSchema, type WarpType, WarpTypeSchema, getLoadedFont, loadFont, measureText, onFontLoaded, registerFont, registeredFamilies, renderPageToPng, renderPageToSvg };
+export { type AssetRef, AssetRefSchema, type BaseNode, BaseNodeSchema, BaseNodeShape, type BlendMode, BlendModeSchema, type CircleParams, CircleParamsSchema, type Document, type DocumentMeta, DocumentMetaSchema, DocumentSchema, Editor, type EditorHandle, type EditorProps, type Effect, EffectSchema, type Fill, FillSchema, type FontStyle, type FontVariant, type GradientStop, GradientStopSchema, type GroupNode, GroupNodeSchema, type HistoryState, type ImageNode, ImageNodeSchema, type LoadedFont, type Node, NodeSchema, type Page, type PageBackground, PageBackgroundSchema, PageSchema, type ShapeNode, ShapeNodeSchema, type Size, SizeSchema, type Stroke, StrokeSchema, type SvgNode, SvgNodeSchema, type TextNode, TextNodeSchema, type Transform, TransformSchema, type Warp, type WarpAnchor, WarpAnchorSchema, type WarpPath, WarpPathSchema, WarpSchema, type WarpType, WarpTypeSchema, getLoadedFont, loadFont, measureText, onFontLoaded, registerFont, registeredFamilies, renderPageToPng, renderPageToSvg };

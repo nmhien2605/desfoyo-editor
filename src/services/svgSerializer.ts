@@ -186,7 +186,7 @@ function shadowLayerMarkup(shadow: Extract<Effect, { type: 'text-shadow' }>, sha
 }
 
 function textElement(node: TextNode, defs: string[]): string {
-  const loaded = getLoadedFont(node.font.family);
+  const loaded = getLoadedFont(node.font.family, node.font);
   // Font chưa nạp thì bỏ qua node, cùng quy ước "thiếu dữ liệu thì im lặng"
   // mà nhánh 'svg' phía dưới dùng khi thiếu bản rasterize.
   if (!loaded) return '';
