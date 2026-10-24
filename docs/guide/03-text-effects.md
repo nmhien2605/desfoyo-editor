@@ -29,6 +29,7 @@ Mọi thứ đều là field trên `TextNode` (`import type { TextNode } from '@
 |---|---|:-:|:-:|:-:|
 | Nội dung | `text` (`\n` = xuống dòng) | ✅ | ✅ | ✅ |
 | Font / cỡ chữ / đậm / nghiêng (§5) | `font.family`, `font.size`, `font.weight`, `font.style` | ✅ | ✅ | ✅ |
+| Gạch chân / chữ hoa-thường (§5) | `underline`, `textCase` | chỉ `textCase` | ✅ | ✅ |
 | Căn lề | `align: 'left' \| 'center' \| 'right'` | ✅ | ✅ | ✅ |
 | Giãn chữ | `letterSpacing` (px) | ✅ | ✅ | ✅ |
 | Giãn dòng | `lineHeight` (bội số của `font.size`) | ✅ | ✅ | ✅ |
@@ -165,10 +166,14 @@ await patchText(ref, id, { font: { ...node.font, size: 120 } });
 await patchText(ref, id, { align: 'right' });
 await patchText(ref, id, { letterSpacing: 10 });  // px, cộng giữa mỗi 2 ký tự
 await patchText(ref, id, { lineHeight: 1.5 });    // 1.5 × font.size
+await patchText(ref, id, { underline: true });    // gạch chân
+await patchText(ref, id, { textCase: 'upper' });  // 'none' | 'upper' | 'lower' — chỉ hiển thị
 ```
 
 Ghi chú:
 - `font.weight`/`font.style` được render (canvas, PNG, SVG, đo `size`). Lib chọn file biến thể khớp nhất của family (cùng style trước, rồi weight gần nhất). Không có file khớp: **faux bold** (nở outline 0.02·`font.size` mỗi phía, mỗi glyph rộng thêm 0.04·`font.size`) khi `weight >= 600`, **faux italic** (nghiêng 12°, `width` cộng thêm (ascent+descent)·tan12°) khi `style: 'italic'`. `weight` 500 trở xuống không có file riêng thì vẽ bằng file thường. File biến thể chưa load thì node đó không vẽ cho tới khi load xong (như font chưa load). Tài liệu 400/normal đo/vẽ y như trước.
+- `underline`: dải dưới mỗi dòng, cùng fill (cả gradient), có trong shadow/warp/PNG/SVG. Vị trí và độ dày theo bảng `post` của font (fallback 0.1·`font.size` dưới baseline, dày 0.05·`font.size`). Không đổi `size`. Với warp circle/custom, dải được cắt theo từng glyph và xoay theo glyph — trên vòng tròn hẹp có khe/chồng nhỏ giữa các đoạn.
+- `textCase`: `'upper'`/`'lower'` chỉ đổi chữ khi vẽ/đo (`đường` → `ĐƯỜNG`), `node.text` giữ nguyên như người dùng gõ. Đổi `textCase` phải đo lại `size`.
 - Không có auto-wrap: chữ chỉ xuống dòng ở `\n`.
 - Muốn chữ to/nhỏ mà không đổi `font.size` (giống kéo góc trong fabric): đổi `transform.scaleX/scaleY` (mục 10) — không cần đo lại.
 

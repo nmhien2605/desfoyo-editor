@@ -66,6 +66,11 @@ interface TextNode extends BaseNode {
   letterSpacing: number;
   lineHeight: number;
   fill: Fill;              // màu/gradient/texture
+  // Gạch chân: một dải dưới mỗi dòng, cùng fill. Vị trí/độ dày từ bảng `post`
+  // của font (fallback 0.1em dưới baseline, dày 0.05em). Không đổi width/height.
+  underline?: boolean;     // vắng = false
+  // Chỉ biến đổi khi hiển thị/đo — `text` giữ nguyên như gõ.
+  textCase?: 'none' | 'upper' | 'lower'; // vắng = 'none'
   // Biến dạng text — xem src/schema/warp.ts và
   // docs/superpowers/specs/2026-08-17-text-warp-arclength-design.md
   warp?: {

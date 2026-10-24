@@ -71,6 +71,10 @@ export const TextNodeSchema = z.object({
   lineHeight: z.number().positive(),
   fill: FillSchema,
   warp: WarpSchema.optional(),
+  // Optional (không .default) để tài liệu cũ parse ra y hệt: vắng = false / 'none'.
+  underline: z.boolean().optional(),
+  // Chỉ biến đổi khi hiển thị (textGeometry.ts) — node.text giữ nguyên như gõ.
+  textCase: z.enum(['none', 'upper', 'lower']).optional(),
 });
 export type TextNode = z.infer<typeof TextNodeSchema>;
 

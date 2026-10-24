@@ -888,6 +888,12 @@ declare const TextNodeSchema: z.ZodObject<{
         }, z.core.$strip>>;
         directionInverted: z.ZodDefault<z.ZodBoolean>;
     }, z.core.$strip>>>;
+    underline: z.ZodOptional<z.ZodBoolean>;
+    textCase: z.ZodOptional<z.ZodEnum<{
+        none: "none";
+        upper: "upper";
+        lower: "lower";
+    }>>;
     id: z.ZodString;
     name: z.ZodOptional<z.ZodString>;
     transform: z.ZodObject<{

@@ -1,5 +1,13 @@
 import type { Font } from 'opentype.js';
-import { FAUX_ITALIC_SKEW, getGlyphOutlines, translateContour, type FauxStyle, type GlyphShape } from './glyphOutlines';
+import {
+  FAUX_ITALIC_SKEW,
+  getGlyphOutlines,
+  signedArea,
+  translateContour,
+  type Contour,
+  type FauxStyle,
+  type GlyphShape,
+} from './glyphOutlines';
 
 export interface TextLayout {
   // Đã dịch vào đúng vị trí trong hộp: gốc toạ độ ở góc trên-trái, y xuống.
@@ -32,13 +40,47 @@ export interface LayoutOptions {
   lineHeight: number; // bội số của fontSize
   align: 'left' | 'center' | 'right';
   faux?: FauxStyle; // bold/italic giả khi không có file biến thể (glyphOutlines.ts)
+  underline?: boolean;
+}
+
+// Fallback khi font không có bảng post (hoặc thickness = 0): giá trị em gần
+// với đa số font Latin.
+const UNDERLINE_FALLBACK = { position: -0.1, thickness: 0.05 };
+
+// Gạch chân (px, y xuống, tính từ baseline): top/bottom của dải. post.
+// underlinePosition là toạ độ ĐỈNH của dải theo spec OpenType (âm = dưới baseline).
+export function underlineMetrics(font: Font, fontSize: number): { top: number; bottom: number } {
+  const post = font.tables.post as { underlinePosition?: number; underlineThickness?: number } | undefined;
+  const em = font.unitsPerEm;
+  const ok = post && typeof post.underlinePosition === 'number' && (post.underlineThickness ?? 0) > 0;
+  const position = ok ? post.underlinePosition! / em : UNDERLINE_FALLBACK.position;
+  const thickness = ok ? post.underlineThickness! / em : UNDERLINE_FALLBACK.thickness;
+  const top = -position * fontSize;
+  return { top, bottom: top + thickness * fontSize };
+}
+
+// Hình chữ nhật dạng cubic (control point chia đều — đoạn thẳng chính xác như
+// commandsToContours). `sign` = chiều quay của outer glyph, để dưới fill-rule
+// nonzero (svgSerializer) dải không triệt tiêu chỗ chồng lên chân chữ g/y/p.
+function rectContour(x0: number, y0: number, x1: number, y1: number, sign: number): Contour {
+  const pts = [x0, y0, x1, y0, x1, y1, x0, y1];
+  const c: Contour = [x0, y0];
+  for (let k = 1; k <= 4; k++) {
+    const ax = pts[(k - 1) * 2];
+    const ay = pts[(k - 1) * 2 + 1];
+    const bx = pts[(k % 4) * 2];
+    const by = pts[(k % 4) * 2 + 1];
+    c.push(ax + (bx - ax) / 3, ay + (by - ay) / 3, ax + (2 * (bx - ax)) / 3, ay + (2 * (by - ay)) / 3, bx, by);
+  }
+  if (Math.sign(signedArea(c)) === sign) return c;
+  return rectContour(x1, y0, x0, y1, sign);
 }
 
 // Không auto-wrap: chỉ ngắt dòng ở '\n'. Có wrap thì node.size.width phải trở
 // thành đầu vào của layout thay vì đầu ra, đảo chiều quan hệ giữa kích thước
 // node và nội dung — xem docs/text-future-work.md mục 2.
 export function layoutText(options: LayoutOptions): TextLayout {
-  const { text, font, fontSize, letterSpacing, lineHeight, align, faux } = options;
+  const { text, font, fontSize, letterSpacing, lineHeight, align, faux, underline } = options;
   const scale = fontSize / font.unitsPerEm;
   const ascent = font.ascender * scale;
   const descent = -font.descender * scale; // descender là số âm trong font units
@@ -62,12 +104,15 @@ export function layoutText(options: LayoutOptions): TextLayout {
 
   const shapes: GlyphShape[] = [];
   const shapePivotX: number[] = [];
+  const under = underline ? underlineMetrics(font, fontSize) : null;
+  const firstOuter = measured.flatMap((line) => line.glyphs).find((g) => g.shapes.length > 0)?.shapes[0].outer;
+  const outerSign = (firstOuter && Math.sign(signedArea(firstOuter))) || 1;
   measured.forEach((line, lineIndex) => {
     const slack = width - line.width;
     const offsetX = align === 'center' ? slack / 2 : align === 'right' ? slack : 0;
     const baseline = ascent + lineIndex * lineStep;
     let penX = offsetX;
-    for (const glyph of line.glyphs) {
+    line.glyphs.forEach((glyph, glyphIndex) => {
       const translated = glyph.shapes.map((shape) => ({
         outer: translateContour(shape.outer, penX, baseline),
         holes: shape.holes.map((hole) => translateContour(hole, penX, baseline)),
@@ -88,8 +133,20 @@ export function layoutText(options: LayoutOptions): TextLayout {
         shapes.push(shape);
         shapePivotX.push(pivotX);
       }
+      // Gạch chân cắt theo từng glyph (phủ cả letterSpacing tới glyph kế, trừ
+      // glyph cuối) và dùng chung pivot của glyph: warp family uốn được theo
+      // từng đoạn, còn circle/custom (xoay cứng từng glyph) kéo đoạn đi theo
+      // glyph của nó. Không vượt quá line.width nên không đổi width.
+      if (under) {
+        const isLast = glyphIndex === line.glyphs.length - 1;
+        const x1 = penX + glyph.advance + (isLast ? 0 : letterSpacing);
+        if (x1 > penX) {
+          shapes.push({ outer: rectContour(penX, baseline + under.top, x1, baseline + under.bottom, outerSign), holes: [] });
+          shapePivotX.push(Number.isFinite(pivotX) ? pivotX : (penX + x1) / 2);
+        }
+      }
       penX += glyph.advance + letterSpacing;
-    }
+    });
   });
 
   return { shapes, shapePivotX, width, advanceWidth, height, baselineY: ascent, centerY: (ascent + descent) / 2 };

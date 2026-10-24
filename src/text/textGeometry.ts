@@ -217,13 +217,22 @@ export function resolveDistortPaths(
   };
 }
 
+// Không truyền locale: 'tr'/'az' đổi i/I khác; tiếng Việt (đ→Đ, ư→Ư, dấu
+// thanh) đúng sẵn với Unicode mặc định.
+export function applyTextCase(text: string, textCase: TextNode['textCase']): string {
+  if (textCase === 'upper') return text.toUpperCase();
+  if (textCase === 'lower') return text.toLowerCase();
+  return text;
+}
+
 // `font` là Font caller đang cầm (thường bản thường của family). Với
 // weight/style khác 400/normal, resolveFontVariant đổi sang file biến thể thật
 // nếu đã nạp, không thì giả lập bold/italic trên outline của `font`.
 export function textGeometry(node: TextNode, font: Font): TextGeometry {
   const variant = resolveFontVariant(node.font, font);
   const layout = layoutText({
-    text: node.text,
+    text: applyTextCase(node.text, node.textCase),
+    underline: node.underline,
     font: variant.font,
     faux: { bold: variant.fauxBold, italic: variant.fauxItalic },
     fontSize: node.font.size,
