@@ -30,7 +30,7 @@ Mọi thứ đều là field trên `TextNode` (`import type { TextNode } from '@
 | Nội dung | `text` (`\n` = xuống dòng) | ✅ | ✅ | ✅ |
 | Font / cỡ chữ / đậm / nghiêng (§5) | `font.family`, `font.size`, `font.weight`, `font.style` | ✅ | ✅ | ✅ |
 | Gạch chân / chữ hoa-thường (§5) | `underline`, `textCase` | chỉ `textCase` | ✅ | ✅ |
-| Căn lề | `align: 'left' \| 'center' \| 'right'` | ✅ | ✅ | ✅ |
+| Căn lề | `align: 'left' \| 'center' \| 'right' \| 'justify'` | ✅ | ✅ | ✅ |
 | Giãn chữ | `letterSpacing` (px) | ✅ | ✅ | ✅ |
 | Giãn dòng | `lineHeight` (bội số của `font.size`) | ✅ | ✅ | ✅ |
 | Màu: solid / linear / radial gradient | `fill` | — | ✅ | ✅ |
@@ -163,7 +163,7 @@ await patchText(ref, id, { font: { ...node.font, family: 'Lobster' } });   // đ
 await patchText(ref, id, { font: { ...node.font, weight: 700 } });          // đậm (file 700 nếu có, không thì faux)
 await patchText(ref, id, { font: { ...node.font, style: 'italic' } });     // nghiêng
 await patchText(ref, id, { font: { ...node.font, size: 120 } });
-await patchText(ref, id, { align: 'right' });
+await patchText(ref, id, { align: 'right' });    // 'left' | 'center' | 'right' | 'justify'
 await patchText(ref, id, { letterSpacing: 10 });  // px, cộng giữa mỗi 2 ký tự
 await patchText(ref, id, { lineHeight: 1.5 });    // 1.5 × font.size
 await patchText(ref, id, { underline: true });    // gạch chân
@@ -175,6 +175,8 @@ Ghi chú:
 - `underline`: dải dưới mỗi dòng, cùng fill (cả gradient), có trong shadow/warp/PNG/SVG. Vị trí và độ dày theo bảng `post` của font (fallback 0.1·`font.size` dưới baseline, dày 0.05·`font.size`). Không đổi `size`. Với warp circle/custom, dải được cắt theo từng glyph và xoay theo glyph — trên vòng tròn hẹp có khe/chồng nhỏ giữa các đoạn.
 - `textCase`: `'upper'`/`'lower'` chỉ đổi chữ khi vẽ/đo (`đường` → `ĐƯỜNG`), `node.text` giữ nguyên như người dùng gõ. Đổi `textCase` phải đo lại `size`.
 - Không có auto-wrap: chữ chỉ xuống dòng ở `\n`.
+- `align: 'justify'` (không wrap): mọi dòng trừ dòng cuối được dãn tới bằng dòng rộng nhất, phần dư chia đều cho các dấu cách giữa hai từ; dòng cuối, dòng chỉ một từ và text một dòng căn trái. `size` không đổi (= dòng rộng nhất). Áp dụng cho canvas, PNG, SVG, warp, shadow, gạch chân.
+- Font có bảng GSUB mà opentype.js chưa hỗ trợ (vd. Agbalumo): lib bỏ substitution (ligature/alternates) cho font đó và tra glyph từng ký tự — chữ vẫn đo/vẽ được, console có một `warn`.
 - Muốn chữ to/nhỏ mà không đổi `font.size` (giống kéo góc trong fabric): đổi `transform.scaleX/scaleY` (mục 10) — không cần đo lại.
 
 ## 6. Màu chữ (fill)
@@ -198,7 +200,7 @@ patchStyle(ref, id, {
 });
 ```
 
-- Gradient trải theo khung của chính node (không theo từng ký tự).
+- Gradient trải theo hộp node `0..size.width × 0..size.height` (không theo từng ký tự, không theo bbox mực), cả gạch chân; toạ độ chuẩn hoá 0..1 của hộp — đường gradient qua tâm theo `(cos angle, sin angle)`, offset 0/1 ở tâm ∓ nửa vector đó. Canvas/PNG và SVG (`gradientUnits="userSpaceOnUse"` + `gradientTransform` scale hộp) khớp nhau. Với warp, hộp là hộp phẳng chưa warp.
 - `fill.alpha` và `stop.alpha` **chưa** được áp dụng khi render — muốn trong suốt dùng `opacity` của node (mục 10).
 - `type: 'texture'` có trong schema nhưng chưa render thật (ra màu xám) — đừng đưa vào UI.
 

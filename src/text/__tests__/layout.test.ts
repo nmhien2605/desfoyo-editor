@@ -123,3 +123,44 @@ describe('layoutText', () => {
     expect(result.advanceWidth).toBeCloseTo(Math.max(shortAdv, longAdv), 5);
   });
 });
+
+describe('layoutText justify', () => {
+  const minX = (shapes: { outer: number[] }[]) => Math.min(...shapes.flatMap((s) => s.outer.filter((_, i) => i % 2 === 0)));
+  const maxX = (shapes: { outer: number[] }[]) => Math.max(...shapes.flatMap((s) => s.outer.filter((_, i) => i % 2 === 0)));
+
+  it('dong khong phai cuoi dan toi width, dong cuoi giu can trai, width khong doi', () => {
+    const text = 'a b c\nabcdefgh\na b';
+    const left = layout(text);
+    const just = layout(text, { align: 'justify' });
+    expect(just.width).toBeCloseTo(left.width, 6);
+    expect(just.height).toBeCloseTo(left.height, 6);
+    // 'a b c' = 3 glyph mực (space không có shape), 'abcdefgh' = 8, 'a b' = 2.
+    const line1 = just.shapes.slice(0, 3);
+    const line1Left = left.shapes.slice(0, 3);
+    expect(minX(line1)).toBeCloseTo(minX(line1Left), 6);
+    // Glyph cuối dòng 1 dịch đúng slack: nó kết thúc ở cùng chỗ như khi căn phải.
+    const right = layout(text, { align: 'right' });
+    expect(maxX(line1)).toBeCloseTo(maxX(right.shapes.slice(0, 3)), 4);
+    // Hai khoảng trắng chia đều: 'b' dịch nửa slack.
+    const slack = maxX(right.shapes.slice(0, 3)) - maxX(line1Left);
+    expect(minX([just.shapes[1]]) - minX([left.shapes[1]])).toBeCloseTo(slack / 2, 4);
+    // Dòng cuối y như căn trái.
+    expect(just.shapes.slice(-2)).toEqual(left.shapes.slice(-2));
+  });
+
+  it('mot dong / dong mot tu = left', () => {
+    expect(layout('a b', { align: 'justify' }).shapes).toEqual(layout('a b').shapes);
+    expect(layout('abc\nabcdefgh', { align: 'justify' }).shapes).toEqual(layout('abc\nabcdefgh').shapes);
+  });
+
+  it('gach chan phu ca khoang dan', () => {
+    const text = 'a b\nabcdefgh';
+    const just = layout(text, { align: 'justify', underline: true });
+    // shapes dòng 1: a, gạch a, gạch space, b, gạch b → đoạn gạch cuối kết thúc ở width.
+    expect(maxX(just.shapes.slice(0, 5))).toBeCloseTo(
+      maxX(layout(text, { align: 'right', underline: true }).shapes.slice(0, 5)),
+      4,
+    );
+  });
+});
+

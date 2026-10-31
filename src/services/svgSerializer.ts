@@ -22,7 +22,11 @@ let gradientCounter = 0;
 // directly, no defs needed. 'texture' fills have no SVG pattern-fill
 // mapping in v1 — ponytail-scoped simplification, falls back to a neutral
 // gray rather than attempting a <pattern> translation.
-function fillAttr(fill: Fill, defs: string[]): string {
+//
+// `box` (text): gradient trải theo hộp node 0..width × 0..height thay vì bbox
+// mực của path — cùng toạ độ chuẩn hoá 0..1, chỉ đổi đơn vị qua
+// gradientTransform, khớp resolveFill(fill, box) bên canvas.
+function fillAttr(fill: Fill, defs: string[], box?: { width: number; height: number }): string {
   if (fill.type === 'solid') {
     const opacity = fill.alpha !== undefined ? ` fill-opacity="${fill.alpha}"` : '';
     return `fill="${fill.color}"${opacity}`;
@@ -36,6 +40,10 @@ function fillAttr(fill: Fill, defs: string[]): string {
         `<stop offset="${s.offset}" stop-color="${s.color}"${s.alpha !== undefined ? ` stop-opacity="${s.alpha}"` : ''}/>`,
     )
     .join('');
+  const units =
+    box && box.width > 0 && box.height > 0
+      ? ` gradientUnits="userSpaceOnUse" gradientTransform="matrix(${box.width} 0 0 ${box.height} 0 0)"`
+      : '';
   if (fill.type === 'linear-gradient') {
     const rad = fill.angle;
     const x2 = 0.5 + Math.cos(rad) * 0.5;
@@ -43,10 +51,11 @@ function fillAttr(fill: Fill, defs: string[]): string {
     const x1 = 0.5 - Math.cos(rad) * 0.5;
     const y1 = 0.5 - Math.sin(rad) * 0.5;
     defs.push(
-      `<linearGradient id="${id}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">${stops}</linearGradient>`,
+      `<linearGradient id="${id}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"${units}>${stops}</linearGradient>`,
     );
   } else {
-    defs.push(`<radialGradient id="${id}">${stops}</radialGradient>`);
+    const at = units ? ' cx="0.5" cy="0.5" r="0.5"' : '';
+    defs.push(`<radialGradient id="${id}"${at}${units}>${stops}</radialGradient>`);
   }
   return `fill="url(#${id})"`;
 }
@@ -190,7 +199,8 @@ function textElement(node: TextNode, defs: string[]): string {
   // Font chưa nạp thì bỏ qua node, cùng quy ước "thiếu dữ liệu thì im lặng"
   // mà nhánh 'svg' phía dưới dùng khi thiếu bản rasterize.
   if (!loaded) return '';
-  const shapes: GlyphShape[] = textGeometry(node, loaded.font).shapes;
+  const geometry = textGeometry(node, loaded.font);
+  const shapes: GlyphShape[] = geometry.shapes;
   if (shapes.length === 0) return '';
   const data = shapes
     .map((shape) => [shape.outer, ...shape.holes].map(contourToPathData).join(' '))
@@ -209,7 +219,7 @@ function textElement(node: TextNode, defs: string[]): string {
     shadowMarkup = shadowLayerMarkup(shadow, shapes, node.font.size);
   }
 
-  return `${shadowMarkup}<path d="${data}" fill-rule="nonzero" ${fillAttr(node.fill, defs)}${filterAttr}/>`;
+  return `${shadowMarkup}<path d="${data}" fill-rule="nonzero" ${fillAttr(node.fill, defs, { width: geometry.pivotWidth, height: geometry.height })}${filterAttr}/>`;
 }
 
 export function serializeNode(

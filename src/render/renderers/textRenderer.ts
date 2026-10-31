@@ -46,8 +46,16 @@ function trace(target: TextDrawTarget, contour: GlyphShape['outer']): void {
 // cùng của lệnh fill ngay trước đó (GraphicsContext.cut() clone _activePath,
 // không phụ thuộc path được dựng bằng lệnh gì), nên phải fill *từng* outer
 // rồi cut lỗ của chính nó — không gộp nhiều outer vào một fill.
-export function drawTextShapes(target: TextDrawTarget, shapes: GlyphShape[], fill: Fill): void {
-  const style = resolveFill(fill);
+//
+// `box`: hộp node (0..width × 0..height) — một gradient dùng chung cho mọi
+// glyph + đoạn gạch chân, trải theo hộp thay vì restart ở mỗi chữ.
+export function drawTextShapes(
+  target: TextDrawTarget,
+  shapes: GlyphShape[],
+  fill: Fill,
+  box?: { width: number; height: number },
+): void {
+  const style = resolveFill(fill, box);
   for (const shape of shapes) {
     trace(target, shape.outer);
     target.fill(style);
@@ -108,7 +116,10 @@ function draw(obj: TextGraphics, node: TextNode): void {
     drawTextShadow(obj as unknown as TextDrawTarget, layers, shadow.color, shadow.thickness);
   }
 
-  drawTextShapes(obj as unknown as TextDrawTarget, geometry.shapes, node.fill);
+  drawTextShapes(obj as unknown as TextDrawTarget, geometry.shapes, node.fill, {
+    width: geometry.pivotWidth,
+    height: geometry.height,
+  });
 
   // Hit-test mặc định của Graphics là hit-test từng path đã tô, nên chỉ đúng
   // phần MỰC của chữ mới bấm được: bấm vào khoảng trắng giữa hai ký tự (hay

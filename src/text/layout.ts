@@ -38,7 +38,7 @@ export interface LayoutOptions {
   fontSize: number;
   letterSpacing: number;
   lineHeight: number; // bội số của fontSize
-  align: 'left' | 'center' | 'right';
+  align: 'left' | 'center' | 'right' | 'justify';
   faux?: FauxStyle; // bold/italic giả khi không có file biến thể (glyphOutlines.ts)
   underline?: boolean;
 }
@@ -111,8 +111,19 @@ export function layoutText(options: LayoutOptions): TextLayout {
     const slack = width - line.width;
     const offsetX = align === 'center' ? slack / 2 : align === 'right' ? slack : 0;
     const baseline = ascent + lineIndex * lineStep;
+    // Justify không wrap: dãn mọi dòng trừ dòng cuối tới width (dòng rộng
+    // nhất) bằng cách chia đều slack cho các khoảng trắng GIỮA hai từ; dòng
+    // cuối / dòng một từ giữ căn trái.
+    const first = line.glyphs.findIndex((g) => !g.space);
+    let last = line.glyphs.length - 1;
+    while (last >= 0 && line.glyphs[last].space) last--;
+    const isGap = (i: number) => line.glyphs[i].space && i > first && i < last;
+    const gaps =
+      align === 'justify' && lineIndex < measured.length - 1 ? line.glyphs.filter((_, i) => isGap(i)).length : 0;
+    const gapExtra = gaps > 0 ? slack / gaps : 0;
     let penX = offsetX;
     line.glyphs.forEach((glyph, glyphIndex) => {
+      const advance = glyph.advance + (gapExtra && isGap(glyphIndex) ? gapExtra : 0);
       const translated = glyph.shapes.map((shape) => ({
         outer: translateContour(shape.outer, penX, baseline),
         holes: shape.holes.map((hole) => translateContour(hole, penX, baseline)),
@@ -139,13 +150,13 @@ export function layoutText(options: LayoutOptions): TextLayout {
       // glyph của nó. Không vượt quá line.width nên không đổi width.
       if (under) {
         const isLast = glyphIndex === line.glyphs.length - 1;
-        const x1 = penX + glyph.advance + (isLast ? 0 : letterSpacing);
+        const x1 = penX + advance + (isLast ? 0 : letterSpacing);
         if (x1 > penX) {
           shapes.push({ outer: rectContour(penX, baseline + under.top, x1, baseline + under.bottom, outerSign), holes: [] });
           shapePivotX.push(Number.isFinite(pivotX) ? pivotX : (penX + x1) / 2);
         }
       }
-      penX += glyph.advance + letterSpacing;
+      penX += advance + letterSpacing;
     });
   });
 

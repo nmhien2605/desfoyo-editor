@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { getLoadedFont, loadFont, registerFont } from '../../text/fontService';
-import { Graphics, Rectangle } from 'pixi.js';
+import { FillGradient, Graphics, Rectangle } from 'pixi.js';
 import {
   drawTextShadow,
   drawTextShapes,
@@ -133,6 +133,63 @@ describe('drawTextShapes', () => {
       'closePath',
       'cut',
     ]);
+  });
+});
+
+describe('drawTextShapes — gradient trai theo hop node', () => {
+  const stops = [
+    { offset: 0, color: '#ff0000' },
+    { offset: 1, color: '#0000ff' },
+  ];
+
+  function fills(fill: TextNode['fill'], text: string, underline = false) {
+    const styles: unknown[] = [];
+    const { target } = fakeTarget();
+    target.fill = (style) => (styles.push(style), target);
+    const font = getLoadedFont('Poppins')!.font;
+    const geometry = textGeometry({ ...node, text, underline, fill }, font);
+    const box = { width: geometry.pivotWidth, height: geometry.height };
+    drawTextShapes(target, geometry.shapes, fill, box);
+    return { styles, box };
+  }
+
+  it('linear: moi glyph + doan gach chan dung CHUNG mot gradient global, khop quy uoc chuan hoa 0..1 cua hop', () => {
+    const angle = 0.6;
+    const { styles, box } = fills({ type: 'linear-gradient', angle, stops }, 'ab c', true);
+    expect(styles.length).toBeGreaterThan(3);
+    const g = styles[0] as FillGradient;
+    expect(g).toBeInstanceOf(FillGradient);
+    expect(styles.every((s) => s === g)).toBe(true);
+    expect(g.textureSpace).toBe('global');
+    // Tham số gradient tại mọi điểm px = tham số chuẩn hoá (u,v) trên đường
+    // qua tâm hộp theo (cos, sin) — đúng gradientHandles.ts bên web.
+    const d = { x: Math.cos(angle), y: Math.sin(angle) };
+    const e = { x: g.end.x - g.start.x, y: g.end.y - g.start.y };
+    const e2 = e.x * e.x + e.y * e.y;
+    for (const [u, v] of [[0, 0], [1, 1], [0.3, 0.8], [0.5, 0.5]]) {
+      const px = { x: u * box.width, y: v * box.height };
+      const pixelT = ((px.x - g.start.x) * e.x + (px.y - g.start.y) * e.y) / e2;
+      const normT = 0.5 + (u - 0.5) * d.x + (v - 0.5) * d.y;
+      expect(pixelT).toBeCloseTo(normT, 9);
+    }
+  });
+
+  it('radial: elip tam hop, ban kinh nua hop', () => {
+    const { styles, box } = fills({ type: 'radial-gradient', stops }, 'ab');
+    const g = styles[0] as FillGradient;
+    expect(styles.every((s) => s === g)).toBe(true);
+    expect(g.textureSpace).toBe('global');
+    expect(g.center).toEqual({ x: box.width / 2, y: box.height / 2 });
+    expect(g.outerRadius).toBeCloseTo(Math.max(box.width, box.height) / 2, 9);
+    expect(g.outerRadius * g.scale).toBeCloseTo(Math.min(box.width, box.height) / 2, 9);
+  });
+
+  it('khong co box thi giu local nhu cu (shape)', () => {
+    const { target } = fakeTarget();
+    let style: unknown;
+    target.fill = (s) => ((style = s), target);
+    drawTextShapes(target, [{ outer: [0, 0, 1, 0, 2, 0, 3, 0], holes: [] }], { type: 'linear-gradient', angle: 0, stops });
+    expect((style as FillGradient).textureSpace).toBe('local');
   });
 });
 

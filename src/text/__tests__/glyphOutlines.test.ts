@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import opentype from 'opentype.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -133,3 +133,24 @@ describe('contour polybezier', () => {
     expect(glyph.shapes[0].holes).toHaveLength(1);
   });
 });
+
+describe('getGlyphOutlines khi GSUB khong ho tro', () => {
+  it('lui ve tra glyph tung ky tu thay vi nem', () => {
+    const expected = getGlyphOutlines('ab o', poppins, 100);
+    // Font "hong" giong Agbalumo: stringToGlyphs nem loi GSUB cua opentype.js.
+    const broken = Object.create(poppins) as typeof poppins;
+    broken.stringToGlyphs = () => {
+      throw new Error('substitutionType : 62 lookupType: 6 - substFormat: 2 is not yet supported');
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const glyphs = getGlyphOutlines('ab o', broken, 100);
+    getGlyphOutlines('ab o', broken, 100);
+    expect(warn).toHaveBeenCalledTimes(1); // nhớ font hỏng, không ném lại
+    warn.mockRestore();
+    expect(glyphs).toHaveLength(4);
+    expect(glyphs.map((g) => g.advance)).toEqual(expected.map((g) => g.advance));
+    expect(glyphs[2].space).toBe(true);
+    expect(glyphs[3].shapes).toEqual(expected[3].shapes);
+  });
+});
+

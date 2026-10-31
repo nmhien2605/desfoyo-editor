@@ -820,6 +820,7 @@ declare const TextNodeSchema: z.ZodObject<{
         center: "center";
         left: "left";
         right: "right";
+        justify: "justify";
     }>;
     letterSpacing: z.ZodNumber;
     lineHeight: z.ZodNumber;

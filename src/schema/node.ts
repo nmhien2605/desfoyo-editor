@@ -53,9 +53,9 @@ export const SvgNodeSchema = z.object({
 export type SvgNode = z.infer<typeof SvgNodeSchema>;
 
 // TextNode: text là nội dung thô, mọi hình học suy ra từ đó tại render time
-// (src/text/textGeometry.ts) chứ không lưu trong model. `align: 'justify'` mà
-// docs/04-data-model.md nêu bị cắt khỏi v1 — justify cần auto-wrap, xem
-// docs/text-future-work.md mục 2.
+// (src/text/textGeometry.ts) chứ không lưu trong model. `align: 'justify'`
+// không auto-wrap: dãn các dòng (trừ dòng cuối) tới dòng rộng nhất — xem
+// src/text/layout.ts và docs/text-future-work.md mục 2.
 export const TextNodeSchema = z.object({
   ...BaseNodeShape,
   type: z.literal('text'),
@@ -66,7 +66,7 @@ export const TextNodeSchema = z.object({
     style: z.enum(['normal', 'italic']),
     size: z.number().positive(),
   }),
-  align: z.enum(['left', 'center', 'right']),
+  align: z.enum(['left', 'center', 'right', 'justify']),
   letterSpacing: z.number(),
   lineHeight: z.number().positive(),
   fill: FillSchema,

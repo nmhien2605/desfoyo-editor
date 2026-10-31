@@ -62,10 +62,12 @@ interface TextNode extends BaseNode {
   font: { family: string; weight: number; style: 'normal' | 'italic'; size: number };
   // weight/style: chọn file registerFont(family, url, { weight, style }) khớp nhất;
   // không có thì faux bold (weight >= 600) / faux italic (12°) — src/text/fontService.ts
+  // justify không wrap: dãn mọi dòng trừ dòng cuối tới dòng rộng nhất (chia
+  // đều cho dấu cách giữa hai từ); dòng cuối / một từ căn trái — src/text/layout.ts
   align: 'left' | 'center' | 'right' | 'justify';
   letterSpacing: number;
   lineHeight: number;
-  fill: Fill;              // màu/gradient/texture
+  fill: Fill;              // màu/gradient/texture — gradient trải theo hộp node 0..w × 0..h
   // Gạch chân: một dải dưới mỗi dòng, cùng fill. Vị trí/độ dày từ bảng `post`
   // của font (fallback 0.1em dưới baseline, dày 0.05em). Không đổi width/height.
   underline?: boolean;     // vắng = false

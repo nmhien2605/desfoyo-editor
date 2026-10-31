@@ -40,6 +40,8 @@ Nếu chỉ thiếu variable font mà không thiếu shaping thì **fontkit** l�
 
 Ngắt dòng tiếng Việt: cẩn thận với dấu tổ hợp (combining diacritics) — không được ngắt giữa ký tự cơ sở và dấu.
 
+**Liên quan — `align: 'justify'`.** Đã có (textmodal-14) nhưng không wrap: các dòng (trừ dòng cuối) dãn tới dòng rộng nhất bằng cách chia slack cho dấu cách giữa hai từ (`src/text/layout.ts`). Khi có wrap, chỉ cần đổi "dòng rộng nhất" thành `node.size.width`.
+
 **Liên quan — `align` hiện là no-op hình ảnh cho text một dòng.** `node.size.width` luôn đúng bằng chiều rộng thật của chữ (xem bất biến "size derived from content"), nên `center`/`right` không có khoảng trống (`slack`) nào để dịch vào — `layout.ts` tính đúng `slack = 0` và không có gì thay đổi trên màn hình. Đây là hành vi đúng, không phải bug; nó chỉ trở nên có ý nghĩa khi có text box chiều rộng cố định hoặc auto-wrap nhiều dòng (mục này), lúc đó `node.size.width` mới có thể lớn hơn chiều rộng một dòng chữ.
 
 ---

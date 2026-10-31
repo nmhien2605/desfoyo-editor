@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { loadFont, registerFont, resetFontsForTest } from '../../text/fontService';
+import { getLoadedFont, loadFont, registerFont, resetFontsForTest } from '../../text/fontService';
+import { textGeometry } from '../../text/textGeometry';
 import { serializeNode } from '../svgSerializer';
 import type { Document, TextNode } from '../../schema';
 
@@ -214,3 +215,26 @@ describe('text-shadow trong SVG export', () => {
     expect(svg).not.toContain('<filter');
   });
 });
+
+describe('serializeNode text gradient', () => {
+  const stops = [
+    { offset: 0, color: '#ff0000' },
+    { offset: 1, color: '#0000ff' },
+  ];
+
+  it('linear trai theo hop node (userSpaceOnUse + scale hop), khong theo bbox muc', () => {
+    const defs: string[] = [];
+    const text = { ...node, text: 'ab', fill: { type: 'linear-gradient' as const, angle: 0, stops } };
+    serializeNode(text, doc, defs);
+    const { pivotWidth, height } = textGeometry(text, getLoadedFont('Poppins')!.font);
+    expect(defs[0]).toContain('x1="0" y1="0.5" x2="1" y2="0.5"');
+    expect(defs[0]).toContain(`gradientUnits="userSpaceOnUse" gradientTransform="matrix(${pivotWidth} 0 0 ${height} 0 0)"`);
+  });
+
+  it('radial: tam/ban kinh chuan hoa tren hop', () => {
+    const defs: string[] = [];
+    serializeNode({ ...node, fill: { type: 'radial-gradient', stops } }, doc, defs);
+    expect(defs[0]).toMatch(/<radialGradient id="[^"]+" cx="0.5" cy="0.5" r="0.5" gradientUnits="userSpaceOnUse"/);
+  });
+});
+

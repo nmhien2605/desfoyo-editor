@@ -67,7 +67,7 @@ describe('TextNodeSchema', () => {
     expect(TextNodeSchema.safeParse(bad).success).toBe(false);
   });
 
-  it('tu choi align "justify" (chua ho tro)', () => {
-    expect(TextNodeSchema.safeParse({ ...validText, align: 'justify' }).success).toBe(false);
+  it('chap nhan align "justify" (textmodal-14)', () => {
+    expect(TextNodeSchema.safeParse({ ...validText, align: 'justify' }).success).toBe(true);
   });
 });

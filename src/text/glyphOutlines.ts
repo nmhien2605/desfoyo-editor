@@ -18,6 +18,7 @@ export interface GlyphShape {
 export interface GlyphOutline {
   advance: number;
   shapes: GlyphShape[];
+  space?: boolean; // U+0020 — khoảng mà align 'justify' dãn ra (layout.ts)
 }
 
 // Cầu phương Gauss–Legendre 3 nút trên [0,1].
@@ -266,6 +267,23 @@ function groupIntoShapes(contours: Contour[]): GlyphShape[] {
   return shapes;
 }
 
+// Font có lookup GSUB mà opentype.js 2.0 chưa hỗ trợ (vd. Agbalumo: "lookupType
+// 6 substFormat 2 is not yet supported") ném ngay trong stringToGlyphs. Khi đó
+// lùi về tra glyph từng code point, bỏ substitution (ligature/alternates) —
+// chữ vẫn đo/vẽ được. Nhớ font hỏng để không ném lại mỗi lần vẽ.
+const gsubBroken = new WeakSet<Font>();
+function toGlyphs(text: string, font: Font) {
+  if (!gsubBroken.has(font)) {
+    try {
+      return font.stringToGlyphs(text);
+    } catch (error) {
+      gsubBroken.add(font);
+      console.warn('[desfoyo] GSUB cua font khong ho tro, bo substitution', error);
+    }
+  }
+  return Array.from(text, (char) => font.charToGlyph(char));
+}
+
 // Chỉ nơi duy nhất trong codebase đọc glyph outline/path từ opentype.js.
 // fontService.ts chỉ parse font file thành Font object, không đụng tới path geometry.
 // Đổi sang harfbuzzjs hay fontkit về sau chỉ phải viết lại file này — xem docs/text-future-work.md.
@@ -281,12 +299,12 @@ export function getGlyphOutlines(text: string, font: Font, fontSize: number, fau
   const scale = fontSize / font.unitsPerEm;
   const bold = faux.bold ? FAUX_BOLD_EM * fontSize : 0;
   const descent = -font.descender * scale;
-  const glyphs = font.stringToGlyphs(text);
+  const glyphs = toGlyphs(text, font);
   const outlines = glyphs.map((glyph) => {
     let shapes = groupIntoShapes(commandsToContours(glyph.getPath(0, 0, fontSize).commands));
     if (bold) shapes = mapShapes(shapes, (c, sign) => translateContour(emboldenContour(c, bold, sign), bold, 0));
     if (faux.italic) shapes = mapShapes(shapes, (c) => skewContour(c, descent));
-    return { advance: (glyph.advanceWidth ?? 0) * scale + 2 * bold, shapes };
+    return { advance: (glyph.advanceWidth ?? 0) * scale + 2 * bold, shapes, space: glyph.unicode === 32 };
   });
   // GPOS/kern cho từng cặp liền kề — cộng thêm vào advance của glyph đứng
   // trước trong cặp, vì pen chỉ tiến sau khi đã "qua" glyph đó. Chỉ cộng dồn,
