@@ -17878,6 +17878,15 @@ var Dp = class {
 		for (let t of [...e.children]) this.destroySubtree(t);
 		e.label && this.displayObjects.delete(e.label), e.destroy();
 	}
+	placeChild(e, t, n, r) {
+		let i;
+		for (let t = r + 1; t < n.length && !i; t++) {
+			let r = this.displayObjects.get(n[t].id);
+			r?.parent === e && (i = r);
+		}
+		let a = i ? e.getChildIndex(i) : e.children.length;
+		t.parent === e && e.getChildIndex(t) < a && --a, e.addChildAt(t, a);
+	}
 	apply(e, t) {
 		if (Jc(e)) return;
 		let n = Ep(t, e.pageId);
@@ -17888,7 +17897,7 @@ var Dp = class {
 				let i = e.parentId ? this.displayObjects.get(e.parentId) : this.layer;
 				if (!i) return;
 				let a = wp(r.node, t);
-				a.label = r.node.id, this.displayObjects.set(r.node.id, a), i.addChildAt(a, r.index), this.onNodeMounted?.(a, r.node), r.node.type === "group" && this.mountChildren(r.node.children, a, t);
+				a.label = r.node.id, this.displayObjects.set(r.node.id, a), this.placeChild(i, a, r.parent, r.index), this.onNodeMounted?.(a, r.node), r.node.type === "group" && this.mountChildren(r.node.children, a, t);
 				break;
 			}
 			case "RemoveNode": {
@@ -17907,7 +17916,7 @@ var Dp = class {
 			case "Reorder": {
 				let t = this.displayObjects.get(e.nodeId), r = Xc(n.children, e.nodeId);
 				if (!t || !r || !t.parent) return;
-				t.parent.setChildIndex(t, r.index);
+				this.placeChild(t.parent, t, r.parent, r.index);
 				break;
 			}
 			case "GroupNodes":

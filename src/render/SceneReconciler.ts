@@ -94,6 +94,21 @@ export class SceneReconciler {
     obj.destroy();
   }
 
+  // Doc index != display index: the page layer also holds non-node children
+  // (CanvasHost's grid sits at index 0 after every remount), so place the
+  // object just below the display object of its next doc sibling instead.
+  private placeChild(parent: Container, obj: Container, siblings: Node[], index: number): void {
+    let anchor: Container | undefined;
+    for (let i = index + 1; i < siblings.length && !anchor; i++) {
+      const next = this.displayObjects.get(siblings[i].id);
+      if (next?.parent === parent) anchor = next;
+    }
+    let to = anchor ? parent.getChildIndex(anchor) : parent.children.length;
+    // addChildAt on the same parent removes the child before inserting.
+    if (obj.parent === parent && parent.getChildIndex(obj) < to) to -= 1;
+    parent.addChildAt(obj, to);
+  }
+
   apply(cmd: Command, doc: Document): void {
     // Page-level commands (AddPage/RemovePage/ReorderPage/DuplicatePage)
     // never need a targeted Pixi update here — CanvasHost.tsx remounts the
@@ -113,7 +128,7 @@ export class SceneReconciler {
         const obj = createDisplayObject(location.node, doc);
         obj.label = location.node.id;
         this.displayObjects.set(location.node.id, obj);
-        parentContainer.addChildAt(obj, location.index);
+        this.placeChild(parentContainer, obj, location.parent, location.index);
         this.onNodeMounted?.(obj, location.node);
         if (location.node.type === 'group') this.mountChildren(location.node.children, obj, doc);
         break;
@@ -137,7 +152,7 @@ export class SceneReconciler {
         const obj = this.displayObjects.get(cmd.nodeId);
         const location = findNodeInTree(page.children, cmd.nodeId);
         if (!obj || !location || !obj.parent) return;
-        obj.parent.setChildIndex(obj, location.index);
+        this.placeChild(obj.parent, obj, location.parent, location.index);
         break;
       }
       case 'GroupNodes':

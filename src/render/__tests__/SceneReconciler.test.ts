@@ -248,4 +248,55 @@ describe('SceneReconciler', () => {
     expect(reconciler.getDisplayObject('nested-shape')).toBeUndefined();
     expect(nestedContainer.destroyed).toBe(true);
   });
+  // D1': CanvasHost puts its grid Graphics at index 0 of the page layer before
+  // mount(), so doc indices are one less than display indices on a loaded doc.
+  it('keeps display order equal to doc order when the layer holds a non-node child below the nodes', () => {
+    const layer = new Container();
+    const grid = new Graphics();
+    layer.addChild(grid);
+    const reconciler = new SceneReconciler(layer);
+    const page = makePage();
+    let doc = makeDoc(page);
+    reconciler.mount(page, doc);
+
+    const nodeOrder = () => layer.children.filter((c) => c !== grid).map((c) => c.label);
+    const docOrder = () => page.children.map((n) => n.id);
+    const shape = (id: string): Page['children'][number] => ({
+      id,
+      type: 'shape',
+      transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+      size: { width: 10, height: 10 },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      shape: 'rect',
+      fill: { type: 'solid', color: '#000000' },
+    });
+
+    const top = shape('top');
+    page.children.push(top);
+    doc = { ...doc, pages: [page] };
+    reconciler.apply({ type: 'AddNode', pageId: 'page-1', node: top }, doc);
+    expect(nodeOrder()).toEqual(docOrder());
+    expect(layer.children[layer.children.length - 1]).toBe(reconciler.getDisplayObject('top'));
+    expect(layer.children[0]).toBe(grid);
+
+    const bottom = shape('bottom');
+    page.children.unshift(bottom);
+    doc = { ...doc, pages: [page] };
+    reconciler.apply({ type: 'AddNode', pageId: 'page-1', node: bottom }, doc);
+    expect(nodeOrder()).toEqual(docOrder());
+    expect(layer.children[0]).toBe(grid);
+
+    const [moved] = page.children.splice(1, 1);
+    page.children.push(moved);
+    reconciler.apply({ type: 'Reorder', pageId: 'page-1', nodeId: moved.id, to: 'top' }, doc);
+    expect(nodeOrder()).toEqual(docOrder());
+
+    const [last] = page.children.splice(page.children.length - 1, 1);
+    page.children.unshift(last);
+    reconciler.apply({ type: 'Reorder', pageId: 'page-1', nodeId: last.id, to: 'bottom' }, doc);
+    expect(nodeOrder()).toEqual(docOrder());
+    expect(layer.children[0]).toBe(grid);
+  });
 });
