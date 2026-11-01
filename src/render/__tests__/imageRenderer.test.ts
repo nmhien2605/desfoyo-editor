@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BlurFilter } from 'pixi.js';
 import { AdjustmentFilter } from 'pixi-filters';
-import { buildImageFilters } from '../renderers/imageRenderer';
+import { buildImageFilters, decodeImage } from '../renderers/imageRenderer';
 
 describe('buildImageFilters', () => {
   it('returns an empty array for undefined filters', () => {
@@ -40,5 +40,38 @@ describe('buildImageFilters', () => {
   it('builds both filters when adjustment and blur are set together', () => {
     const filters = buildImageFilters({ brightness: 1.2, blur: 3 });
     expect(filters).toHaveLength(2);
+  });
+});
+
+describe('decodeImage', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const stubImage = (w: number, h: number) => {
+    // jsdom has no img.decode()
+    HTMLImageElement.prototype.decode = () => Promise.resolve();
+    vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(w);
+    vi.spyOn(HTMLImageElement.prototype, 'naturalHeight', 'get').mockReturnValue(h);
+    const ctx = { drawImage: () => {} };
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      ctx as unknown as ReturnType<HTMLCanvasElement['getContext']>,
+    );
+  };
+
+  // Large sources drawn small skip thin strokes without mipmaps (dotted lines).
+  it('turns on mipmaps for SVG and raster sources', async () => {
+    stubImage(100, 50);
+    const svg = await decodeImage('data:image/svg+xml,<svg/>');
+    const png = await decodeImage('https://cdn.test/a.png');
+    expect(svg.source.autoGenerateMipmaps).toBe(true);
+    expect(png.source.autoGenerateMipmaps).toBe(true);
+  });
+
+  it('rasterises SVG at 2x natural size, capped at 4096 px', async () => {
+    stubImage(100, 50);
+    const small = await decodeImage('https://cdn.test/small.svg');
+    expect([small.source.pixelWidth, small.source.pixelHeight]).toEqual([200, 100]);
+    stubImage(4000, 2000);
+    const big = await decodeImage('https://cdn.test/big.svg');
+    expect([big.source.pixelWidth, big.source.pixelHeight]).toEqual([4096, 2048]);
   });
 });

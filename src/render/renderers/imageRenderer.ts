@@ -38,12 +38,14 @@ const textureCache = new Map<string, Promise<Texture>>();
 // from the URL extension (extension-less CDN/blob: URLs fail) and its
 // texture parser uses createImageBitmap, which rejects SVG. SVG is drawn to a
 // canvas at 2× its natural size so it stays sharp when the node is scaled up.
-async function decodeImage(src: string): Promise<Texture> {
+// Mipmaps on: sources are often ~4000 px drawn at a few hundred px, and plain
+// linear sampling at that ratio skips thin strokes (they render dotted).
+export async function decodeImage(src: string): Promise<Texture> {
   const img = new Image();
   img.crossOrigin = 'anonymous';
   img.src = src;
   await img.decode();
-  if (!SVG_SRC.test(src)) return Texture.from(img);
+  if (!SVG_SRC.test(src)) return withMipmaps(Texture.from(img));
   // An SVG without width/height has no natural size in some browsers.
   const w = img.naturalWidth || 512;
   const h = img.naturalHeight || 512;
@@ -52,7 +54,12 @@ async function decodeImage(src: string): Promise<Texture> {
   canvas.width = Math.round(w * k);
   canvas.height = Math.round(h * k);
   canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-  return Texture.from(canvas);
+  return withMipmaps(Texture.from(canvas));
+}
+
+function withMipmaps(texture: Texture): Texture {
+  texture.source.autoGenerateMipmaps = true;
+  return texture;
 }
 
 function loadImage(src: string): Promise<Texture> {
