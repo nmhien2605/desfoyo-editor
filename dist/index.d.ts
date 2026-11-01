@@ -1215,10 +1215,11 @@ interface EditorStage {
     pageColor?: string;
     /** Drop shadow around the page. */
     pageShadow?: boolean;
-    /** Display-only 2px dashed border around the page, plus 4 corner squares when `corners`. */
+    /** Display-only 2px border around the page (dashed unless `dashed: false`), plus 4 corner squares when `corners`. */
     outline?: {
         color: string;
         corners?: boolean;
+        dashed?: boolean;
     };
     /** Max zoom as a multiple of the fit zoom. Default 4. */
     maxZoom?: number;

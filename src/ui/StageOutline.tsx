@@ -21,7 +21,7 @@ export function StageOutline() {
         width: size.width * camera.zoom,
         height: size.height * camera.zoom,
         boxSizing: 'border-box',
-        border: `2px dashed ${outline.color}`,
+        border: `2px ${outline.dashed === false ? 'solid' : 'dashed'} ${outline.color}`,
       }}
     >
       {corners.map((inset) => (

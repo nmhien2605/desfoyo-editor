@@ -18432,7 +18432,7 @@ function nm({ onReady: e, reconcilerRef: t }) {
 						...t.size
 					}
 				};
-				e.setStageFit(pu(n.canvas, n.backdrop), n);
+				JSON.stringify(n) !== JSON.stringify(e.stageBounds) && e.setStageFit(pu(n.canvas, n.backdrop), n);
 			}, T = () => {
 				let e = r.getState(), t = Q(e) ?? e.document.pages[0];
 				a.renderer.background.alpha = e.stage ? 0 : $p(t.background), a.canvas.style.display = e.stage ? "block" : "", b?.sync(e.stage, t), te(), w();
@@ -19310,7 +19310,7 @@ function Hm() {
 			width: n.width * t.zoom,
 			height: n.height * t.zoom,
 			boxSizing: "border-box",
-			border: `2px dashed ${e.color}`
+			border: `2px ${e.dashed === !1 ? "solid" : "dashed"} ${e.color}`
 		},
 		children: r.map((t) => /* @__PURE__ */ T("div", {
 			className: "absolute",
@@ -22283,7 +22283,7 @@ var y_ = r(function(e, t) {
 						/* @__PURE__ */ T(qg, {})
 					]
 				}) : /* @__PURE__ */ T("div", {
-					className: `df-editor relative ${p ? "block h-full w-full" : "inline-block align-top"} ${e.className ?? ""}`,
+					className: `df-editor relative ${p ? "block h-full w-full overflow-hidden" : "inline-block align-top"} ${e.className ?? ""}`,
 					children: g
 				})
 			})

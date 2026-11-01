@@ -306,7 +306,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
             </div>
           ) : (
             <div
-              className={`df-editor relative ${staged ? 'block h-full w-full' : 'inline-block align-top'} ${props.className ?? ''}`}
+              className={`df-editor relative ${staged ? 'block h-full w-full overflow-hidden' : 'inline-block align-top'} ${props.className ?? ''}`}
             >
               {canvasArea}
             </div>
