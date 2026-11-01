@@ -64,5 +64,20 @@ describe('store stage state', () => {
     expect(store.getState()).toBe(before);
     store.getState().setStage(null);
     expect(store.getState().stageFit).toBeNull();
+    expect(store.getState().camera).toEqual({ zoom: 1, panX: 0, panY: 0 });
+  });
+
+  it('setStageFit keeps a zoomed view when only the canvas resizes, and refits at fit', () => {
+    const store = createEditorStore(doc);
+    const backdrop = { x: 0, y: 0, width: 100, height: 100 };
+    store.getState().setStage(stage);
+    store.getState().setStageFit(fitCamera({ width: 100, height: 100 }, backdrop), { canvas: { width: 100, height: 100 }, backdrop });
+    store.getState().setCamera({ zoom: 2, panX: -50, panY: -50 });
+    store.getState().setStageFit(fitCamera({ width: 100, height: 80 }, backdrop), { canvas: { width: 100, height: 80 }, backdrop });
+    expect(store.getState().camera.zoom).toBe(2);
+    store.getState().setCamera({ zoom: 0 }); // back to fit
+    const fit = fitCamera({ width: 100, height: 60 }, backdrop);
+    store.getState().setStageFit(fit, { canvas: { width: 100, height: 60 }, backdrop });
+    expect(store.getState().camera).toEqual(fit);
   });
 });

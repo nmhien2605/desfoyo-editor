@@ -430,9 +430,21 @@ export function createEditorStore(initialDocument: Document) {
       set(viewScale == null ? { viewScale: null } : { viewScale, camera: { zoom: viewScale, panX: 0, panY: 0 } }),
     // Hosts usually pass a fresh stage object every render; only a real change should refit.
     setStage: (stage) =>
-      set((s) => (JSON.stringify(stage) === JSON.stringify(s.stage) ? s : { stage, ...(stage ? {} : { stageFit: null, stageBounds: null }) })),
+      set((s) => (JSON.stringify(stage) === JSON.stringify(s.stage) ? s : {
+        stage,
+        ...(stage ? {} : { stageFit: null, stageBounds: null, camera: { zoom: s.viewScale ?? 1, panX: 0, panY: 0 } }),
+      })),
     setStageFit: (stageFit, stageBounds) =>
-      set(stageFit ? { stageFit, stageBounds: stageBounds ?? null, camera: stageFit } : { stageFit, stageBounds: null }),
+      set((s) => {
+        if (!stageFit) return { stageFit, stageBounds: null };
+        const bounds = stageBounds ?? null;
+        // Only the canvas resized (mobile URL bar, keyboard): keep the user's zoom, re-clamped. At fit, follow the new fit.
+        const zoomed = s.stageFit && s.stageBounds && bounds && s.camera.zoom > s.stageFit.zoom * 1.001
+          && JSON.stringify(s.stageBounds.backdrop) === JSON.stringify(bounds.backdrop);
+        if (!zoomed) return { stageFit, stageBounds: bounds, camera: stageFit };
+        const zoom = clampStageZoom(s.camera.zoom, stageFit.zoom, s.stage?.maxZoom);
+        return { stageFit, stageBounds: bounds, camera: clampStagePan({ ...s.camera, zoom }, bounds) };
+      }),
   }));
 }
 

@@ -34,9 +34,7 @@ export function StageOutline() {
             margin: -CORNER / 2 - 2,
             width: CORNER,
             height: CORNER,
-            boxSizing: 'border-box',
-            background: '#fff',
-            border: `1px solid ${outline.color}`,
+            background: outline.color,
           }}
         />
       ))}
