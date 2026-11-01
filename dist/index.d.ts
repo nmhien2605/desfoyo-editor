@@ -1237,6 +1237,10 @@ interface EditorHandle {
         pageId?: string;
         parentId?: string | null;
     }): void;
+    /** Moves a node to `toIndex` (0 = bottom) within its container as a single undo step. */
+    moveNode(nodeId: string, toIndex: number, opts?: {
+        pageId?: string;
+    }): void;
     /** Replaces the current selection; an empty array clears it. */
     selectNode(nodeIds: string[]): void;
     groupSelection(): void;

@@ -149,6 +149,28 @@ export function replaceSelection(store: EditorStoreApi, nodeIds: string[]): void
   for (const id of nodeIds.slice(1)) store.getState().select(id, 'toggle');
 }
 
+// Moves a node to `toIndex` within its own container as one undo step
+// (a layer-panel drag), instead of one Reorder entry per slot.
+export function moveNode(store: EditorStoreApi, nodeId: string, toIndex: number, pageId?: string): void {
+  const state = store.getState();
+  const page = state.document.pages.find((p) => p.id === (pageId ?? state.activePageId));
+  const location = page && findNodeInTree(page.children, nodeId);
+  if (!page || !location) return;
+  const to = Math.max(0, Math.min(toIndex, location.parent.length - 1));
+  if (to === location.index) return;
+  state.beginGesture('move-node');
+  for (let i = 0; i < Math.abs(to - location.index); i++) {
+    store.getState().dispatch({
+      type: 'Reorder',
+      pageId: page.id,
+      nodeId,
+      to: to > location.index ? 'up' : 'down',
+      parentId: location.ownerGroupId,
+    });
+  }
+  store.getState().endGesture();
+}
+
 export function nudgeSelection(store: EditorStoreApi, dx: number, dy: number): void {
   const state = store.getState();
   const { selectedNodeIds } = state;

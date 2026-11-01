@@ -19502,7 +19502,23 @@ function bh(e, t) {
 	e.getState().select(t[0] ?? null, "replace");
 	for (let n of t.slice(1)) e.getState().select(n, "toggle");
 }
-function xh(e, t, n) {
+function xh(e, t, n, r) {
+	let i = e.getState(), a = i.document.pages.find((e) => e.id === (r ?? i.activePageId)), o = a && Xc(a.children, t);
+	if (!a || !o) return;
+	let s = Math.max(0, Math.min(n, o.parent.length - 1));
+	if (s !== o.index) {
+		i.beginGesture("move-node");
+		for (let n = 0; n < Math.abs(s - o.index); n++) e.getState().dispatch({
+			type: "Reorder",
+			pageId: a.id,
+			nodeId: t,
+			to: s > o.index ? "up" : "down",
+			parentId: o.ownerGroupId
+		});
+		e.getState().endGesture();
+	}
+}
+function Sh(e, t, n) {
 	let r = e.getState(), { selectedNodeIds: i } = r;
 	if (i.size === 0) return;
 	let a = Su(r);
@@ -19525,7 +19541,7 @@ function xh(e, t, n) {
 }
 //#endregion
 //#region src/ui/toolActions.ts
-var Sh = {
+var Ch = {
 	x: 100,
 	y: 100,
 	scaleX: 1,
@@ -19534,10 +19550,10 @@ var Sh = {
 	originX: .5,
 	originY: .5
 };
-function Ch() {
+function wh() {
 	return {
 		id: Yc(),
-		transform: { ...Sh },
+		transform: { ...Ch },
 		size: {
 			width: 150,
 			height: 150
@@ -19553,10 +19569,10 @@ function Ch() {
 		}
 	};
 }
-function wh(e, t, n) {
+function Th(e, t, n) {
 	return {
 		id: Yc(),
-		transform: { ...Sh },
+		transform: { ...Ch },
 		size: {
 			width: t,
 			height: n
@@ -19568,13 +19584,13 @@ function wh(e, t, n) {
 		assetId: e
 	};
 }
-function Th(e) {
+function Eh(e) {
 	return new Promise((t, n) => {
 		let r = new FileReader();
 		r.onload = () => t(r.result), r.onerror = () => n(r.error), r.readAsDataURL(e);
 	});
 }
-function Eh(e) {
+function Dh(e) {
 	return new Promise((t) => {
 		let n = new Image();
 		n.onload = () => t({
@@ -19586,10 +19602,10 @@ function Eh(e) {
 		}), n.src = e;
 	});
 }
-function Dh(e, t, n) {
+function Oh(e, t, n) {
 	return {
 		id: Yc(),
-		transform: { ...Sh },
+		transform: { ...Ch },
 		size: {
 			width: t,
 			height: n
@@ -19601,7 +19617,7 @@ function Dh(e, t, n) {
 		assetId: e
 	};
 }
-function Oh(e) {
+function kh(e) {
 	let t = new DOMParser().parseFromString(e, "image/svg+xml").documentElement, n = t.getAttribute("viewBox");
 	if (n) {
 		let e = n.trim().split(/[\s,]+/).map(Number);
@@ -19619,10 +19635,10 @@ function Oh(e) {
 		height: 200
 	};
 }
-function kh(e, t) {
+function Ah(e, t) {
 	return {
 		id: Yc(),
-		transform: { ...Sh },
+		transform: { ...Ch },
 		size: t,
 		opacity: 1,
 		visible: !0,
@@ -19644,7 +19660,7 @@ function kh(e, t) {
 		}
 	};
 }
-function Ah(e, t) {
+function jh(e, t) {
 	let n = (t) => {
 		let n = e.getState().activePageId;
 		e.getState().dispatch({
@@ -19655,13 +19671,13 @@ function Ah(e, t) {
 	};
 	return {
 		addNode: n,
-		addShape: () => n(Ch()),
+		addShape: () => n(wh()),
 		handleAddText: async () => {
 			let e = Dd()[0];
 			if (!e) return;
 			let t = kd(e) ?? await Nd(e);
 			if (!t) return;
-			let r = kh(e, {
+			let r = Ah(e, {
 				width: 1,
 				height: 1
 			});
@@ -19671,18 +19687,18 @@ function Ah(e, t) {
 			});
 		},
 		handleImageFile: async (t) => {
-			let r = await Th(t), { width: i, height: a } = await Eh(r), o = Yc();
+			let r = await Eh(t), { width: i, height: a } = await Dh(r), o = Yc();
 			e.getState().addAssetRef(o, {
 				type: "image",
 				dataUri: r
-			}), n(wh(o, i, a));
+			}), n(Th(o, i, a));
 		},
 		handleSvgFile: async (t) => {
-			let r = await Th(t), { width: i, height: a } = Oh(await dd(r)), o = Yc();
+			let r = await Eh(t), { width: i, height: a } = kh(await dd(r)), o = Yc();
 			e.getState().addAssetRef(o, {
 				type: "svg",
 				dataUri: r
-			}), n(Dh(o, i, a));
+			}), n(Oh(o, i, a));
 		},
 		handleFitToScreen: () => {
 			if (!t) return;
@@ -19716,7 +19732,7 @@ function Ah(e, t) {
 }
 //#endregion
 //#region src/ui/selectionScreenBounds.ts
-function jh() {
+function Mh() {
 	let { canvas: e } = ku(), t = $((e) => e.camera), n = $(Yp(vm));
 	if (!e || n.length !== 1) return null;
 	let r = n[0], i = Xp(e, () => t), a = r.transform.originX ?? 0, o = r.transform.originY ?? 0, s = gm(r), c = i.toScreen({
@@ -19732,8 +19748,8 @@ function jh() {
 }
 //#endregion
 //#region src/ui/FloatingContextToolbar.tsx
-function Mh() {
-	let e = Eu(), t = $((e) => e.selectedNodeIds), n = jh(), r = Ah(e, null);
+function Nh() {
+	let e = Eu(), t = $((e) => e.selectedNodeIds), n = Mh(), r = jh(e, null);
 	return !n || t.size !== 1 ? null : /* @__PURE__ */ E("div", {
 		className: "pointer-events-auto absolute z-20 flex items-center gap-1 px-2",
 		style: {
@@ -19770,8 +19786,8 @@ function Mh() {
 }
 //#endregion
 //#region src/ui/LeftSidebar.tsx
-function Nh() {
-	let e = Eu(), { app: t } = ku(), { drawer: n, toggleDrawer: r, activeTool: i, setActiveTool: a } = Mu(), o = Ah(e, t), c = s(null), l = (e, t) => {
+function Ph() {
+	let e = Eu(), { app: t } = ku(), { drawer: n, toggleDrawer: r, activeTool: i, setActiveTool: a } = Mu(), o = jh(e, t), c = s(null), l = (e, t) => {
 		a(e), t();
 	};
 	return /* @__PURE__ */ E("aside", {
@@ -19879,9 +19895,9 @@ function Nh() {
 }
 //#endregion
 //#region src/ui/FloatingBottomBar.tsx
-var Ph = .1, Fh = 8;
-function Ih() {
-	let e = Eu(), { app: t } = ku(), n = Ah(e, t), r = $((e) => e.past.length > 0), i = $((e) => e.future.length > 0), a = $((e) => e.camera.zoom), { activeTool: o, setActiveTool: s } = Mu(), c = Math.round(a * 100);
+var Fh = .1, Ih = 8;
+function Lh() {
+	let e = Eu(), { app: t } = ku(), n = jh(e, t), r = $((e) => e.past.length > 0), i = $((e) => e.future.length > 0), a = $((e) => e.camera.zoom), { activeTool: o, setActiveTool: s } = Mu(), c = Math.round(a * 100);
 	return /* @__PURE__ */ E("div", {
 		className: "flex items-center gap-2",
 		children: [
@@ -19956,7 +19972,7 @@ function Ih() {
 						type: "button",
 						className: "kittl-pill-btn",
 						title: "Zoom out",
-						disabled: a <= Ph,
+						disabled: a <= Fh,
 						onClick: () => n.zoomBy(1 / 1.2),
 						children: /* @__PURE__ */ T(Jm, {
 							size: 16,
@@ -19972,7 +19988,7 @@ function Ih() {
 						type: "button",
 						className: "kittl-pill-btn",
 						title: "Zoom in",
-						disabled: a >= Fh,
+						disabled: a >= Ih,
 						onClick: () => n.zoomBy(1.2),
 						children: /* @__PURE__ */ T(Ym, {
 							size: 16,
@@ -19994,7 +20010,7 @@ function Ih() {
 }
 //#endregion
 //#region src/ui/WorkspacePageLabel.tsx
-var Lh = {
+var Rh = {
 	Standard: {
 		width: 940,
 		height: 960
@@ -20016,7 +20032,7 @@ var Lh = {
 		height: 4500
 	}
 };
-function Rh(e, t) {
+function zh(e, t) {
 	return {
 		id: Yc(),
 		name: e,
@@ -20028,9 +20044,9 @@ function Rh(e, t) {
 		children: []
 	};
 }
-function zh() {
+function Bh() {
 	let e = Eu(), t = $((e) => e.document.pages), n = $((e) => e.activePageId), r = t.find((e) => e.id === n), i = (n) => {
-		let r = Rh(`Page ${t.length + 1}`, Lh[n] ?? Lh.Standard);
+		let r = zh(`Page ${t.length + 1}`, Rh[n] ?? Rh.Standard);
 		e.getState().dispatch({
 			type: "AddPage",
 			page: r
@@ -20069,7 +20085,7 @@ function zh() {
 				children: [/* @__PURE__ */ T("option", {
 					value: "",
 					children: "+ Page"
-				}), Object.keys(Lh).map((e) => /* @__PURE__ */ T("option", {
+				}), Object.keys(Rh).map((e) => /* @__PURE__ */ T("option", {
 					value: e,
 					children: e
 				}, e))]
@@ -20079,10 +20095,10 @@ function zh() {
 }
 //#endregion
 //#region src/ui/LayersPanel.tsx
-function Bh(e) {
+function Vh(e) {
 	return e.name ? e.name : `${e.type[0].toUpperCase()}${e.type.slice(1)}`;
 }
-function Vh({ onClose: e }) {
+function Hh({ onClose: e }) {
 	let t = $((e) => e.activePageId), n = $((e) => Su(e)?.children ?? []);
 	return /* @__PURE__ */ E("div", {
 		className: "flex h-full flex-col p-3 text-sm",
@@ -20101,7 +20117,7 @@ function Vh({ onClose: e }) {
 			})]
 		}), /* @__PURE__ */ T("ul", {
 			className: "flex flex-col gap-1",
-			children: [...n].reverse().map((e) => /* @__PURE__ */ T(Hh, {
+			children: [...n].reverse().map((e) => /* @__PURE__ */ T(Uh, {
 				node: e,
 				depth: 0,
 				pageId: t
@@ -20109,7 +20125,7 @@ function Vh({ onClose: e }) {
 		})]
 	});
 }
-function Hh({ node: e, depth: t, pageId: n }) {
+function Uh({ node: e, depth: t, pageId: n }) {
 	let r = Eu(), i = $((e) => e.selectedNodeIds).has(e.id), a = (t) => {
 		r.getState().dispatch({
 			type: "Reorder",
@@ -20130,7 +20146,7 @@ function Hh({ node: e, depth: t, pageId: n }) {
 		},
 		children: [/* @__PURE__ */ T("span", {
 			className: "truncate",
-			children: Bh(e)
+			children: Vh(e)
 		}), /* @__PURE__ */ E("span", {
 			className: "flex gap-1 text-xs",
 			children: [
@@ -20173,7 +20189,7 @@ function Hh({ node: e, depth: t, pageId: n }) {
 		})]
 	}), e.type === "group" && e.children.length > 0 && /* @__PURE__ */ T("ul", {
 		className: "flex flex-col gap-1",
-		children: [...e.children].reverse().map((e) => /* @__PURE__ */ T(Hh, {
+		children: [...e.children].reverse().map((e) => /* @__PURE__ */ T(Uh, {
 			node: e,
 			depth: t + 1,
 			pageId: n
@@ -20182,16 +20198,16 @@ function Hh({ node: e, depth: t, pageId: n }) {
 }
 //#endregion
 //#region src/ui/AssetPanel.tsx
-function Uh(e) {
+function Wh(e) {
 	return e.type === "image" || e.type === "svg";
 }
-var Wh = "text/desfoyo-asset-id";
-function Gh(e) {
+var Gh = "text/desfoyo-asset-id";
+function Kh(e) {
 	return [e.width, e.height];
 }
-function Kh({ onClose: e }) {
-	let t = Eu(), n = $((e) => e.activePageId), r = $((e) => e.document.assets), i = Object.entries(r).filter((e) => Uh(e[1])), a = async (e, r, i) => {
-		let a = i === "svg" ? Dh(e, ...Gh(Oh(await dd(r)))) : wh(e, ...Gh(await Eh(r)));
+function qh({ onClose: e }) {
+	let t = Eu(), n = $((e) => e.activePageId), r = $((e) => e.document.assets), i = Object.entries(r).filter((e) => Wh(e[1])), a = async (e, r, i) => {
+		let a = i === "svg" ? Oh(e, ...Kh(kh(await dd(r)))) : Th(e, ...Kh(await Dh(r)));
 		t.getState().dispatch({
 			type: "AddNode",
 			pageId: n,
@@ -20218,7 +20234,7 @@ function Kh({ onClose: e }) {
 			children: i.map(([e, t]) => /* @__PURE__ */ T("img", {
 				src: t.dataUri,
 				draggable: !0,
-				onDragStart: (t) => t.dataTransfer.setData(Wh, e),
+				onDragStart: (t) => t.dataTransfer.setData(Gh, e),
 				onClick: () => void a(e, t.dataUri, t.type),
 				className: "h-16 w-16 cursor-pointer rounded object-cover",
 				style: { border: "1px solid var(--panel-border)" }
@@ -20228,7 +20244,7 @@ function Kh({ onClose: e }) {
 }
 //#endregion
 //#region src/ui/DevMenuPanel.tsx
-function qh({ onClose: e, sampleNames: t, activeSample: n, onSampleChange: r, onExport: i }) {
+function Jh({ onClose: e, sampleNames: t, activeSample: n, onSampleChange: r, onExport: i }) {
 	return /* @__PURE__ */ E("div", {
 		className: "flex h-full flex-col p-3 text-sm",
 		style: { color: "var(--text-primary)" },
@@ -20246,7 +20262,7 @@ function qh({ onClose: e, sampleNames: t, activeSample: n, onSampleChange: r, on
 					children: "Close"
 				})]
 			}),
-			/* @__PURE__ */ T(Jh, {
+			/* @__PURE__ */ T(Yh, {
 				title: "Samples",
 				children: /* @__PURE__ */ T("div", {
 					className: "flex flex-col gap-1",
@@ -20262,7 +20278,7 @@ function qh({ onClose: e, sampleNames: t, activeSample: n, onSampleChange: r, on
 					}, e))
 				})
 			}),
-			/* @__PURE__ */ T(Jh, {
+			/* @__PURE__ */ T(Yh, {
 				title: "Export",
 				children: /* @__PURE__ */ E("div", {
 					className: "flex gap-2",
@@ -20282,7 +20298,7 @@ function qh({ onClose: e, sampleNames: t, activeSample: n, onSampleChange: r, on
 		]
 	});
 }
-function Jh({ title: e, children: t }) {
+function Yh({ title: e, children: t }) {
 	return /* @__PURE__ */ E("div", {
 		className: "mb-4",
 		children: [/* @__PURE__ */ T("div", {
@@ -20294,7 +20310,7 @@ function Jh({ title: e, children: t }) {
 }
 //#endregion
 //#region src/ui/DrawerPanel.tsx
-function Yh() {
+function Xh() {
 	let { drawer: e, setDrawer: t, devMenu: n, onExport: r } = Mu();
 	return e ? /* @__PURE__ */ E(w, { children: [/* @__PURE__ */ T("button", {
 		type: "button",
@@ -20304,9 +20320,9 @@ function Yh() {
 	}), /* @__PURE__ */ E("div", {
 		className: "kittl-drawer",
 		children: [
-			e === "layers" && /* @__PURE__ */ T(Vh, { onClose: () => t(null) }),
-			e === "assets" && /* @__PURE__ */ T(Kh, { onClose: () => t(null) }),
-			e === "dev" && n && r && /* @__PURE__ */ T(qh, {
+			e === "layers" && /* @__PURE__ */ T(Hh, { onClose: () => t(null) }),
+			e === "assets" && /* @__PURE__ */ T(qh, { onClose: () => t(null) }),
+			e === "dev" && n && r && /* @__PURE__ */ T(Jh, {
 				onClose: () => t(null),
 				sampleNames: n.sampleNames,
 				activeSample: n.activeSample,
@@ -20318,12 +20334,12 @@ function Yh() {
 }
 //#endregion
 //#region src/ui/Workspace.tsx
-function Xh({ children: e }) {
+function Zh({ children: e }) {
 	return /* @__PURE__ */ E("main", {
 		className: "relative flex min-w-0 flex-col overflow-hidden",
 		style: { background: "var(--workspace-bg)" },
 		children: [
-			/* @__PURE__ */ T(zh, {}),
+			/* @__PURE__ */ T(Bh, {}),
 			/* @__PURE__ */ T("div", {
 				className: "relative flex min-h-0 flex-1 items-start justify-center overflow-auto pt-6",
 				children: /* @__PURE__ */ T("div", {
@@ -20336,16 +20352,16 @@ function Xh({ children: e }) {
 				className: "pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center pb-3",
 				children: /* @__PURE__ */ T("div", {
 					className: "pointer-events-auto",
-					children: /* @__PURE__ */ T(Ih, {})
+					children: /* @__PURE__ */ T(Lh, {})
 				})
 			}),
-			/* @__PURE__ */ T(Yh, {})
+			/* @__PURE__ */ T(Xh, {})
 		]
 	});
 }
 //#endregion
 //#region src/ui/TransformationControls.tsx
-var Zh = .5, Qh = [
+var Qh = .5, $h = [
 	"wave",
 	"arch",
 	"rise",
@@ -20355,28 +20371,28 @@ var Zh = .5, Qh = [
 	"distort",
 	"custom"
 ];
-function $h(e, t) {
+function eg(e, t) {
 	return {
 		type: t,
 		curveHeight: e?.curveHeight ?? .5,
 		directionInverted: e?.directionInverted ?? !1
 	};
 }
-function eg(e, t) {
+function tg(e, t) {
 	return {
 		type: e?.type ?? "wave",
 		curveHeight: Math.min(4, Math.max(-1, t)),
 		directionInverted: e?.directionInverted ?? !1
 	};
 }
-function tg(e) {
+function ng(e) {
 	return {
 		type: e?.type ?? "none",
-		curveHeight: Zh,
+		curveHeight: Qh,
 		directionInverted: !1
 	};
 }
-function ng(e) {
+function rg(e) {
 	return {
 		type: e?.type ?? "circle",
 		curveHeight: e?.curveHeight ?? .5,
@@ -20385,7 +20401,7 @@ function ng(e) {
 		directionInverted: !(e?.directionInverted ?? !1)
 	};
 }
-function rg(e, t, n) {
+function ig(e, t, n) {
 	let r = t ? fp({
 		...e,
 		warp: n
@@ -20395,14 +20411,14 @@ function rg(e, t, n) {
 		size: r
 	} : { warp: n };
 }
-function ig({ node: e, activePageId: t }) {
+function ag({ node: e, activePageId: t }) {
 	let n = Eu(), r = e.warp, i = r?.type ?? "none", a = (r) => {
 		let i = kd(e.font.family)?.font ?? null;
 		n.getState().dispatch({
 			type: "UpdateProps",
 			pageId: t,
 			nodeId: e.id,
-			patch: rg(e, i, r)
+			patch: ig(e, i, r)
 		});
 	};
 	return /* @__PURE__ */ E("section", {
@@ -20414,12 +20430,12 @@ function ig({ node: e, activePageId: t }) {
 			}),
 			/* @__PURE__ */ T("div", {
 				className: "grid grid-cols-4 gap-1.5",
-				children: Qh.map((e) => {
+				children: $h.map((e) => {
 					let t = i === e;
 					return /* @__PURE__ */ T("button", {
 						type: "button",
 						title: e,
-						onClick: () => a($h(r, e)),
+						onClick: () => a(eg(r, e)),
 						className: "flex flex-col items-center justify-center rounded-lg text-[11px] font-semibold uppercase",
 						style: {
 							width: 50,
@@ -20449,7 +20465,7 @@ function ig({ node: e, activePageId: t }) {
 						className: "kittl-range",
 						onPointerDown: () => n.getState().beginGesture(`warp-curve:${e.id}`),
 						onPointerUp: () => n.getState().endGesture(),
-						onChange: (e) => a(eg(r, Number(e.target.value)))
+						onChange: (e) => a(tg(r, Number(e.target.value)))
 					})
 				]
 			}) }),
@@ -20459,12 +20475,12 @@ function ig({ node: e, activePageId: t }) {
 				children: [/* @__PURE__ */ T("input", {
 					type: "checkbox",
 					checked: r?.directionInverted ?? !1,
-					onChange: () => a(ng(r))
+					onChange: () => a(rg(r))
 				}), "Direction Inverted"]
 			}),
 			(i !== "none" || r) && /* @__PURE__ */ T("button", {
 				type: "button",
-				onClick: () => a(tg(r)),
+				onClick: () => a(ng(r)),
 				className: "mt-3 w-full rounded-lg px-3 py-2 text-xs",
 				style: {
 					background: "#252c37",
@@ -20478,7 +20494,7 @@ function ig({ node: e, activePageId: t }) {
 }
 //#endregion
 //#region src/ui/TextShadowControls.tsx
-var ag = {
+var og = {
 	type: "text-shadow",
 	style: "drop",
 	color: "#000000",
@@ -20486,23 +20502,23 @@ var ag = {
 	distance: .06,
 	blur: 4
 };
-function og(e, t) {
+function sg(e, t) {
 	let n = (e ?? []).filter((e) => e.type !== "text-shadow");
 	return t ? [...n, t] : n;
 }
-var sg = [
+var cg = [
 	"drop",
 	"line",
 	"block",
 	"3d"
 ];
-function cg({ node: e, onChange: t }) {
+function lg({ node: e, onChange: t }) {
 	let n = pp(e.effects), r = (r) => {
 		let i = {
-			...n ?? ag,
+			...n ?? og,
 			...r
 		};
-		t(og(e.effects, i));
+		t(sg(e.effects, i));
 	};
 	return /* @__PURE__ */ E("div", {
 		className: "flex flex-col gap-2",
@@ -20512,12 +20528,12 @@ function cg({ node: e, onChange: t }) {
 			children: [/* @__PURE__ */ T("input", {
 				type: "checkbox",
 				checked: !!n,
-				onChange: (n) => t(og(e.effects, n.target.checked ? ag : null))
+				onChange: (n) => t(sg(e.effects, n.target.checked ? og : null))
 			}), "Enable Shadow"]
 		}), n && /* @__PURE__ */ E(w, { children: [
 			/* @__PURE__ */ T("div", {
 				className: "grid grid-cols-4 gap-1.5",
-				children: sg.map((e) => /* @__PURE__ */ T("button", {
+				children: cg.map((e) => /* @__PURE__ */ T("button", {
 					type: "button",
 					onClick: () => r({ style: e }),
 					className: "rounded-lg px-2 py-1.5 text-[11px] font-semibold uppercase",
@@ -20597,26 +20613,26 @@ function cg({ node: e, onChange: t }) {
 }
 //#endregion
 //#region src/ui/PropertiesPanel.tsx
-var lg = [
+var ug = [
 	"normal",
 	"multiply",
 	"screen",
 	"overlay",
 	"darken",
 	"lighten"
-], ug = [
+], dg = [
 	"inside",
 	"center",
 	"outside"
-], dg = [
+], fg = [
 	"shadow",
 	"glow",
 	"outline",
 	"blur",
 	"extrude3d",
 	"custom"
-], fg = Object.keys(Kl);
-function pg(e) {
+], pg = Object.keys(Kl);
+function mg(e) {
 	switch (e) {
 		case "shadow": return {
 			type: e,
@@ -20625,7 +20641,7 @@ function pg(e) {
 			offset: [2, 2],
 			alpha: .5
 		};
-		case "text-shadow": return ag;
+		case "text-shadow": return og;
 		case "glow": return {
 			type: "glow",
 			color: "#ffffff",
@@ -20649,18 +20665,18 @@ function pg(e) {
 		};
 		case "custom": return {
 			type: "custom",
-			shaderId: fg[0] ?? "",
+			shaderId: pg[0] ?? "",
 			uniforms: { strength: 2 }
 		};
 	}
 }
-function mg(e) {
+function hg(e) {
 	return e.type === "shape" || e.type === "text";
 }
-function hg(e, t) {
+function gg(e, t) {
 	return e.type === "solid" ? e.color : e.type === "texture" ? "#000000" : e.stops[t]?.color ?? "#000000";
 }
-function gg(e, t, n) {
+function _g(e, t, n) {
 	if (e.type !== "linear-gradient" && e.type !== "radial-gradient") return e;
 	let r = [...e.stops];
 	return r[t] = {
@@ -20671,13 +20687,13 @@ function gg(e, t, n) {
 		stops: r
 	};
 }
-function _g(e) {
+function vg(e) {
 	if (e.selectedNodeIds.size !== 1) return null;
 	let [t] = e.selectedNodeIds, n = Su(e);
 	return n ? Xc(n.children, t)?.node ?? null : null;
 }
-function vg() {
-	let e = Eu(), t = $((e) => e.activePageId), n = $((e) => e.selectedNodeIds), r = $(_g);
+function yg() {
+	let e = Eu(), t = $((e) => e.activePageId), n = $((e) => e.selectedNodeIds), r = $(vg);
 	if (n.size !== 1 || !r) return null;
 	let i = (n) => {
 		e.getState().dispatch({
@@ -20712,55 +20728,55 @@ function vg() {
 				onChange: (e) => i({ opacity: Number(e.target.value) })
 			})]
 		}),
-		mg(r) && /* @__PURE__ */ E("section", {
+		hg(r) && /* @__PURE__ */ E("section", {
 			className: "kittl-section",
 			children: [/* @__PURE__ */ T("div", {
 				className: "kittl-section-title",
 				children: "Text Colors"
-			}), /* @__PURE__ */ T(Tg, {
+			}), /* @__PURE__ */ T(Eg, {
 				fill: r.fill,
 				onChange: (e) => i({ fill: e })
 			})]
 		}),
-		r.type === "shape" && /* @__PURE__ */ T(yg, {
+		r.type === "shape" && /* @__PURE__ */ T(bg, {
 			title: "Border",
-			children: /* @__PURE__ */ T(Eg, {
+			children: /* @__PURE__ */ T(Dg, {
 				stroke: r.stroke,
 				onChange: (e) => i({ stroke: e })
 			})
 		}),
-		r.type === "text" && /* @__PURE__ */ T(kg, {
+		r.type === "text" && /* @__PURE__ */ T(Ag, {
 			node: r,
 			onChange: (e) => i(e)
 		}),
-		r.type === "text" && /* @__PURE__ */ T(ig, {
+		r.type === "text" && /* @__PURE__ */ T(ag, {
 			node: r,
 			activePageId: t
 		}),
-		r.type === "image" && /* @__PURE__ */ T(yg, {
+		r.type === "image" && /* @__PURE__ */ T(bg, {
 			title: "Image",
-			children: /* @__PURE__ */ T(Cg, {
-				node: r,
-				onChange: (e) => i(e)
-			})
-		}),
-		r.type === "svg" && /* @__PURE__ */ T(yg, {
-			title: "Recolor",
 			children: /* @__PURE__ */ T(wg, {
 				node: r,
 				onChange: (e) => i(e)
 			})
 		}),
-		r.type === "text" && /* @__PURE__ */ T(yg, {
+		r.type === "svg" && /* @__PURE__ */ T(bg, {
+			title: "Recolor",
+			children: /* @__PURE__ */ T(Tg, {
+				node: r,
+				onChange: (e) => i(e)
+			})
+		}),
+		r.type === "text" && /* @__PURE__ */ T(bg, {
 			title: "Text Shadow",
-			children: /* @__PURE__ */ T(cg, {
+			children: /* @__PURE__ */ T(lg, {
 				node: r,
 				onChange: (e) => i({ effects: e })
 			})
 		}),
-		/* @__PURE__ */ T(yg, {
+		/* @__PURE__ */ T(bg, {
 			title: "Effects",
-			children: /* @__PURE__ */ T(xg, {
+			children: /* @__PURE__ */ T(Sg, {
 				effects: r.effects,
 				onChange: (e) => i({ effects: e }),
 				excludeShadow: r.type === "text"
@@ -20777,7 +20793,7 @@ function vg() {
 					value: r.blendMode ?? "normal",
 					onChange: (e) => i({ blendMode: e.target.value }),
 					className: "kittl-input w-full",
-					children: lg.map((e) => /* @__PURE__ */ T("option", {
+					children: ug.map((e) => /* @__PURE__ */ T("option", {
 						value: e,
 						children: e
 					}, e))
@@ -20786,7 +20802,7 @@ function vg() {
 		})
 	] });
 }
-function yg({ title: e, children: t }) {
+function bg({ title: e, children: t }) {
 	let [n, r] = c(!1);
 	return /* @__PURE__ */ E("section", {
 		className: "kittl-section",
@@ -20807,11 +20823,11 @@ function yg({ title: e, children: t }) {
 		})]
 	});
 }
-function bg(e) {
+function xg(e) {
 	return (e ?? []).filter((e) => e.type !== "text-shadow");
 }
-function xg({ effects: e, onChange: t, excludeShadow: n }) {
-	let r = e ?? [], i = bg(r), a = n ? dg.filter((e) => e !== "shadow") : dg;
+function Sg({ effects: e, onChange: t, excludeShadow: n }) {
+	let r = e ?? [], i = xg(r), a = n ? fg.filter((e) => e !== "shadow") : fg;
 	return /* @__PURE__ */ E("fieldset", {
 		className: "flex flex-col gap-1",
 		children: [
@@ -20829,7 +20845,7 @@ function xg({ effects: e, onChange: t, excludeShadow: n }) {
 						className: "text-xs text-gray-500",
 						children: "Remove"
 					})]
-				}), /* @__PURE__ */ T(Sg, {
+				}), /* @__PURE__ */ T(Cg, {
 					effect: e,
 					onChange: (n) => t(r.map((t) => t === e ? n : t))
 				})]
@@ -20837,7 +20853,7 @@ function xg({ effects: e, onChange: t, excludeShadow: n }) {
 			/* @__PURE__ */ E("select", {
 				value: "",
 				onChange: (e) => {
-					e.target.value && t([...r, pg(e.target.value)]);
+					e.target.value && t([...r, mg(e.target.value)]);
 				},
 				className: "rounded border border-gray-300 px-1 py-0.5",
 				children: [/* @__PURE__ */ T("option", {
@@ -20851,7 +20867,7 @@ function xg({ effects: e, onChange: t, excludeShadow: n }) {
 		]
 	});
 }
-function Sg({ effect: e, onChange: t }) {
+function Cg({ effect: e, onChange: t }) {
 	switch (e.type) {
 		case "shadow": return /* @__PURE__ */ E(w, { children: [/* @__PURE__ */ T("input", {
 			type: "color",
@@ -20957,7 +20973,7 @@ function Sg({ effect: e, onChange: t }) {
 				shaderId: n.target.value
 			}),
 			className: "rounded border border-gray-300 px-1 py-0.5",
-			children: fg.map((e) => /* @__PURE__ */ T("option", {
+			children: pg.map((e) => /* @__PURE__ */ T("option", {
 				value: e,
 				children: e
 			}, e))
@@ -20976,7 +20992,7 @@ function Sg({ effect: e, onChange: t }) {
 		}, n))] });
 	}
 }
-function Cg({ node: e, onChange: t }) {
+function wg({ node: e, onChange: t }) {
 	let n = e.filters ?? {}, r = (e, r) => {
 		t({ filters: {
 			...n,
@@ -21066,7 +21082,7 @@ function Cg({ node: e, onChange: t }) {
 		]
 	});
 }
-function wg({ node: e, onChange: t }) {
+function Tg({ node: e, onChange: t }) {
 	let n = $((t) => {
 		let n = t.document.assets[e.assetId];
 		return n?.type === "svg" ? n.dataUri : void 0;
@@ -21118,29 +21134,29 @@ function wg({ node: e, onChange: t }) {
 		]
 	});
 }
-function Tg({ fill: e, onChange: t }) {
+function Eg({ fill: e, onChange: t }) {
 	let n = (n) => {
 		n === "solid" ? t({
 			type: "solid",
-			color: hg(e, 0)
+			color: gg(e, 0)
 		}) : n === "linear-gradient" ? t({
 			type: "linear-gradient",
 			angle: 0,
 			stops: [{
 				offset: 0,
-				color: hg(e, 0)
+				color: gg(e, 0)
 			}, {
 				offset: 1,
-				color: hg(e, 1)
+				color: gg(e, 1)
 			}]
 		}) : n === "radial-gradient" && t({
 			type: "radial-gradient",
 			stops: [{
 				offset: 0,
-				color: hg(e, 0)
+				color: gg(e, 0)
 			}, {
 				offset: 1,
-				color: hg(e, 1)
+				color: gg(e, 1)
 			}]
 		});
 	};
@@ -21193,12 +21209,12 @@ function Tg({ fill: e, onChange: t }) {
 				className: "flex gap-1",
 				children: [/* @__PURE__ */ T("input", {
 					type: "color",
-					value: hg(e, 0),
-					onChange: (n) => t(gg(e, 0, n.target.value))
+					value: gg(e, 0),
+					onChange: (n) => t(_g(e, 0, n.target.value))
 				}), /* @__PURE__ */ T("input", {
 					type: "color",
-					value: hg(e, 1),
-					onChange: (n) => t(gg(e, 1, n.target.value))
+					value: gg(e, 1),
+					onChange: (n) => t(_g(e, 1, n.target.value))
 				})]
 			}), e.type === "linear-gradient" && /* @__PURE__ */ E("label", {
 				className: "flex flex-col gap-1",
@@ -21215,7 +21231,7 @@ function Tg({ fill: e, onChange: t }) {
 		]
 	});
 }
-function Eg({ stroke: e, onChange: t }) {
+function Dg({ stroke: e, onChange: t }) {
 	return e ? /* @__PURE__ */ E("fieldset", {
 		className: "flex flex-col gap-1",
 		children: [
@@ -21261,7 +21277,7 @@ function Eg({ stroke: e, onChange: t }) {
 						align: n.target.value
 					}),
 					className: "rounded border border-gray-300 px-1 py-0.5",
-					children: ug.map((e) => /* @__PURE__ */ T("option", {
+					children: dg.map((e) => /* @__PURE__ */ T("option", {
 						value: e,
 						children: e
 					}, e))
@@ -21370,13 +21386,13 @@ function Eg({ stroke: e, onChange: t }) {
 		children: "Add Stroke"
 	});
 }
-var Dg = .01;
-function Og(e, t) {
+var Og = .01;
+function kg(e, t) {
 	if (!t) return null;
 	let n = fp(e, t);
-	return Math.abs(n.width - e.size.width) < Dg && Math.abs(n.height - e.size.height) < Dg ? null : n;
+	return Math.abs(n.width - e.size.width) < Og && Math.abs(n.height - e.size.height) < Og ? null : n;
 }
-function kg({ node: e, onChange: t }) {
+function Ag({ node: e, onChange: t }) {
 	let n = Eu(), r = Dd(), i = (n) => {
 		let r = {
 			...e,
@@ -21401,7 +21417,7 @@ function kg({ node: e, onChange: t }) {
 			});
 		});
 	}, [e.id, n]), a(() => {
-		let t = Og(e, kd(e.font.family)?.font ?? null);
+		let t = kg(e, kd(e.font.family)?.font ?? null);
 		if (!t) return;
 		let r = n.getState();
 		r.dispatch({
@@ -21519,14 +21535,14 @@ function kg({ node: e, onChange: t }) {
 }
 //#endregion
 //#region src/ui/InspectorPanel.tsx
-var Ag = [
+var jg = [
 	1,
 	2,
 	3,
 	4
 ];
-function jg() {
-	let e = Eu(), t = $((e) => e.selectedNodeIds.size), n = $(_g), r = $((e) => e.document.meta.title), i = Ah(e, null), { onExport: a } = Mu(), [o, s] = c(1);
+function Mg() {
+	let e = Eu(), t = $((e) => e.selectedNodeIds.size), n = $(vg), r = $((e) => e.document.meta.title), i = jh(e, null), { onExport: a } = Mu(), [o, s] = c(1);
 	return /* @__PURE__ */ E("aside", {
 		className: "flex min-h-0 flex-col overflow-y-auto border-l text-sm",
 		style: {
@@ -21547,7 +21563,7 @@ function jg() {
 							value: o,
 							onChange: (e) => s(Number(e.target.value)),
 							className: "kittl-input ml-auto w-14 text-xs",
-							children: Ag.map((e) => /* @__PURE__ */ E("option", {
+							children: jg.map((e) => /* @__PURE__ */ E("option", {
 								value: e,
 								children: [e, "×"]
 							}, e))
@@ -21626,7 +21642,7 @@ function jg() {
 					})]
 				})]
 			}),
-			/* @__PURE__ */ T(vg, {}),
+			/* @__PURE__ */ T(yg, {}),
 			t === 0 && /* @__PURE__ */ T("div", {
 				className: "p-4 text-xs",
 				style: { color: "var(--text-muted)" },
@@ -21637,14 +21653,14 @@ function jg() {
 }
 //#endregion
 //#region src/services/svgSerializer.ts
-var Mg = 0;
-function Ng(e, t, n) {
+var Ng = 0;
+function Pg(e, t, n) {
 	if (e.type === "solid") {
 		let t = e.alpha === void 0 ? "" : ` fill-opacity="${e.alpha}"`;
 		return `fill="${e.color}"${t}`;
 	}
 	if (e.type === "texture") return "fill=\"#888888\"";
-	let r = `grad-${Mg++}`, i = e.stops.map((e) => `<stop offset="${e.offset}" stop-color="${e.color}"${e.alpha === void 0 ? "" : ` stop-opacity="${e.alpha}"`}/>`).join(""), a = n && n.width > 0 && n.height > 0 ? ` gradientUnits="userSpaceOnUse" gradientTransform="matrix(${n.width} 0 0 ${n.height} 0 0)"` : "";
+	let r = `grad-${Ng++}`, i = e.stops.map((e) => `<stop offset="${e.offset}" stop-color="${e.color}"${e.alpha === void 0 ? "" : ` stop-opacity="${e.alpha}"`}/>`).join(""), a = n && n.width > 0 && n.height > 0 ? ` gradientUnits="userSpaceOnUse" gradientTransform="matrix(${n.width} 0 0 ${n.height} 0 0)"` : "";
 	if (e.type === "linear-gradient") {
 		let n = e.angle, o = .5 + Math.cos(n) * .5, s = .5 + Math.sin(n) * .5, c = .5 - Math.cos(n) * .5, l = .5 - Math.sin(n) * .5;
 		t.push(`<linearGradient id="${r}" x1="${c}" y1="${l}" x2="${o}" y2="${s}"${a}>${i}</linearGradient>`);
@@ -21654,7 +21670,7 @@ function Ng(e, t, n) {
 	}
 	return `fill="url(#${r})"`;
 }
-function Pg(e, t, n, r) {
+function Fg(e, t, n, r) {
 	let i = r / 2, a = [];
 	for (let o = 0; o < n * 2; o++) {
 		let s = o % 2 == 0 ? r : i, c = Math.PI * o / n - Math.PI / 2;
@@ -21662,8 +21678,8 @@ function Pg(e, t, n, r) {
 	}
 	return a.join(" ");
 }
-function Fg(e, t) {
-	let { width: n, height: r } = e.size, i = Ng(e.fill, t);
+function Ig(e, t) {
+	let { width: n, height: r } = e.size, i = Pg(e.fill, t);
 	switch (e.shape) {
 		case "rect": return e.cornerRadius ? `<rect width="${n}" height="${r}" rx="${e.cornerRadius}" ${i}/>` : `<rect width="${n}" height="${r}" ${i}/>`;
 		case "ellipse": return `<ellipse cx="${n / 2}" cy="${r / 2}" rx="${n / 2}" ry="${r / 2}" ${i}/>`;
@@ -21675,84 +21691,84 @@ function Fg(e, t) {
 			n / 2,
 			r
 		]).reduce((e, t, n) => (n % 2 == 0 ? e.push(`${t}`) : e[e.length - 1] += `,${t}`, e), []).join(" ")}" ${i}/>`;
-		case "star": return `<polygon points="${Pg(n / 2, r / 2, 5, Math.min(n, r) / 2)}" ${i}/>`;
+		case "star": return `<polygon points="${Fg(n / 2, r / 2, 5, Math.min(n, r) / 2)}" ${i}/>`;
 		case "line": return `<line x1="0" y1="0" x2="${n}" y2="${r}" stroke="${e.fill.type === "solid" ? e.fill.color : "#000000"}"/>`;
 		case "path": return `<rect width="${n}" height="${r}" ${i}/>`;
 	}
 }
-function Ig(e) {
+function Lg(e) {
 	let { transform: t, size: n } = e, r = t.originX ?? 0, i = t.originY ?? 0, a = r * n.width, o = i * n.height, s = t.rotation * 180 / Math.PI;
 	return `translate(${t.x} ${t.y}) rotate(${s}) scale(${t.scaleX} ${t.scaleY}) translate(${-a} ${-o})`;
 }
-function Lg(e) {
-	let t = e.opacity === 1 ? "" : ` opacity="${e.opacity}"`, n = e.blendMode && e.blendMode !== "normal" ? ` style="mix-blend-mode:${e.blendMode}"` : "";
-	return ` transform="${Ig(e)}"${t}${n}`;
-}
 function Rg(e) {
+	let t = e.opacity === 1 ? "" : ` opacity="${e.opacity}"`, n = e.blendMode && e.blendMode !== "normal" ? ` style="mix-blend-mode:${e.blendMode}"` : "";
+	return ` transform="${Lg(e)}"${t}${n}`;
+}
+function zg(e) {
 	let t = [`M ${e[0]} ${e[1]}`];
 	for (let n = 2; n + 5 < e.length; n += 6) t.push(`C ${e[n]} ${e[n + 1]} ${e[n + 2]} ${e[n + 3]} ${e[n + 4]} ${e[n + 5]}`);
 	return t.push("Z"), t.join(" ");
 }
-var zg = 0;
-function Bg(e, t, n) {
-	let r = `text-shadow-${zg++}`, i = e.distance * t, a = Math.cos(e.angle) * i, o = Math.sin(e.angle) * i, s = e.blur ?? 4;
+var Bg = 0;
+function Vg(e, t, n) {
+	let r = `text-shadow-${Bg++}`, i = e.distance * t, a = Math.cos(e.angle) * i, o = Math.sin(e.angle) * i, s = e.blur ?? 4;
 	return n.push(`<filter id="${r}" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur in="SourceAlpha" stdDeviation="${s / 2}"/><feOffset dx="${a}" dy="${o}" result="offsetblur"/><feFlood flood-color="${e.color}"/><feComposite in2="offsetblur" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>`), r;
 }
-function Vg(e, t, n) {
+function Hg(e, t, n) {
 	return hp(t, e, n).map((t) => {
-		let n = t.shapes.map((e) => [e.outer, ...e.holes].map(Rg).join(" ")).join(" ");
+		let n = t.shapes.map((e) => [e.outer, ...e.holes].map(zg).join(" ")).join(" ");
 		return t.mode === "stroke" ? `<path d="${n}" fill="none" stroke="${e.color}" stroke-width="${e.thickness ?? 2}"/>` : `<path d="${n}" fill="${e.color}" fill-rule="nonzero"/>`;
 	}).join("");
 }
-function Hg(e, t) {
+function Ug(e, t) {
 	let n = kd(e.font.family, e.font);
 	if (!n) return "";
 	let r = cp(e, n.font), i = r.shapes;
 	if (i.length === 0) return "";
-	let a = i.map((e) => [e.outer, ...e.holes].map(Rg).join(" ")).join(" "), o = pp(e.effects), s = "", c = "";
-	return o?.style === "drop" ? c = ` filter="url(#${Bg(o, e.font.size, t)})"` : o && (s = Vg(o, i, e.font.size)), `${s}<path d="${a}" fill-rule="nonzero" ${Ng(e.fill, t, {
+	let a = i.map((e) => [e.outer, ...e.holes].map(zg).join(" ")).join(" "), o = pp(e.effects), s = "", c = "";
+	return o?.style === "drop" ? c = ` filter="url(#${Vg(o, e.font.size, t)})"` : o && (s = Hg(o, i, e.font.size)), `${s}<path d="${a}" fill-rule="nonzero" ${Pg(e.fill, t, {
 		width: r.pivotWidth,
 		height: r.height
 	})}${c}/>`;
 }
-function Ug(e, t, n, r) {
+function Wg(e, t, n, r) {
 	if (!e.visible) return "";
 	if (e.type === "svg") {
 		let t = r?.[e.id];
-		return t ? `<image${Lg(e)} width="${e.size.width}" height="${e.size.height}" href="${t}"/>` : "";
+		return t ? `<image${Rg(e)} width="${e.size.width}" height="${e.size.height}" href="${t}"/>` : "";
 	}
 	if (e.type === "image") {
 		let n = Vu(e.assetId, t);
-		return `<image${Lg(e)} width="${e.size.width}" height="${e.size.height}" href="${n}"/>`;
+		return `<image${Rg(e)} width="${e.size.width}" height="${e.size.height}" href="${n}"/>`;
 	}
 	if (e.type === "text") {
-		let t = Hg(e, n);
-		return t ? `<g${Lg(e)}>${t}</g>` : "";
+		let t = Ug(e, n);
+		return t ? `<g${Rg(e)}>${t}</g>` : "";
 	}
 	if (e.type === "group") {
-		let i = e.children.map((e) => Ug(e, t, n, r)).join("");
-		return `<g${Lg(e)}>${i}</g>`;
+		let i = e.children.map((e) => Wg(e, t, n, r)).join("");
+		return `<g${Rg(e)}>${i}</g>`;
 	}
-	return `<g${Lg(e)}>${Fg(e, n)}</g>`;
+	return `<g${Rg(e)}>${Ig(e, n)}</g>`;
 }
 //#endregion
 //#region src/services/exportService.ts
-async function Wg(e, t, n, r = 1) {
+async function Gg(e, t, n, r = 1) {
 	return await Ku(), e.renderer.extract.canvas({
 		target: t,
 		frame: new b(0, 0, n.width, n.height),
 		resolution: r
 	});
 }
-async function Gg(e, t, n, r = 1) {
-	let i = await Wg(e, t, n, r);
+async function Kg(e, t, n, r = 1) {
+	let i = await Gg(e, t, n, r);
 	return new Promise((e, t) => {
 		i.toBlob((n) => {
 			n ? e(n) : t(/* @__PURE__ */ Error("Failed to export PNG"));
 		}, "image/png");
 	});
 }
-async function Kg(e, t, n) {
+async function qg(e, t, n) {
 	let r = {}, i = [];
 	return $c(t.children, (t) => {
 		if (t.type !== "svg") return;
@@ -21765,14 +21781,14 @@ async function Kg(e, t, n) {
 		}));
 	}), await Promise.all(i), r;
 }
-async function qg(e, t, n, r) {
+async function Jg(e, t, n, r) {
 	await Ku();
-	let i = await Kg(e, t, r), a = [], o = t.children.map((e) => Ug(e, n, a, i)).join(""), s = a.length > 0 ? `<defs>${a.join("")}</defs>` : "";
+	let i = await qg(e, t, r), a = [], o = t.children.map((e) => Wg(e, n, a, i)).join(""), s = a.length > 0 ? `<defs>${a.join("")}</defs>` : "";
 	return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${t.size.width} ${t.size.height}" width="${t.size.width}" height="${t.size.height}">${s}${o}</svg>`;
 }
 //#endregion
 //#region src/services/shortcuts.ts
-var Jg = 1, Yg = 10, Xg = 1.2, Zg = {
+var Yg = 1, Xg = 10, Zg = 1.2, Qg = {
 	"mod+z": (e) => e.getState().undo(),
 	"mod+shift+z": (e) => e.getState().redo(),
 	"mod+y": (e) => e.getState().redo(),
@@ -21785,46 +21801,46 @@ var Jg = 1, Yg = 10, Xg = 1.2, Zg = {
 	"mod+a": (e) => yh(e),
 	"mod+g": (e) => gh(e),
 	"mod+shift+g": (e) => vh(e),
-	arrowup: (e) => xh(e, 0, -1),
-	arrowdown: (e) => xh(e, 0, Jg),
-	arrowleft: (e) => xh(e, -1, 0),
-	arrowright: (e) => xh(e, Jg, 0),
-	"shift+arrowup": (e) => xh(e, 0, -10),
-	"shift+arrowdown": (e) => xh(e, 0, Yg),
-	"shift+arrowleft": (e) => xh(e, -10, 0),
-	"shift+arrowright": (e) => xh(e, Yg, 0),
-	"mod+=": (e) => Qg(e, Xg),
-	"mod++": (e) => Qg(e, Xg),
-	"mod+-": (e) => Qg(e, 1 / Xg)
+	arrowup: (e) => Sh(e, 0, -1),
+	arrowdown: (e) => Sh(e, 0, Yg),
+	arrowleft: (e) => Sh(e, -1, 0),
+	arrowright: (e) => Sh(e, Yg, 0),
+	"shift+arrowup": (e) => Sh(e, 0, -10),
+	"shift+arrowdown": (e) => Sh(e, 0, Xg),
+	"shift+arrowleft": (e) => Sh(e, -10, 0),
+	"shift+arrowright": (e) => Sh(e, Xg, 0),
+	"mod+=": (e) => $g(e, Zg),
+	"mod++": (e) => $g(e, Zg),
+	"mod+-": (e) => $g(e, 1 / Zg)
 };
-function Qg(e, t) {
+function $g(e, t) {
 	let { camera: n } = e.getState();
 	e.getState().setCamera({ zoom: n.zoom * t });
 }
-function $g(e) {
+function e_(e) {
 	return e instanceof HTMLElement ? e.tagName === "INPUT" || e.tagName === "TEXTAREA" || e.isContentEditable : !1;
 }
-function e_(e) {
+function t_(e) {
 	let t = [];
 	return (e.metaKey || e.ctrlKey) && t.push("mod"), e.shiftKey && t.push("shift"), e.altKey && t.push("alt"), t.push(e.key.toLowerCase()), t.join("+");
 }
-function t_(e, t) {
+function n_(e, t) {
 	if (t === !1) return () => {};
 	let n = t ? new Set(t) : null, r = (t) => {
-		if ($g(t.target)) return;
-		let r = e_(t);
+		if (e_(t.target)) return;
+		let r = t_(t);
 		if (n && !n.has(r)) return;
-		let i = Zg[r];
+		let i = Qg[r];
 		i && (t.preventDefault(), i(e));
 	};
 	return window.addEventListener("keydown", r), () => window.removeEventListener("keydown", r);
 }
 //#endregion
 //#region src/ui/Editor.tsx
-function n_(e) {
+function r_(e) {
 	return [e.width, e.height];
 }
-var r_ = r(function(e, t) {
+var i_ = r(function(e, t) {
 	let [n] = c(() => {
 		let t = xu(gs.parse(e.document));
 		return e.viewScale != null && t.getState().setViewScale(e.viewScale), e.initialSelectedNodeIds?.length && bh(t, e.initialSelectedNodeIds), t;
@@ -21833,7 +21849,7 @@ var r_ = r(function(e, t) {
 		pageContainer: null,
 		canvas: null
 	}), [i, l] = c(r.current), u = s(null), d = s(e);
-	d.current = e, a(() => t_(n, e.shortcuts), [n, e.shortcuts]), a(() => {
+	d.current = e, a(() => n_(n, e.shortcuts), [n, e.shortcuts]), a(() => {
 		n.getState().setViewScale(e.viewScale ?? null);
 	}, [n, e.viewScale]), a(() => n.subscribe((e, t) => {
 		let { onChange: n, onSelectionChange: r, onHistoryChange: i } = d.current;
@@ -21861,16 +21877,16 @@ var r_ = r(function(e, t) {
 			let { app: t, pageContainer: i } = r.current;
 			if (!t || !i) throw Error("Editor is not mounted yet");
 			let a = n.getState();
-			return Wg(t, i, (Su(a) ?? a.document.pages[0]).size, e);
+			return Gg(t, i, (Su(a) ?? a.document.pages[0]).size, e);
 		},
 		export: async (e, t = 1) => {
 			let { app: i, pageContainer: a } = r.current;
 			if (!i || !a) throw Error("Editor is not mounted yet");
 			let o = n.getState(), s = o.document, c = Su(o) ?? s.pages[0];
-			if (e === "png") return Gg(i, a, c.size, t);
+			if (e === "png") return Kg(i, a, c.size, t);
 			let l = u.current;
 			if (!l) throw Error("Editor is not mounted yet");
-			let d = await qg(i, c, s, l);
+			let d = await Jg(i, c, s, l);
 			return new Blob([d], { type: "image/svg+xml" });
 		},
 		undo: () => n.getState().undo(),
@@ -21910,6 +21926,7 @@ var r_ = r(function(e, t) {
 			to: t,
 			parentId: r?.parentId
 		}),
+		moveNode: (e, t, r) => xh(n, e, t, r?.pageId),
 		selectNode: (e) => bh(n, e),
 		groupSelection: () => gh(n),
 		ungroupSelection: () => vh(n),
@@ -21921,12 +21938,12 @@ var r_ = r(function(e, t) {
 	}), [n]);
 	let f = async (e) => {
 		e.preventDefault();
-		let t = e.dataTransfer.getData(Wh), { canvas: i } = r.current, a = n.getState().document.assets[t];
+		let t = e.dataTransfer.getData(Gh), { canvas: i } = r.current, a = n.getState().document.assets[t];
 		if (!t || !i || !a || a.type !== "image" && a.type !== "svg") return;
 		let o = Xp(i, () => n.getState().camera).toWorld({
 			x: e.clientX,
 			y: e.clientY
-		}), s = a.type === "svg" ? Dh(t, ...n_(Oh(await dd(a.dataUri)))) : wh(t, ...n_(await Eh(a.dataUri)));
+		}), s = a.type === "svg" ? Oh(t, ...r_(kh(await dd(a.dataUri)))) : Th(t, ...r_(await Dh(a.dataUri)));
 		s.transform.x = o.x, s.transform.y = o.y, n.getState().dispatch({
 			type: "AddNode",
 			pageId: n.getState().activePageId,
@@ -21949,7 +21966,7 @@ var r_ = r(function(e, t) {
 				}
 			}),
 			/* @__PURE__ */ T(ym, {}),
-			p && /* @__PURE__ */ T(Mh, {})
+			p && /* @__PURE__ */ T(Nh, {})
 		]
 	});
 	return /* @__PURE__ */ T(Tu, {
@@ -21967,9 +21984,9 @@ var r_ = r(function(e, t) {
 						background: "var(--app-bg)"
 					},
 					children: [
-						/* @__PURE__ */ T(Nh, {}),
-						/* @__PURE__ */ T(Xh, { children: m }),
-						/* @__PURE__ */ T(jg, {})
+						/* @__PURE__ */ T(Ph, {}),
+						/* @__PURE__ */ T(Zh, { children: m }),
+						/* @__PURE__ */ T(Mg, {})
 					]
 				}) : /* @__PURE__ */ T("div", {
 					className: `df-editor relative inline-block align-top ${e.className ?? ""}`,
@@ -21981,7 +21998,7 @@ var r_ = r(function(e, t) {
 });
 //#endregion
 //#region src/services/headlessRender.ts
-async function i_(e, t, n) {
+async function a_(e, t, n) {
 	let r = new l();
 	await r.init({
 		width: e.size.width,
@@ -22000,11 +22017,11 @@ async function i_(e, t, n) {
 		a.destroy(), r.destroy({ removeView: !0 });
 	}
 }
-function a_(e, t, n = 1) {
-	return i_(e, t, (t, r) => Gg(t, r, e.size, n));
+function o_(e, t, n = 1) {
+	return a_(e, t, (t, r) => Kg(t, r, e.size, n));
 }
-function o_(e, t) {
-	return i_(e, t, (n, r, i) => qg(n, e, t, i));
+function s_(e, t) {
+	return a_(e, t, (n, r, i) => Jg(n, e, t, i));
 }
 //#endregion
-export { J as AssetRefSchema, Zo as BaseNodeSchema, Xo as BaseNodeShape, qo as BlendModeSchema, as as CircleParamsSchema, hs as DocumentMetaSchema, gs as DocumentSchema, r_ as Editor, Ko as EffectSchema, $o as FillSchema, Qo as GradientStopSchema, ds as GroupNodeSchema, cs as ImageNodeSchema, fs as NodeSchema, ps as PageBackgroundSchema, ms as PageSchema, ss as ShapeNodeSchema, Yo as SizeSchema, es as StrokeSchema, ls as SvgNodeSchema, us as TextNodeSchema, Jo as TransformSchema, ns as WarpAnchorSchema, rs as WarpPathSchema, os as WarpSchema, is as WarpTypeSchema, kd as getLoadedFont, Nd as loadFont, fp as measureText, Md as onFontLoaded, Ed as registerFont, Dd as registeredFamilies, a_ as renderPageToPng, o_ as renderPageToSvg };
+export { J as AssetRefSchema, Zo as BaseNodeSchema, Xo as BaseNodeShape, qo as BlendModeSchema, as as CircleParamsSchema, hs as DocumentMetaSchema, gs as DocumentSchema, i_ as Editor, Ko as EffectSchema, $o as FillSchema, Qo as GradientStopSchema, ds as GroupNodeSchema, cs as ImageNodeSchema, fs as NodeSchema, ps as PageBackgroundSchema, ms as PageSchema, ss as ShapeNodeSchema, Yo as SizeSchema, es as StrokeSchema, ls as SvgNodeSchema, us as TextNodeSchema, Jo as TransformSchema, ns as WarpAnchorSchema, rs as WarpPathSchema, os as WarpSchema, is as WarpTypeSchema, kd as getLoadedFont, Nd as loadFont, fp as measureText, Md as onFontLoaded, Ed as registerFont, Dd as registeredFamilies, o_ as renderPageToPng, s_ as renderPageToSvg };

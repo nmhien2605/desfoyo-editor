@@ -17,7 +17,7 @@ import { createViewport } from '../render/viewport';
 import type { SceneReconciler } from '../render/SceneReconciler';
 import { exportCanvas, exportPng, exportSvg } from '../services/exportService';
 import { attachShortcuts } from '../services/shortcuts';
-import { deleteSelection, groupSelection, ungroupSelection, replaceSelection } from '../core/actions';
+import { deleteSelection, groupSelection, ungroupSelection, replaceSelection, moveNode } from '../core/actions';
 import { duplicateSelection, copySelection, cutSelection, pasteClipboard } from '../services/clipboard';
 
 function toSizeTuple(size: { width: number; height: number }): [number, number] {
@@ -41,6 +41,8 @@ export interface EditorHandle {
   updateNodeProps(nodeId: string, patch: Partial<Node>, opts?: { pageId?: string }): void;
   updateNodeTransform(nodeId: string, patch: Partial<Transform>, opts?: { pageId?: string }): void;
   reorderNode(nodeId: string, to: 'up' | 'down' | 'top' | 'bottom', opts?: { pageId?: string; parentId?: string | null }): void;
+  /** Moves a node to `toIndex` (0 = bottom) within its container as a single undo step. */
+  moveNode(nodeId: string, toIndex: number, opts?: { pageId?: string }): void;
   /** Replaces the current selection; an empty array clears it. */
   selectNode(nodeIds: string[]): void;
   groupSelection(): void;
@@ -208,6 +210,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
           to,
           parentId: opts?.parentId,
         }),
+      moveNode: (nodeId, toIndex, opts) => moveNode(store, nodeId, toIndex, opts?.pageId),
       selectNode: (nodeIds) => replaceSelection(store, nodeIds),
       groupSelection: () => groupSelection(store),
       ungroupSelection: () => ungroupSelection(store),

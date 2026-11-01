@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createEditorStore } from '../store';
-import { alignSelection, distributeSelection, replaceSelection } from '../actions';
+import { alignSelection, distributeSelection, moveNode, replaceSelection } from '../actions';
 import type { Document, Node, ShapeNode } from '../../schema';
 
 function shapeNode(id: string, x: number, y: number, width = 20, height = 20): ShapeNode {
@@ -115,5 +115,34 @@ describe('replaceSelection', () => {
     store.getState().select('a');
     replaceSelection(store, []);
     expect(store.getState().selectedNodeIds.size).toBe(0);
+  });
+});
+
+describe('moveNode', () => {
+  const ids = (store: ReturnType<typeof createEditorStore>) =>
+    store.getState().document.pages[0].children.map((n) => n.id);
+
+  it('moves several slots as one undo step', () => {
+    const store = createEditorStore(
+      makeDocument([shapeNode('a', 0, 0), shapeNode('b', 0, 0), shapeNode('c', 0, 0), shapeNode('d', 0, 0)]),
+    );
+    moveNode(store, 'a', 3);
+    expect(ids(store)).toEqual(['b', 'c', 'd', 'a']);
+    expect(store.getState().past.length).toBe(1);
+    moveNode(store, 'a', 1);
+    expect(ids(store)).toEqual(['b', 'a', 'c', 'd']);
+    store.getState().undo();
+    expect(ids(store)).toEqual(['b', 'c', 'd', 'a']);
+    store.getState().undo();
+    expect(ids(store)).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('clamps the index and ignores no-op or unknown moves', () => {
+    const store = createEditorStore(makeDocument([shapeNode('a', 0, 0), shapeNode('b', 0, 0)]));
+    moveNode(store, 'a', 99);
+    expect(ids(store)).toEqual(['b', 'a']);
+    moveNode(store, 'a', 1);
+    moveNode(store, 'zzz', 0);
+    expect(store.getState().past.length).toBe(1);
   });
 });
