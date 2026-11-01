@@ -18158,7 +18158,7 @@ function Up({ onReady: e, reconcilerRef: t }) {
 				resolution: window.devicePixelRatio || 1,
 				autoDensity: !0
 			}), i) {
-				a.destroy(!0);
+				a.destroy({ removeView: !0 });
 				return;
 			}
 			n.current?.appendChild(a.canvas), a.ticker.stop();
@@ -18209,7 +18209,7 @@ function Up({ onReady: e, reconcilerRef: t }) {
 		})(), () => {
 			i = !0, c?.(), u?.(), d?.(), p?.(), m?.(), cancelAnimationFrame(h);
 			for (let e of g) e();
-			s?.destroy(), t && (t.current = null), a.renderer && a.destroy(!0);
+			s?.destroy(), t && (t.current = null), a.renderer && a.destroy({ removeView: !0 });
 		};
 	}, []), /* @__PURE__ */ T("div", {
 		ref: n,
@@ -21988,7 +21988,7 @@ async function i_(e, t, n) {
 	try {
 		return await n(r, i, a);
 	} finally {
-		a.destroy(), r.destroy(!0);
+		a.destroy(), r.destroy({ removeView: !0 });
 	}
 }
 function a_(e, t, n = 1) {

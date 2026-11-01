@@ -75,7 +75,7 @@ describe('renderPageToPng', () => {
     expect(initMock).toHaveBeenCalledWith(expect.objectContaining({ width: 200, height: 100, background: '#ffffff' }));
     expect(mountMock).toHaveBeenCalledWith(page, doc);
     expect(exportPngMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), page.size, 2);
-    expect(destroyMock).toHaveBeenCalledWith(true);
+    expect(destroyMock).toHaveBeenCalledWith({ removeView: true });
     expect(reconcilerDestroyMock).toHaveBeenCalled();
     expect(blob).toBeInstanceOf(Blob);
   });
@@ -84,8 +84,22 @@ describe('renderPageToPng', () => {
     exportPngMock.mockRejectedValueOnce(new Error('boom'));
     const page = makePage();
     await expect(renderPageToPng(page, makeDoc(page))).rejects.toThrow('boom');
-    expect(destroyMock).toHaveBeenCalledWith(true);
+    expect(destroyMock).toHaveBeenCalledWith({ removeView: true });
   });
+});
+
+// Regression (D1): destroy(true) / releaseGlobalResources clears Pixi's
+// module-wide Batch pool, which still holds batches the live editor renderer
+// is drawing with → its next render throws null.geometry / null.clear.
+it('never releases Pixi global resources when destroying the off-screen app', async () => {
+  destroyMock.mockClear();
+  const page = makePage();
+  await renderPageToPng(page, makeDoc(page));
+  for (const [opts] of destroyMock.mock.calls) {
+    expect(opts).not.toBe(true);
+    expect(opts?.releaseGlobalResources).toBeFalsy();
+  }
+  expect(destroyMock).toHaveBeenCalledTimes(1);
 });
 
 describe('renderPageToSvg', () => {

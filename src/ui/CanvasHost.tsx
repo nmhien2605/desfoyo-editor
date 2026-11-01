@@ -80,7 +80,8 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
         autoDensity: true,
       });
       if (cancelled) {
-        app.destroy(true);
+        // Not destroy(true): that also releases Pixi's global pools and breaks every other live renderer (see headlessRender.ts).
+        app.destroy({ removeView: true });
         return;
       }
 
@@ -193,7 +194,7 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
       for (const off of unsubscribeRender) off();
       reconciler?.destroy();
       if (reconcilerRef) reconcilerRef.current = null;
-      if (app.renderer) app.destroy(true);
+      if (app.renderer) app.destroy({ removeView: true });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mounts the Pixi app exactly once
   }, []);

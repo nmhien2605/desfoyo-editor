@@ -38,7 +38,10 @@ async function withRenderedPage<T>(page: Page, doc: Document, render: (app: Appl
     return await render(app, pageContainer, reconciler);
   } finally {
     reconciler.destroy();
-    app.destroy(true);
+    // Not destroy(true): `true` sets releaseGlobalResources, which destroys Pixi's
+    // module-wide Batch pool — including batches still used by the live editor's
+    // renderer — so its next render throws null.geometry / null.clear.
+    app.destroy({ removeView: true });
   }
 }
 
