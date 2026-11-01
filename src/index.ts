@@ -4,6 +4,7 @@ import './ui/styles.css';
 export * from './schema';
 export { Editor } from './ui/Editor';
 export type { EditorProps, EditorHandle, HistoryState } from './ui/Editor';
+export type { EditorStage } from './render/stage';
 export {
   registerFont,
   loadFont,

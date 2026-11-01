@@ -11,7 +11,8 @@ function clamp(zoom: number): number {
 export function attachViewportControls(canvas: HTMLCanvasElement, store: EditorStoreApi): () => void {
   const handleWheel = (event: WheelEvent) => {
     // Host-fixed viewScale: leave the wheel to the page (scrolling), don't swallow it.
-    if (store.getState().viewScale != null) return;
+    // Stage mode gets its own gestures (stage-2); until then it behaves the same.
+    if (store.getState().viewScale != null || store.getState().stage != null) return;
     event.preventDefault();
     const { camera } = store.getState();
     const rect = canvas.getBoundingClientRect();
@@ -31,9 +32,9 @@ export function attachViewportControls(canvas: HTMLCanvasElement, store: EditorS
 
 // Middle-mouse-drag always pans; left-mouse-drag pans only while Space is
 // held (tracked locally — no store field needed, it's purely an input-mode
-// toggle for this listener). panX/panY are applied to pageContainer.position
-// independently of .scale in CanvasHost, so a screen-pixel pointer delta
-// maps 1:1 onto them regardless of zoom.
+// toggle for this listener). panX/panY are applied to the world container's
+// .position independently of its .scale in CanvasHost, so a screen-pixel
+// pointer delta maps 1:1 onto them regardless of zoom.
 export function attachPan(canvas: HTMLCanvasElement, store: EditorStoreApi): () => void {
   let spacePressed = false;
   let panning = false;
@@ -58,7 +59,7 @@ export function attachPan(canvas: HTMLCanvasElement, store: EditorStoreApi): () 
 
   const handlePointerDown = (event: PointerEvent) => {
     if (event.button !== 1 && !(event.button === 0 && spacePressed)) return;
-    if (store.getState().viewScale != null) return;
+    if (store.getState().viewScale != null || store.getState().stage != null) return;
     event.preventDefault();
     panning = true;
     last = { x: event.clientX, y: event.clientY };

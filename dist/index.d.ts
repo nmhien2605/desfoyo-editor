@@ -1198,6 +1198,32 @@ declare const DocumentSchema: z.ZodObject<{
 }, z.core.$strip>;
 type Document = z.infer<typeof DocumentSchema>;
 
+interface EditorStage {
+    /** Mockup image drawn under the page. */
+    backdropUrl: string;
+    /** Page centre, as a 0..1 fraction of the image. */
+    pageCenter: {
+        x: number;
+        y: number;
+    };
+    /** Largest box the page may take, as a 0..1 fraction of the image; the page fits it uniformly (contain). */
+    pageBox: {
+        width: number;
+        height: number;
+    };
+    /** Display-only fill under the page (not exported), e.g. "#fff". */
+    pageColor?: string;
+    /** Drop shadow around the page. */
+    pageShadow?: boolean;
+    /** Display-only 2px dashed border around the page, plus 4 corner squares when `corners`. */
+    outline?: {
+        color: string;
+        corners?: boolean;
+    };
+    /** Max zoom as a multiple of the fit zoom. Default 4. */
+    maxZoom?: number;
+}
+
 type HistoryAction = 'push' | 'undo' | 'redo' | 'reset';
 
 type DevMenuConfig = {
@@ -1250,6 +1276,8 @@ interface EditorHandle {
     copySelection(): void;
     cutSelection(): void;
     pasteClipboard(): void;
+    /** Stage mode: back to the camera that fits the whole backdrop. No-op otherwise. */
+    resetView(): void;
 }
 interface EditorProps {
     document: Document;
@@ -1265,6 +1293,12 @@ interface EditorProps {
     chrome?: boolean;
     /** When set, the canvas is page.size × viewScale CSS px and wheel zoom / pan / zoom shortcuts are disabled. Live-updatable. */
     viewScale?: number;
+    /**
+     * Shows a mockup image around the page (display only, never in the document or exports); the
+     * canvas fills the Editor's parent box and the camera fits the image. Use with chrome={false},
+     * without viewScale. Live-updatable.
+     */
+    stage?: EditorStage;
     /** Called on double-click of a selected node. When provided, the built-in behaviour (inline text edit, image crop) runs only if it returns true. */
     onNodeDoubleClick?: (nodeId: string, nodeType: Node['type']) => boolean | void;
     /** Fires after every history change: a new edit ('push'), undo, redo, or loadDocument ('reset'). */
@@ -1303,4 +1337,4 @@ declare function measureText(node: TextNode, font: Font): {
 declare function renderPageToPng(page: Page, doc: Document, scale?: number): Promise<Blob>;
 declare function renderPageToSvg(page: Page, doc: Document): Promise<string>;
 
-export { type AssetRef, AssetRefSchema, type BaseNode, BaseNodeSchema, BaseNodeShape, type BlendMode, BlendModeSchema, type CircleParams, CircleParamsSchema, type Document, type DocumentMeta, DocumentMetaSchema, DocumentSchema, Editor, type EditorHandle, type EditorProps, type Effect, EffectSchema, type Fill, FillSchema, type FontStyle, type FontVariant, type GradientStop, GradientStopSchema, type GroupNode, GroupNodeSchema, type HistoryState, type ImageNode, ImageNodeSchema, type LoadedFont, type Node, NodeSchema, type Page, type PageBackground, PageBackgroundSchema, PageSchema, type ShapeNode, ShapeNodeSchema, type Size, SizeSchema, type Stroke, StrokeSchema, type SvgNode, SvgNodeSchema, type TextNode, TextNodeSchema, type Transform, TransformSchema, type Warp, type WarpAnchor, WarpAnchorSchema, type WarpPath, WarpPathSchema, WarpSchema, type WarpType, WarpTypeSchema, getLoadedFont, loadFont, measureText, onFontLoaded, registerFont, registeredFamilies, renderPageToPng, renderPageToSvg };
+export { type AssetRef, AssetRefSchema, type BaseNode, BaseNodeSchema, BaseNodeShape, type BlendMode, BlendModeSchema, type CircleParams, CircleParamsSchema, type Document, type DocumentMeta, DocumentMetaSchema, DocumentSchema, Editor, type EditorHandle, type EditorProps, type EditorStage, type Effect, EffectSchema, type Fill, FillSchema, type FontStyle, type FontVariant, type GradientStop, GradientStopSchema, type GroupNode, GroupNodeSchema, type HistoryState, type ImageNode, ImageNodeSchema, type LoadedFont, type Node, NodeSchema, type Page, type PageBackground, PageBackgroundSchema, PageSchema, type ShapeNode, ShapeNodeSchema, type Size, SizeSchema, type Stroke, StrokeSchema, type SvgNode, SvgNodeSchema, type TextNode, TextNodeSchema, type Transform, TransformSchema, type Warp, type WarpAnchor, WarpAnchorSchema, type WarpPath, WarpPathSchema, WarpSchema, type WarpType, WarpTypeSchema, getLoadedFont, loadFont, measureText, onFontLoaded, registerFont, registeredFamilies, renderPageToPng, renderPageToSvg };

@@ -7,7 +7,9 @@ import { attachMarquee } from '../render/interactions/marquee';
 import { backgroundAlpha, backgroundColor } from '../render/backgroundColor';
 import { onLoadSettled } from '../render/pendingLoads';
 import { onFontLoaded } from '../text/fontService';
-import { useEditorStoreApi } from './EditorContext';
+import { createStageLayers } from '../render/stageLayers';
+import { fitCamera } from '../render/stage';
+import { useEditorStore, useEditorStoreApi } from './EditorContext';
 import { activePage, type GridSettings } from '../core/store';
 import type { Document, Page, Size } from '../schema';
 
@@ -37,11 +39,15 @@ export interface CanvasHostProps {
 export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const store = useEditorStoreApi();
+  const staged = useEditorStore((s) => s.stage != null);
 
   useEffect(() => {
     let cancelled = false;
     const app = new Application();
     const pageContainer = new Container();
+    // Camera transform lives here; pageContainer stays identity inside it, so
+    // getLocalPosition(pageContainer) still yields world (page) units.
+    const world = new Container();
     let reconciler: SceneReconciler | null = null;
     let unsubscribe: (() => void) | null = null;
     let unsubscribeCamera: (() => void) | null = null;
@@ -50,6 +56,8 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
     let detachPan: (() => void) | null = null;
     let frame = 0;
     let unsubscribeRender: (() => void)[] = [];
+    let resizeObserver: ResizeObserver | null = null;
+    let stageLayers: ReturnType<typeof createStageLayers> | null = null;
 
     (async () => {
       const state = store.getState();
@@ -57,7 +65,11 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
 
       // Canvas CSS size = page size × host viewScale (1 when unset); the camera
       // zoom (pinned to viewScale by the store) scales the content to match.
+      // In stage mode it is the host element's size instead.
       const scaledSize = (size: Size) => {
+        if (store.getState().stage && hostRef.current) {
+          return { width: Math.max(1, hostRef.current.clientWidth), height: Math.max(1, hostRef.current.clientHeight) };
+        }
         const s = store.getState().viewScale ?? 1;
         return { width: size.width * s, height: size.height * s };
       };
@@ -100,24 +112,54 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
         });
       };
       unsubscribeRender = [store.subscribe(requestRender), onLoadSettled(requestRender), onFontLoaded(requestRender)];
-      app.stage.addChild(pageContainer);
+      app.stage.addChild(world);
       app.stage.eventMode = 'static';
       app.stage.hitArea = app.screen;
+      stageLayers = createStageLayers(world, pageContainer, () => refit());
 
       const applyCamera = () => {
         const { camera } = store.getState();
-        pageContainer.scale.set(camera.zoom);
-        pageContainer.position.set(camera.panX, camera.panY);
+        world.scale.set(camera.zoom);
+        world.position.set(camera.panX, camera.panY);
+      };
+      const resizeToFit = () => {
+        const state = store.getState();
+        const { width, height } = scaledSize((activePage(state) ?? state.document.pages[0]).size);
+        if (app.renderer.width !== width || app.renderer.height !== height) app.renderer.resize(width, height);
+      };
+      // Stage mode: the fit target is the backdrop, or the page until the backdrop loads.
+      const refit = () => {
+        const state = store.getState();
+        if (!state.stage) return;
+        const page = activePage(state) ?? state.document.pages[0];
+        const target = stageLayers?.backdropRect() ?? { x: 0, y: 0, ...page.size };
+        state.setStageFit(fitCamera({ width: app.screen.width, height: app.screen.height }, target));
+      };
+      // Stage mode keeps the renderer clear so the backdrop shows; the page background is a stage layer instead.
+      const syncStage = () => {
+        const state = store.getState();
+        const page = activePage(state) ?? state.document.pages[0];
+        app.renderer.background.alpha = state.stage ? 0 : backgroundAlpha(page.background);
+        // Inline canvas would leave a baseline gap under it inside the host box.
+        (app.canvas as HTMLCanvasElement).style.display = state.stage ? 'block' : '';
+        stageLayers?.sync(state.stage, page);
+        resizeToFit();
+        refit();
       };
       applyCamera();
       unsubscribeCamera = store.subscribe((state, prevState) => {
         if (state.camera !== prevState.camera) applyCamera();
-        if (state.viewScale !== prevState.viewScale) {
-          const current = activePage(state) ?? state.document.pages[0];
-          const { width, height } = scaledSize(current.size);
-          app.renderer.resize(width, height);
-        }
+        if (state.viewScale !== prevState.viewScale) resizeToFit();
+        if (state.stage !== prevState.stage) syncStage();
       });
+      if (hostRef.current) {
+        resizeObserver = new ResizeObserver(() => {
+          if (!store.getState().stage) return;
+          resizeToFit();
+          refit();
+        });
+        resizeObserver.observe(hostRef.current);
+      }
       detachViewportControls = attachViewportControls(app.canvas as HTMLCanvasElement, store);
       detachPan = attachPan(app.canvas as HTMLCanvasElement, store);
       attachMarquee(app.stage, pageContainer, store);
@@ -136,12 +178,8 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
       const remountPage = (newPage: Page, doc: Document) => {
         reconciler?.destroy();
         pageContainer.removeChildren();
-        const size = scaledSize(newPage.size);
-        if (app.renderer.width !== size.width || app.renderer.height !== size.height) {
-          app.renderer.resize(size.width, size.height);
-        }
         app.renderer.background.color = backgroundColor(newPage.background);
-        app.renderer.background.alpha = backgroundAlpha(newPage.background);
+        syncStage();
         pageContainer.addChild(gridGraphics);
         drawGrid(gridGraphics, newPage.size, store.getState().grid);
         reconciler = new SceneReconciler(pageContainer, (obj, node) => {
@@ -190,6 +228,8 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
       unsubscribeGrid?.();
       detachViewportControls?.();
       detachPan?.();
+      resizeObserver?.disconnect();
+      stageLayers?.destroy();
       cancelAnimationFrame(frame);
       for (const off of unsubscribeRender) off();
       reconciler?.destroy();
@@ -199,5 +239,6 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mounts the Pixi app exactly once
   }, []);
 
-  return <div ref={hostRef} className="relative inline-block" />;
+  // Stage mode: fills the Editor's box and the canvas follows it (ResizeObserver above).
+  return <div ref={hostRef} className={staged ? 'absolute inset-0 overflow-hidden' : 'relative inline-block'} />;
 }

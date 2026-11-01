@@ -6,6 +6,7 @@ import { EditorStoreProvider, CanvasProvider, type CanvasContextValue } from './
 import { EditorUIProvider, type DevMenuConfig } from './EditorUIContext';
 import { CanvasHost } from './CanvasHost';
 import { SelectionOverlay } from './SelectionOverlay';
+import { StageOutline } from './StageOutline';
 import { FloatingContextToolbar } from './FloatingContextToolbar';
 import { LeftSidebar } from './LeftSidebar';
 import { Workspace } from './Workspace';
@@ -15,6 +16,7 @@ import { ASSET_DRAG_TYPE } from './AssetPanel';
 import { decodeSvgText } from '../render/renderers/svgRenderer';
 import { createViewport } from '../render/viewport';
 import type { SceneReconciler } from '../render/SceneReconciler';
+import type { EditorStage } from '../render/stage';
 import { exportCanvas, exportPng, exportSvg } from '../services/exportService';
 import { attachShortcuts } from '../services/shortcuts';
 import { deleteSelection, groupSelection, ungroupSelection, replaceSelection, moveNode } from '../core/actions';
@@ -52,6 +54,8 @@ export interface EditorHandle {
   copySelection(): void;
   cutSelection(): void;
   pasteClipboard(): void;
+  /** Stage mode: back to the camera that fits the whole backdrop. No-op otherwise. */
+  resetView(): void;
 }
 
 export interface EditorProps {
@@ -68,6 +72,12 @@ export interface EditorProps {
   chrome?: boolean;
   /** When set, the canvas is page.size × viewScale CSS px and wheel zoom / pan / zoom shortcuts are disabled. Live-updatable. */
   viewScale?: number;
+  /**
+   * Shows a mockup image around the page (display only, never in the document or exports); the
+   * canvas fills the Editor's parent box and the camera fits the image. Use with chrome={false},
+   * without viewScale. Live-updatable.
+   */
+  stage?: EditorStage;
   /** Called on double-click of a selected node. When provided, the built-in behaviour (inline text edit, image crop) runs only if it returns true. */
   onNodeDoubleClick?: (nodeId: string, nodeType: Node['type']) => boolean | void;
   /** Fires after every history change: a new edit ('push'), undo, redo, or loadDocument ('reset'). */
@@ -88,6 +98,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     // Seeded here, not only in the effect below: CanvasHost sizes its canvas
     // in its own (earlier-running) mount effect.
     if (props.viewScale != null) api.getState().setViewScale(props.viewScale);
+    if (props.stage) api.getState().setStage(props.stage);
     if (props.initialSelectedNodeIds?.length) {
       replaceSelection(api, props.initialSelectedNodeIds);
     }
@@ -107,6 +118,11 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   useEffect(() => {
     store.getState().setViewScale(props.viewScale ?? null);
   }, [store, props.viewScale]);
+
+  // setStage ignores a structurally equal object, so an inline stage prop is fine.
+  useEffect(() => {
+    store.getState().setStage(props.stage ?? null);
+  }, [store, props.stage]);
 
   useEffect(
     () =>
@@ -219,6 +235,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
       copySelection: () => copySelection(store),
       cutSelection: () => cutSelection(store),
       pasteClipboard: () => pasteClipboard(store),
+      resetView: () => {
+        const { stageFit, setCamera } = store.getState();
+        if (stageFit) setCamera(stageFit);
+      },
     }),
     [store],
   );
@@ -242,9 +262,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   };
 
   const chrome = props.chrome !== false;
+  const staged = props.stage != null;
   const canvasArea = (
     <div
-      className="relative select-none"
+      className={staged ? 'relative h-full w-full select-none' : 'relative select-none'}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => void handleAssetDrop(e)}
     >
@@ -256,6 +277,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
           setCanvasValue(value);
         }}
       />
+      {staged && <StageOutline />}
       <SelectionOverlay />
       {chrome && <FloatingContextToolbar />}
     </div>
@@ -279,7 +301,11 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
               <InspectorPanel />
             </div>
           ) : (
-            <div className={`df-editor relative inline-block align-top ${props.className ?? ''}`}>{canvasArea}</div>
+            <div
+              className={`df-editor relative ${staged ? 'block h-full w-full' : 'inline-block align-top'} ${props.className ?? ''}`}
+            >
+              {canvasArea}
+            </div>
           )}
         </CanvasProvider>
       </EditorUIProvider>

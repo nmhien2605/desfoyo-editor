@@ -6,6 +6,7 @@ import type { AssetRef, Document, GroupNode, Node, Page, Transform } from '../sc
 import { composeTransform, decomposeTransform } from '../render/applyTransform';
 import { computeSelectionBounds } from '../render/interactions/groupTransformMath';
 import type { Camera } from '../render/viewport';
+import { DEFAULT_STAGE_MAX_ZOOM, type EditorStage } from '../render/stage';
 import type { Rect } from '../render/interactions/marquee';
 import type { SnapGuide } from '../render/interactions/snapping';
 
@@ -69,6 +70,11 @@ export interface EditorStore {
   // {zoom: viewScale, pan 0} and setCamera is a no-op, which disables every
   // zoom/pan path (wheel, Space-pan, shortcuts, fit-to-screen) at once.
   viewScale: number | null;
+  // EditorProps.stage. While set, the canvas fills its host and stageFit is
+  // the camera that fits the backdrop (the page until it loads); setCamera
+  // clamps zoom to [stageFit.zoom, stageFit.zoom × maxZoom].
+  stage: EditorStage | null;
+  stageFit: Camera | null;
   // World-space marquee (rubber-band select) rect, live while dragging on
   // empty canvas; null otherwise. See src/render/interactions/marquee.ts.
   marqueeRect: Rect | null;
@@ -84,6 +90,9 @@ export interface EditorStore {
   setDragState: (state: DragState | null) => void;
   setCamera: (partial: Partial<Camera>) => void;
   setViewScale: (viewScale: number | null) => void;
+  setStage: (stage: EditorStage | null) => void;
+  /** Stores the fit camera and jumps to it. */
+  setStageFit: (fit: Camera | null) => void;
   setMarqueeRect: (rect: Rect | null) => void;
   setActiveGuides: (guides: SnapGuide[]) => void;
   setGrid: (partial: Partial<GridSettings>) => void;
@@ -364,6 +373,8 @@ export function createEditorStore(initialDocument: Document) {
     dragState: null,
     camera: { zoom: 1, panX: 0, panY: 0 },
     viewScale: null,
+    stage: null,
+    stageFit: null,
     marqueeRect: null,
     activeGuides: [],
     grid: { enabled: false, size: 20, snap: false },
@@ -386,15 +397,22 @@ export function createEditorStore(initialDocument: Document) {
     setActivePage: (pageId) => set({ activePageId: pageId }),
     setDragState: (dragState) => set({ dragState }),
     setCamera: (partial) =>
-      set((s) => (s.viewScale != null ? {} : {
-        camera: {
-          ...s.camera,
-          ...partial,
-          ...(partial.zoom !== undefined ? { zoom: clampZoom(partial.zoom) } : {}),
-        },
-      })),
+      set((s) => {
+        if (s.viewScale != null) return {};
+        let zoom = partial.zoom;
+        if (zoom !== undefined) {
+          zoom = s.stage && s.stageFit
+            ? Math.min(s.stageFit.zoom * (s.stage.maxZoom ?? DEFAULT_STAGE_MAX_ZOOM), Math.max(s.stageFit.zoom, zoom))
+            : clampZoom(zoom);
+        }
+        return { camera: { ...s.camera, ...partial, ...(zoom !== undefined ? { zoom } : {}) } };
+      }),
     setViewScale: (viewScale) =>
       set(viewScale == null ? { viewScale: null } : { viewScale, camera: { zoom: viewScale, panX: 0, panY: 0 } }),
+    // Hosts usually pass a fresh stage object every render; only a real change should refit.
+    setStage: (stage) =>
+      set((s) => (JSON.stringify(stage) === JSON.stringify(s.stage) ? s : { stage, ...(stage ? {} : { stageFit: null }) })),
+    setStageFit: (stageFit) => set(stageFit ? { stageFit, camera: stageFit } : { stageFit }),
   }));
 }
 

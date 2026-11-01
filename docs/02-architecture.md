@@ -80,6 +80,7 @@
 
 - Container gốc có transform (scale = zoom, position = pan).
 - Hit-testing qua Pixi interaction; tọa độ screen ↔ world convert qua ma trận viewport.
+- **Stage mode** (`<Editor stage={...}>`, dùng với `chrome={false}`): canvas = kích thước phần tử chứa (ResizeObserver), camera mặc định fit toàn bộ ảnh mockup (`handle.resetView()` quay lại fit). Trong `world` (container nhận camera): ảnh nền → page fill (`pageColor` + nền page, bóng) → `pageContainer` bị mask theo rect page. Page vẫn ở (0,0)–(page.size) nên drag/snap/overlay/export không đổi; ảnh nền đặt sao cho page fit `pageBox` và tâm ở `pageCenter` (`src/render/stage.ts`). Viền nét đứt là overlay DOM (`StageOutline`). Mọi lớp này nằm ngoài `pageContainer` → không vào `exportCanvas`. Zoom kẹp trong [fit, fit × `maxZoom`]; cử chỉ zoom/pan của stage làm ở bước sau, hiện wheel/Space-pan/phím zoom tắt trong stage mode.
 
 ### 8. Services
 

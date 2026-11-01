@@ -11,7 +11,7 @@ export interface Camera {
 
 // Phase 1 had no zoom/pan, so world space and canvas pixel space were
 // identical. Phase 2 fills in the seam: `camera` (zoom scale + pan offset,
-// applied to pageContainer.scale/.position in CanvasHost) means world space
+// applied to the world container's scale/position in CanvasHost) means world space
 // and canvas-local pixel space now differ by that transform.
 //
 // toWorld: native PointerEvent clientX/clientY (viewport-relative) -> world

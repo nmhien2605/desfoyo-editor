@@ -40,6 +40,8 @@ const SHORTCUTS: Record<string, ShortcutHandler> = {
 };
 
 function zoomBy(store: EditorStoreApi, factor: number): void {
+  // Would zoom around the world origin, not the view; stage mode zooms by gesture only.
+  if (store.getState().stage) return;
   const { camera } = store.getState();
   store.getState().setCamera({ zoom: camera.zoom * factor });
 }
