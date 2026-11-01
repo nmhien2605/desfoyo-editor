@@ -6,7 +6,7 @@ import type { AssetRef, Document, GroupNode, Node, Page, Transform } from '../sc
 import { composeTransform, decomposeTransform } from '../render/applyTransform';
 import { computeSelectionBounds } from '../render/interactions/groupTransformMath';
 import type { Camera } from '../render/viewport';
-import { DEFAULT_STAGE_MAX_ZOOM, type EditorStage } from '../render/stage';
+import { clampStagePan, clampStageZoom, type EditorStage, type StageBounds } from '../render/stage';
 import type { Rect } from '../render/interactions/marquee';
 import type { SnapGuide } from '../render/interactions/snapping';
 
@@ -60,6 +60,9 @@ export interface EditorStore {
   gestureStartDocument: Document | null;
   beginGesture: (gestureId: string) => void;
   endGesture: () => void;
+  // Drops the gesture in progress (a second finger landed): document back to
+  // gestureStartDocument, no history entry, live drag/marquee/guide state cleared.
+  cancelGesture: () => void;
 
   // uiSlice — ephemeral, never persisted as part of the document.
   selectedNodeIds: Set<string>;
@@ -72,9 +75,11 @@ export interface EditorStore {
   viewScale: number | null;
   // EditorProps.stage. While set, the canvas fills its host and stageFit is
   // the camera that fits the backdrop (the page until it loads); setCamera
-  // clamps zoom to [stageFit.zoom, stageFit.zoom × maxZoom].
+  // clamps zoom to [stageFit.zoom, stageFit.zoom × maxZoom], and pan to
+  // stageBounds once known (see clampStagePan).
   stage: EditorStage | null;
   stageFit: Camera | null;
+  stageBounds: StageBounds | null;
   // World-space marquee (rubber-band select) rect, live while dragging on
   // empty canvas; null otherwise. See src/render/interactions/marquee.ts.
   marqueeRect: Rect | null;
@@ -91,8 +96,8 @@ export interface EditorStore {
   setCamera: (partial: Partial<Camera>) => void;
   setViewScale: (viewScale: number | null) => void;
   setStage: (stage: EditorStage | null) => void;
-  /** Stores the fit camera and jumps to it. */
-  setStageFit: (fit: Camera | null) => void;
+  /** Stores the fit camera (and the bounds that clamp pan) and jumps to it. */
+  setStageFit: (fit: Camera | null, bounds?: StageBounds) => void;
   setMarqueeRect: (rect: Rect | null) => void;
   setActiveGuides: (guides: SnapGuide[]) => void;
   setGrid: (partial: Partial<GridSettings>) => void;
@@ -367,6 +372,18 @@ export function createEditorStore(initialDocument: Document) {
           lastHistoryAction: 'push',
         };
       }),
+    cancelGesture: () =>
+      set((s) => ({
+        // lastCommand null: CanvasHost rebuilds the scene from the restored document, as for undo.
+        ...(s.gestureStartDocument && s.gestureStartDocument !== s.document
+          ? { document: s.gestureStartDocument, lastCommand: null }
+          : {}),
+        activeGestureId: null,
+        gestureStartDocument: null,
+        dragState: null,
+        marqueeRect: null,
+        activeGuides: [],
+      })),
 
     selectedNodeIds: new Set(),
     activePageId: initialDocument.pages[0]?.id ?? '',
@@ -375,6 +392,7 @@ export function createEditorStore(initialDocument: Document) {
     viewScale: null,
     stage: null,
     stageFit: null,
+    stageBounds: null,
     marqueeRect: null,
     activeGuides: [],
     grid: { enabled: false, size: 20, snap: false },
@@ -399,20 +417,22 @@ export function createEditorStore(initialDocument: Document) {
     setCamera: (partial) =>
       set((s) => {
         if (s.viewScale != null) return {};
-        let zoom = partial.zoom;
-        if (zoom !== undefined) {
-          zoom = s.stage && s.stageFit
-            ? Math.min(s.stageFit.zoom * (s.stage.maxZoom ?? DEFAULT_STAGE_MAX_ZOOM), Math.max(s.stageFit.zoom, zoom))
-            : clampZoom(zoom);
+        if (s.stage && s.stageFit) {
+          const camera = { ...s.camera, ...partial };
+          camera.zoom = clampStageZoom(camera.zoom, s.stageFit.zoom, s.stage.maxZoom);
+          return { camera: s.stageBounds ? clampStagePan(camera, s.stageBounds) : camera };
         }
+        let zoom = partial.zoom;
+        if (zoom !== undefined) zoom = clampZoom(zoom);
         return { camera: { ...s.camera, ...partial, ...(zoom !== undefined ? { zoom } : {}) } };
       }),
     setViewScale: (viewScale) =>
       set(viewScale == null ? { viewScale: null } : { viewScale, camera: { zoom: viewScale, panX: 0, panY: 0 } }),
     // Hosts usually pass a fresh stage object every render; only a real change should refit.
     setStage: (stage) =>
-      set((s) => (JSON.stringify(stage) === JSON.stringify(s.stage) ? s : { stage, ...(stage ? {} : { stageFit: null }) })),
-    setStageFit: (stageFit) => set(stageFit ? { stageFit, camera: stageFit } : { stageFit }),
+      set((s) => (JSON.stringify(stage) === JSON.stringify(s.stage) ? s : { stage, ...(stage ? {} : { stageFit: null, stageBounds: null }) })),
+    setStageFit: (stageFit, stageBounds) =>
+      set(stageFit ? { stageFit, stageBounds: stageBounds ?? null, camera: stageFit } : { stageFit, stageBounds: null }),
   }));
 }
 

@@ -1,5 +1,5 @@
 import type { Size } from '../schema';
-import type { Camera } from './viewport';
+import type { Camera, Point } from './viewport';
 
 // EditorProps.stage: the editor also shows a mockup image (shirt, frame, case)
 // around the page. Display only — none of it is in the document or exports.
@@ -57,5 +57,40 @@ export function fitCamera(canvas: Size, rect: WorldRect): Camera {
     zoom,
     panX: (canvas.width - rect.width * zoom) / 2 - rect.x * zoom,
     panY: (canvas.height - rect.height * zoom) / 2 - rect.y * zoom,
+  };
+}
+
+export function clampStageZoom(zoom: number, fitZoom: number, maxZoom = DEFAULT_STAGE_MAX_ZOOM): number {
+  return Math.min(fitZoom * maxZoom, Math.max(fitZoom, zoom));
+}
+
+// What the pan clamp needs: canvas CSS size and the backdrop in world units.
+export interface StageBounds {
+  canvas: Size;
+  backdrop: WorldRect;
+}
+
+// Per axis: a backdrop wider than the canvas must keep covering it, a narrower one stays centred.
+export function clampStagePan(camera: Camera, { canvas, backdrop }: StageBounds): Camera {
+  const axis = (pan: number, view: number, start: number, length: number) => {
+    const size = length * camera.zoom;
+    const offset = start * camera.zoom;
+    if (size <= view) return (view - size) / 2 - offset;
+    return Math.min(-offset, Math.max(view - size - offset, pan));
+  };
+  return {
+    zoom: camera.zoom,
+    panX: axis(camera.panX, canvas.width, backdrop.x, backdrop.width),
+    panY: axis(camera.panY, canvas.height, backdrop.y, backdrop.height),
+  };
+}
+
+// Camera at `zoom` that puts the world point that was under `from` (in
+// `start`) under `to` — wheel zoom (from = to = cursor) and pinch (midpoints).
+export function anchoredCamera(start: Camera, from: Point, to: Point, zoom: number): Camera {
+  return {
+    zoom,
+    panX: to.x - ((from.x - start.panX) / start.zoom) * zoom,
+    panY: to.y - ((from.y - start.panY) / start.zoom) * zoom,
   };
 }

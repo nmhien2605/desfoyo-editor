@@ -11,7 +11,7 @@ function clamp(zoom: number): number {
 export function attachViewportControls(canvas: HTMLCanvasElement, store: EditorStoreApi): () => void {
   const handleWheel = (event: WheelEvent) => {
     // Host-fixed viewScale: leave the wheel to the page (scrolling), don't swallow it.
-    // Stage mode gets its own gestures (stage-2); until then it behaves the same.
+    // Stage mode has its own gestures (stageGestures.ts).
     if (store.getState().viewScale != null || store.getState().stage != null) return;
     event.preventDefault();
     const { camera } = store.getState();

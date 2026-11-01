@@ -4,6 +4,7 @@ import { SceneReconciler } from '../render/SceneReconciler';
 import { attachDrag } from '../render/interactions/drag';
 import { attachViewportControls, attachPan } from '../render/interactions/viewportControls';
 import { attachMarquee } from '../render/interactions/marquee';
+import { attachDoubleTapReset } from '../render/interactions/stageGestures';
 import { backgroundAlpha, backgroundColor } from '../render/backgroundColor';
 import { onLoadSettled } from '../render/pendingLoads';
 import { onFontLoaded } from '../text/fontService';
@@ -132,8 +133,11 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
         const state = store.getState();
         if (!state.stage) return;
         const page = activePage(state) ?? state.document.pages[0];
-        const target = stageLayers?.backdropRect() ?? { x: 0, y: 0, ...page.size };
-        state.setStageFit(fitCamera({ width: app.screen.width, height: app.screen.height }, target));
+        const bounds = {
+          canvas: { width: app.screen.width, height: app.screen.height },
+          backdrop: stageLayers?.backdropRect() ?? { x: 0, y: 0, ...page.size },
+        };
+        state.setStageFit(fitCamera(bounds.canvas, bounds.backdrop), bounds);
       };
       // Stage mode keeps the renderer clear so the backdrop shows; the page background is a stage layer instead.
       const syncStage = () => {
@@ -163,6 +167,7 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
       detachViewportControls = attachViewportControls(app.canvas as HTMLCanvasElement, store);
       detachPan = attachPan(app.canvas as HTMLCanvasElement, store);
       attachMarquee(app.stage, pageContainer, store);
+      attachDoubleTapReset(app.stage, store);
 
       const gridGraphics = new Graphics();
       gridGraphics.eventMode = 'none';

@@ -81,6 +81,16 @@
   border: 1px solid var(--df-handle-border-color);
 }
 
+/* Stage Space/middle-drag pan; !important beats the cursor Pixi sets inline on the canvas. */
+.df-editor [data-df-pan='grab'],
+.df-editor [data-df-pan='grab'] * {
+  cursor: grab !important;
+}
+.df-editor [data-df-pan='grabbing'],
+.df-editor [data-df-pan='grabbing'] * {
+  cursor: grabbing !important;
+}
+
 .df-marquee {
   border: 1px dashed var(--df-marquee-color);
   background: color-mix(in srgb, var(--df-marquee-color) 10%, transparent);

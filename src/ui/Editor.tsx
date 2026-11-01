@@ -17,6 +17,7 @@ import { decodeSvgText } from '../render/renderers/svgRenderer';
 import { createViewport } from '../render/viewport';
 import type { SceneReconciler } from '../render/SceneReconciler';
 import type { EditorStage } from '../render/stage';
+import { attachStageGestures, resetStageView } from '../render/interactions/stageGestures';
 import { exportCanvas, exportPng, exportSvg } from '../services/exportService';
 import { attachShortcuts } from '../services/shortcuts';
 import { deleteSelection, groupSelection, ungroupSelection, replaceSelection, moveNode } from '../core/actions';
@@ -123,6 +124,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   useEffect(() => {
     store.getState().setStage(props.stage ?? null);
   }, [store, props.stage]);
+
+  const areaRef = useRef<HTMLDivElement>(null);
+  const staged = props.stage != null;
+  useEffect(() => (staged && areaRef.current ? attachStageGestures(areaRef.current, store) : undefined), [store, staged]);
 
   useEffect(
     () =>
@@ -235,10 +240,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
       copySelection: () => copySelection(store),
       cutSelection: () => cutSelection(store),
       pasteClipboard: () => pasteClipboard(store),
-      resetView: () => {
-        const { stageFit, setCamera } = store.getState();
-        if (stageFit) setCamera(stageFit);
-      },
+      resetView: () => resetStageView(store),
     }),
     [store],
   );
@@ -262,10 +264,12 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   };
 
   const chrome = props.chrome !== false;
-  const staged = props.stage != null;
   const canvasArea = (
     <div
+      ref={areaRef}
       className={staged ? 'relative h-full w-full select-none' : 'relative select-none'}
+      // Stage mode: pinch over the backdrop or an overlay zooms the editor, not the page.
+      style={staged ? { touchAction: 'none' } : undefined}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => void handleAssetDrop(e)}
     >
