@@ -116,7 +116,11 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
       app.stage.addChild(world);
       app.stage.eventMode = 'static';
       app.stage.hitArea = app.screen;
-      stageLayers = createStageLayers(world, pageContainer, () => refit());
+      // refit is a no-op when the new backdrop has the same rect (e.g. another case colour), so draw explicitly.
+      stageLayers = createStageLayers(world, pageContainer, () => {
+        refit();
+        requestRender();
+      });
 
       const applyCamera = () => {
         const { camera } = store.getState();

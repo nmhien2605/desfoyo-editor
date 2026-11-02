@@ -18429,7 +18429,9 @@ function nm({ onReady: e, reconcilerRef: t }) {
 				r.subscribe(S),
 				Xu(S),
 				Ld(S)
-			], a.stage.addChild(s), a.stage.eventMode = "static", a.stage.hitArea = a.screen, b = em(s, o, () => w());
+			], a.stage.addChild(s), a.stage.eventMode = "static", a.stage.hitArea = a.screen, b = em(s, o, () => {
+				w(), S();
+			});
 			let C = () => {
 				let { camera: e } = r.getState();
 				s.scale.set(e.zoom), s.position.set(e.panX, e.panY);
