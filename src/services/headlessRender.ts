@@ -1,4 +1,4 @@
-import { Application, Container } from 'pixi.js';
+import { Application, Container, type BindGroup } from 'pixi.js';
 import type { Document, Page } from '../schema';
 import { SceneReconciler } from '../render/SceneReconciler';
 import { backgroundAlpha, backgroundColor } from '../render/backgroundColor';
@@ -38,11 +38,21 @@ async function withRenderedPage<T>(page: Page, doc: Document, render: (app: Appl
     return await render(app, pageContainer, reconciler);
   } finally {
     reconciler.destroy();
+    releaseFilterBindGroup(app);
     // Not destroy(true): `true` sets releaseGlobalResources, which destroys Pixi's
     // module-wide Batch pool — including batches still used by the live editor's
     // renderer — so its next render throws null.geometry / null.clear.
     app.destroy({ removeView: true });
   }
+}
+
+// FilterSystem keeps one BindGroup subscribed to the last filter pass's input
+// (and back) texture and its FilterSystem.destroy() never releases it. Those
+// are TexturePool textures sized to this renderer's screen, which app.destroy()
+// prunes (TexturePool.removeScreen) -> "[BindGroup] ... destroyed while still
+// bound" (pixi >= 8.21). Unsubscribe the group first; the renderer is going away.
+export function releaseFilterBindGroup(app: Application): void {
+  (app.renderer?.filter as unknown as { _globalFilterBindGroup?: BindGroup } | undefined)?._globalFilterBindGroup?.destroy();
 }
 
 export function renderPageToPng(page: Page, doc: Document, scale = 1): Promise<Blob> {

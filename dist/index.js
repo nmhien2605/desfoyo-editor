@@ -22525,14 +22525,17 @@ async function K_(e, t, n) {
 	try {
 		return await n(r, i, a);
 	} finally {
-		a.destroy(), r.destroy({ removeView: !0 });
+		a.destroy(), q_(r), r.destroy({ removeView: !0 });
 	}
 }
-function q_(e, t, n = 1) {
+function q_(e) {
+	(e.renderer?.filter)?._globalFilterBindGroup?.destroy();
+}
+function J_(e, t, n = 1) {
 	return K_(e, t, (t, r) => N_(t, r, e.size, n));
 }
-function J_(e, t) {
+function Y_(e, t) {
 	return K_(e, t, (n, r, i) => F_(n, e, t, i));
 }
 //#endregion
-export { gs as AssetRefSchema, $o as BaseNodeSchema, Qo as BaseNodeShape, Yo as BlendModeSchema, ss as CircleParamsSchema, _s as DocumentMetaSchema, vs as DocumentSchema, G_ as Editor, Jo as EffectSchema, ts as FillSchema, es as GradientStopSchema, ps as GroupNodeSchema, us as ImageNodeSchema, ms as NodeSchema, hs as PageBackgroundSchema, q as PageSchema, ls as ShapeNodeSchema, Zo as SizeSchema, ns as StrokeSchema, ds as SvgNodeSchema, fs as TextNodeSchema, Xo as TransformSchema, is as WarpAnchorSchema, as as WarpPathSchema, cs as WarpSchema, os as WarpTypeSchema, Jd as getLoadedFont, Qd as loadFont, jp as measureText, Zd as onFontLoaded, Gd as registerFont, Kd as registeredFamilies, q_ as renderPageToPng, J_ as renderPageToSvg };
+export { gs as AssetRefSchema, $o as BaseNodeSchema, Qo as BaseNodeShape, Yo as BlendModeSchema, ss as CircleParamsSchema, _s as DocumentMetaSchema, vs as DocumentSchema, G_ as Editor, Jo as EffectSchema, ts as FillSchema, es as GradientStopSchema, ps as GroupNodeSchema, us as ImageNodeSchema, ms as NodeSchema, hs as PageBackgroundSchema, q as PageSchema, ls as ShapeNodeSchema, Zo as SizeSchema, ns as StrokeSchema, ds as SvgNodeSchema, fs as TextNodeSchema, Xo as TransformSchema, is as WarpAnchorSchema, as as WarpPathSchema, cs as WarpSchema, os as WarpTypeSchema, Jd as getLoadedFont, Qd as loadFont, jp as measureText, Zd as onFontLoaded, Gd as registerFont, Kd as registeredFamilies, J_ as renderPageToPng, Y_ as renderPageToSvg };
