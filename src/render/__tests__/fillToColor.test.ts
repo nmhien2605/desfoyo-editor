@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FillGradient, Graphics } from 'pixi.js';
-import { GradientCache, gradientCacheFor, resolveFill } from '../fillToColor';
+import { BindGroup, FillGradient, Graphics, Texture, TextureSource } from 'pixi.js';
+import { GradientCache, gradientCacheFor, releaseGradient, resolveFill } from '../fillToColor';
 import type { Fill } from '../../schema';
 
 const radial: Fill = {
@@ -60,5 +60,37 @@ describe('GradientCache', () => {
     const destroy = vi.spyOn(g, 'destroy');
     obj.destroy();
     expect(destroy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('releaseGradient', () => {
+  // Pixi's batch BindGroup cache keeps every Graphics texture subscribed; a
+  // destroy it hears about is the "[BindGroup] ... destroyed while still
+  // bound" warning (pixi >= 8.21; 8.19 silently destroys the group).
+  it('unsubscribes cached bind groups before destroying the texture', () => {
+    const gradient = resolveFill(radial, box) as FillGradient;
+    const source = new TextureSource();
+    gradient.texture = new Texture({ source });
+    const group = new BindGroup({ 0: source, 1: source.style });
+    const gpuFreed = vi.fn();
+    source.on('destroy', gpuFreed);
+    releaseGradient(gradient);
+    expect(source.destroyed).toBe(true);
+    expect(gpuFreed).toHaveBeenCalledTimes(1);
+    // The group heard nothing: 8.19 would have torn it down (resources = null).
+    expect(group.resources).not.toBeNull();
+  });
+
+  it('GradientCache.commit releases replaced gradients the same way', () => {
+    const cache = new GradientCache();
+    const old = resolveFill(radial, box, cache) as FillGradient;
+    cache.commit();
+    const source = new TextureSource();
+    old.texture = new Texture({ source });
+    const group = new BindGroup({ 0: source, 1: source.style });
+    resolveFill(radial, { width: 1, height: 1 }, cache);
+    cache.commit();
+    expect(source.destroyed).toBe(true);
+    expect(group.resources).not.toBeNull();
   });
 });

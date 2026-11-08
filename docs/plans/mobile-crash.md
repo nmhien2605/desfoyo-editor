@@ -1,4 +1,4 @@
-Status: done · Updated: 2026-11-08 · ID: mcrash
+Status: in progress · Updated: 2026-11-08 · ID: mcrash
 
 # Editor crash on mobile
 
@@ -33,5 +33,8 @@ The v2 editor on a phone stays within a sane memory budget (no tab kill on iPhon
 | 3 | mcrash-3 | lib | code | Opus | perf: transform-only drag path, stable selection | done |
 | 4 | mcrash-4 | web | code | Opus | atlas cap, lazy Model3D on mobile | done |
 | 5 | mcrash-5 | both | qa | Opus | measure + functional check in browser | done |
+| 6 | mcrash-6 | lib | code | Opus | QA follow-ups: BindGroup warning (gradient release), handles above warp points + touch hit area, slider cancel | done |
+| 7 | mcrash-7 | web | ui | Opus | mobile toolbar covered by side tabs, hint overlap, 3D preview cost, multi-side designs in 3D | todo |
+| 8 | mcrash-8 | both | qa | Opus | re-test after the follow-ups | todo |
 
 Local testing: lead builds the lib, copies `dist/` into `desfoyo-web/node_modules/@desfoyo/editor/dist`, clears `.next/cache`, restarts the dev server. Pushing the lib and bumping the web's `yarn.lock` needs the user's OK.

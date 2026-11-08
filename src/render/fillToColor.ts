@@ -18,7 +18,7 @@ export class GradientCache {
 
   // Call after a full redraw (clear() + every fill/stroke).
   commit(): void {
-    for (const [key, gradient] of this.live) if (this.next.get(key) !== gradient) gradient.destroy();
+    for (const [key, gradient] of this.live) if (this.next.get(key) !== gradient) releaseGradient(gradient);
     this.live = this.next;
     this.next = new Map();
   }
@@ -27,6 +27,20 @@ export class GradientCache {
     this.commit();
     this.commit();
   }
+}
+
+// Pixi caches one BindGroup per batched texture set (getTextureBatchBindGroup,
+// used by every Graphics batch) and never evicts it. Destroying a texture
+// such a group listens to warns "[BindGroup] a 'textureSource' was destroyed
+// while still bound" (pixi >= 8.21) once per stale group. No draw can pick that
+// group again (its key hashes the dead texture's uid), so unsubscribe it from
+// the source/sampler 'change' events first. destroy() still emits 'destroy'
+// (GPU texture freed) and then drops every listener anyway.
+export function releaseGradient(gradient: FillGradient): void {
+  const source = gradient.texture?.source;
+  source?.style.removeAllListeners('change');
+  source?.removeAllListeners('change');
+  gradient.destroy();
 }
 
 const caches = new WeakMap<Container, GradientCache>();

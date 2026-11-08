@@ -1,6 +1,6 @@
 import type { TextNode, Warp, WarpType } from '../schema';
 import { useEditorStoreApi } from './EditorContext';
-import { endOwnGesture } from '../render/interactions/pointerGesture';
+import { endOwnGesture, startPointerGesture } from '../render/interactions/pointerGesture';
 import { getLoadedFont } from '../text/fontService';
 import { measureText } from '../text/textGeometry';
 
@@ -137,9 +137,8 @@ export function TransformationControls({
               step={0.01}
               value={warp?.curveHeight ?? 0}
               className="kittl-range"
-              onPointerDown={() => store.getState().beginGesture(`warp-curve:${node.id}`)}
-              onPointerUp={() => endOwnGesture(store, `warp-curve:${node.id}`)}
-              onPointerCancel={() => endOwnGesture(store, `warp-curve:${node.id}`)}
+              // Ends on pointerup/pointercancel anywhere, like the opacity slider.
+              onPointerDown={(e) => startPointerGesture(store, `warp-curve:${node.id}`, () => {}, e.pointerId)}
               onBlur={() => endOwnGesture(store, `warp-curve:${node.id}`)}
               onChange={(e) => apply(setWarpCurveHeight(warp, Number(e.target.value)))}
             />

@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
 import { activePage } from '../core/store';
 import { findNodeInTree } from '../core/tree';
-import { endOwnGesture } from '../render/interactions/pointerGesture';
+import { endOwnGesture, startPointerGesture } from '../render/interactions/pointerGesture';
 import { customShaders } from '../effects/shaders/customShaders';
 import { decodeSvgText, listFillableIds } from '../render/renderers/svgRenderer';
 import { getLoadedFont, onFontLoaded, registeredFamilies } from '../text/fontService';
@@ -104,10 +104,9 @@ export function PropertiesPanel() {
           step={0.01}
           value={node.opacity}
           className="kittl-range w-full"
-          onPointerDown={() => store.getState().beginGesture('opacity')}
-          // pointercancel (touch turned into a scroll) / blur also end it; only our own gesture.
-          onPointerUp={() => endOwnGesture(store, 'opacity')}
-          onPointerCancel={() => endOwnGesture(store, 'opacity')}
+          // Window-level end: pointerup/pointercancel may land outside the slider
+          // (finger slid off, touch turned into a scroll). Blur ends only our own gesture.
+          onPointerDown={(e) => startPointerGesture(store, 'opacity', () => {}, e.pointerId)}
           onBlur={() => endOwnGesture(store, 'opacity')}
           onChange={(e) => updateProps({ opacity: Number(e.target.value) })}
         />

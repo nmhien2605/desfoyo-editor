@@ -22,10 +22,15 @@ import type { SnapGuide } from '../render/interactions/snapping';
 import type { Document, ImageNode, Node, Transform } from '../schema';
 import { getLoadedFont } from '../text/fontService';
 import { TextEditOverlay } from './TextEditOverlay';
-import { WarpHandlesOverlay } from './WarpHandlesOverlay';
+import { HIT_AREA_CLASS, WarpHandlesOverlay, handleHitSize, isCoarsePointer } from './WarpHandlesOverlay';
 import { CircleHandlesOverlay, memoTextGeometry } from './CircleHandlesOverlay';
 
 const HANDLES: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+
+// Resize/rotate/crop handles: above warp/circle points (zIndex), with a
+// touch-sized hit area on coarse pointers (--df-hit, see handleHitSize).
+const HANDLE_CLASS = `pointer-events-auto touch-none absolute df-handle -translate-x-1/2 -translate-y-1/2 ${HIT_AREA_CLASS}`;
+const handleStyle = (left: number, top: number, hit: number) => ({ left, top, zIndex: 1, ['--df-hit' as string]: `${hit}px` });
 
 function localCorner(handle: ResizeHandle, width: number, height: number): Point {
   const x = handle.includes('e') ? width : handle.includes('w') ? 0 : width / 2;
@@ -173,6 +178,11 @@ function SingleSelectionOverlay({
     y: node.transform.y + (box.y - originY * node.size.height) * scaleY,
   });
   const rotationDeg = (node.transform.rotation * 180) / Math.PI;
+  const hit = handleHitSize(
+    7,
+    Math.min(Math.abs(box.width * scaleX), Math.abs(box.height * scaleY)) * camera.zoom,
+    isCoarsePointer(),
+  );
 
   const startResize = (handle: ResizeHandle) => (downEvent: ReactPointerEvent) => {
     downEvent.stopPropagation();
@@ -300,20 +310,20 @@ function SingleSelectionOverlay({
             <div
               key={handle}
               onPointerDown={startResize(handle)}
-              className="pointer-events-auto touch-none absolute df-handle -translate-x-1/2 -translate-y-1/2"
-              style={{ left: pos.x, top: pos.y, cursor: `${handle}-resize` }}
+              className={HANDLE_CLASS}
+              style={{ ...handleStyle(pos.x, pos.y, hit), cursor: `${handle}-resize` }}
             />
           );
         })}
       {!isCropping && !isEditingText && (
         <div
           onPointerDown={startRotate}
-          className="pointer-events-auto touch-none absolute df-handle -translate-x-1/2 -translate-y-1/2 cursor-grab"
-          style={{ left: rotateHandlePos.x, top: rotateHandlePos.y }}
+          className={`${HANDLE_CLASS} cursor-grab`}
+          style={handleStyle(rotateHandlePos.x, rotateHandlePos.y, hit)}
         />
       )}
       {isCropping && node.type === 'image' && (
-        <ImageCropHandles node={node} activePageId={activePageId} viewport={viewport} />
+        <ImageCropHandles node={node} activePageId={activePageId} viewport={viewport} hit={hit} />
       )}
       {isEditingText && node.type === 'text' && (
         <TextEditOverlay
@@ -324,14 +334,14 @@ function SingleSelectionOverlay({
         />
       )}
       {!isEditingText && node.type === 'text' && node.warp?.type === 'circle' && (
-        <CircleHandlesOverlay node={node} activePageId={activePageId} viewport={viewport} />
+        <CircleHandlesOverlay node={node} activePageId={activePageId} viewport={viewport} handleHit={hit} />
       )}
       {!isEditingText &&
         node.type === 'text' &&
         node.warp &&
         node.warp.type !== 'none' &&
         node.warp.type !== 'circle' && (
-          <WarpHandlesOverlay node={node} activePageId={activePageId} viewport={viewport} />
+          <WarpHandlesOverlay node={node} activePageId={activePageId} viewport={viewport} handleHit={hit} />
         )}
       {extras}
     </div>
@@ -378,10 +388,12 @@ function ImageCropHandles({
   node,
   activePageId,
   viewport,
+  hit,
 }: {
   node: ImageNode;
   activePageId: string;
   viewport: Viewport;
+  hit: number;
 }) {
   const store = useEditorStoreApi();
   const crop = node.crop ?? DEFAULT_CROP;
@@ -421,8 +433,8 @@ function ImageCropHandles({
           <div
             key={handle}
             onPointerDown={startDrag(handle)}
-            className="pointer-events-auto touch-none absolute df-handle -translate-x-1/2 -translate-y-1/2"
-            style={{ left: pos.x, top: pos.y, cursor: `${handle}-resize` }}
+            className={HANDLE_CLASS}
+            style={{ ...handleStyle(pos.x, pos.y, hit), cursor: `${handle}-resize` }}
           />
         );
       })}
@@ -487,8 +499,12 @@ function MultiSelectionOverlay({ nodes, activePageId }: { nodes: Node[]; activeP
       />
       <div
         onPointerDown={startRotate}
-        className="pointer-events-auto touch-none absolute df-handle -translate-x-1/2 -translate-y-1/2 cursor-grab"
-        style={{ left: rotateHandlePos.x, top: rotateHandlePos.y }}
+        className={`${HANDLE_CLASS} cursor-grab`}
+        style={handleStyle(
+          rotateHandlePos.x,
+          rotateHandlePos.y,
+          handleHitSize(7, Math.min(bounds.max.x - bounds.min.x, bounds.max.y - bounds.min.y) * camera.zoom, isCoarsePointer()),
+        )}
       />
     </div>
   );

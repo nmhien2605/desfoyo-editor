@@ -10,6 +10,26 @@ import type { Node, TextNode, Warp, WarpAnchor, WarpPath } from '../schema';
 
 type PathRole = 'baseline' | 'top' | 'bottom';
 
+// Fingers need a >= 24 css px target; the visible dot keeps its size. Capped
+// at half the object's shorter on-screen side so a tiny object's handles don't
+// swallow its body drag.
+export function handleHitSize(visual: number, minSidePx: number, coarse: boolean): number {
+  return coarse ? Math.max(visual, Math.min(24, minSidePx / 2)) : visual;
+}
+
+export const isCoarsePointer = (): boolean =>
+  typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+
+// Invisible hit area of size var(--df-hit) on ::before, so elementFromPoint
+// and the pointerdown target are still the handle itself.
+export const HIT_AREA_CLASS =
+  "before:absolute before:top-1/2 before:left-1/2 before:size-[var(--df-hit)] before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:content-['']";
+
+// Warp/circle points sit UNDER the resize/rotate handles (which are on top via
+// zIndex) and get a hit area this much wider, so a point that coincides with a
+// corner handle is still grabbable in the ring around it.
+export const POINT_HIT_EXTRA = 12;
+
 export type HandleRef = { anchor: number; kind: 'anchor' | 'in' | 'out' };
 
 // Pivot -> scale -> rotate -> translate -> camera, tach rieng khoi component
@@ -105,10 +125,13 @@ export function WarpHandlesOverlay({
   node,
   activePageId,
   viewport,
+  handleHit = 7,
 }: {
   node: TextNode;
   activePageId: string;
   viewport: Viewport;
+  // Hit size of the resize handles (see handleHitSize).
+  handleHit?: number;
 }) {
   const store = useEditorStoreApi();
   const font = getLoadedFont(node.font.family)?.font;
@@ -258,10 +281,15 @@ export function WarpHandlesOverlay({
           <div
             key={`${role}-${ref.anchor}-${ref.kind}`}
             onPointerDown={startDrag(role, ref, path)}
-            className={`pointer-events-auto touch-none absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 bg-white ${
+            className={`pointer-events-auto touch-none absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 bg-white ${HIT_AREA_CLASS} ${
               ref.kind === 'anchor' ? 'h-[7px] w-[7px]' : 'h-2.5 w-2.5'
             }`}
-            style={{ left: screen.x, top: screen.y, borderColor: '#78bde8' }}
+            style={{
+              left: screen.x,
+              top: screen.y,
+              borderColor: '#78bde8',
+              ['--df-hit' as string]: `${handleHit + POINT_HIT_EXTRA}px`,
+            }}
           />
         );
         }),

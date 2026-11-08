@@ -5,7 +5,7 @@ import { rotateVector } from '../render/interactions/resizeMath';
 import { startPointerGesture } from '../render/interactions/pointerGesture';
 import { getLoadedFont } from '../text/fontService';
 import { resolveCircleParams, textGeometry, type TextGeometry } from '../text/textGeometry';
-import { projectLocalPoint } from './WarpHandlesOverlay';
+import { HIT_AREA_CLASS, POINT_HIT_EXTRA, projectLocalPoint } from './WarpHandlesOverlay';
 import type { Font } from 'opentype.js';
 import type { CircleParams, Node, TextNode } from '../schema';
 
@@ -66,10 +66,12 @@ export function CircleHandlesOverlay({
   node,
   activePageId,
   viewport,
+  handleHit = 7,
 }: {
   node: TextNode;
   activePageId: string;
   viewport: Viewport;
+  handleHit?: number;
 }) {
   const store = useEditorStoreApi();
   const font = getLoadedFont(node.font.family)?.font;
@@ -154,8 +156,13 @@ export function CircleHandlesOverlay({
           <div
             key={ref}
             onPointerDown={startDrag(ref)}
-            className="pointer-events-auto touch-none absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 bg-white"
-            style={{ left: screen.x, top: screen.y, borderColor: '#78bde8' }}
+            className={`pointer-events-auto touch-none absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 bg-white ${HIT_AREA_CLASS}`}
+            style={{
+              left: screen.x,
+              top: screen.y,
+              borderColor: '#78bde8',
+              ['--df-hit' as string]: `${handleHit + POINT_HIT_EXTRA}px`,
+            }}
           />
         );
       })}
