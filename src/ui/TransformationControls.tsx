@@ -1,5 +1,6 @@
 import type { TextNode, Warp, WarpType } from '../schema';
 import { useEditorStoreApi } from './EditorContext';
+import { endOwnGesture } from '../render/interactions/pointerGesture';
 import { getLoadedFont } from '../text/fontService';
 import { measureText } from '../text/textGeometry';
 
@@ -137,7 +138,9 @@ export function TransformationControls({
               value={warp?.curveHeight ?? 0}
               className="kittl-range"
               onPointerDown={() => store.getState().beginGesture(`warp-curve:${node.id}`)}
-              onPointerUp={() => store.getState().endGesture()}
+              onPointerUp={() => endOwnGesture(store, `warp-curve:${node.id}`)}
+              onPointerCancel={() => endOwnGesture(store, `warp-curve:${node.id}`)}
+              onBlur={() => endOwnGesture(store, `warp-curve:${node.id}`)}
               onChange={(e) => apply(setWarpCurveHeight(warp, Number(e.target.value)))}
             />
           </label>

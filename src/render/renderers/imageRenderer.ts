@@ -123,7 +123,19 @@ function releaseSprite(sprite: Sprite): void {
 
 function loadTexture(sprite: Sprite, node: ImageNode, doc: Document): void {
   loadedAssetId.set(sprite, node.assetId);
-  const src = resolveAsset(node.assetId, doc);
+  let src: string;
+  try {
+    src = resolveAsset(node.assetId, doc);
+  } catch (err) {
+    // Missing asset must not throw out of mount/remount: empty placeholder (not retried until assetId changes).
+    console.warn(`Image asset ${node.assetId} unavailable:`, err);
+    releaseSprite(sprite);
+    if (sprite.texture !== Texture.EMPTY) {
+      sprite.texture.destroy();
+      sprite.texture = Texture.EMPTY;
+    }
+    return;
+  }
   releaseSprite(sprite);
   acquiredSrc.set(sprite, src);
   trackLoad(

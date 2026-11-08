@@ -77,8 +77,18 @@ export const svgRenderer = {
     return obj;
   },
   update(obj: Graphics, node: SvgNode, doc: Document): void {
+    let src: string;
+    try {
+      src = resolveAsset(node.assetId, doc);
+    } catch (err) {
+      // Missing asset must not throw out of mount/remount: leave it empty.
+      console.warn(`SVG asset ${node.assetId} unavailable:`, err);
+      obj.clear();
+      applyTransform(obj, node);
+      return;
+    }
     trackLoad(
-      decodeSvgText(resolveAsset(node.assetId, doc)).then((svgText) => {
+      decodeSvgText(src).then((svgText) => {
         if (obj.destroyed) return;
         obj.clear();
         obj.svg(applyOverrides(svgText, node.overrides));

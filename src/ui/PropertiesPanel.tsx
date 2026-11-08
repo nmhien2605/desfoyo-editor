@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
 import { activePage } from '../core/store';
 import { findNodeInTree } from '../core/tree';
+import { endOwnGesture } from '../render/interactions/pointerGesture';
 import { customShaders } from '../effects/shaders/customShaders';
 import { decodeSvgText, listFillableIds } from '../render/renderers/svgRenderer';
 import { getLoadedFont, onFontLoaded, registeredFamilies } from '../text/fontService';
@@ -104,7 +105,10 @@ export function PropertiesPanel() {
           value={node.opacity}
           className="kittl-range w-full"
           onPointerDown={() => store.getState().beginGesture('opacity')}
-          onPointerUp={() => store.getState().endGesture()}
+          // pointercancel (touch turned into a scroll) / blur also end it; only our own gesture.
+          onPointerUp={() => endOwnGesture(store, 'opacity')}
+          onPointerCancel={() => endOwnGesture(store, 'opacity')}
+          onBlur={() => endOwnGesture(store, 'opacity')}
           onChange={(e) => updateProps({ opacity: Number(e.target.value) })}
         />
       </section>

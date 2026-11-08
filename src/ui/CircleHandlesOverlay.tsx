@@ -107,7 +107,7 @@ export function CircleHandlesOverlay({
         } as Partial<Node>,
       });
     };
-    startPointerGesture(store, `circle-handle:${node.id}`, onMove);
+    startPointerGesture(store, `circle-handle:${node.id}`, onMove, downEvent.pointerId);
   };
 
   const cx = params.centerX * fontSize;
@@ -135,7 +135,7 @@ export function CircleHandlesOverlay({
           <div
             key={ref}
             onPointerDown={startDrag(ref)}
-            className="pointer-events-auto absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 bg-white"
+            className="pointer-events-auto touch-none absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 bg-white"
             style={{ left: screen.x, top: screen.y, borderColor: '#78bde8' }}
           />
         );

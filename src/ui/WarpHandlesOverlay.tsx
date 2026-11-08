@@ -197,7 +197,7 @@ export function WarpHandlesOverlay({
         patch: { warp: nextWarp } as Partial<Node>,
       });
     };
-    startPointerGesture(store, `warp-handle:${node.id}`, onMove);
+    startPointerGesture(store, `warp-handle:${node.id}`, onMove, downEvent.pointerId);
   };
 
   return (
@@ -258,7 +258,7 @@ export function WarpHandlesOverlay({
           <div
             key={`${role}-${ref.anchor}-${ref.kind}`}
             onPointerDown={startDrag(role, ref, path)}
-            className={`pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 bg-white ${
+            className={`pointer-events-auto touch-none absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 bg-white ${
               ref.kind === 'anchor' ? 'h-[7px] w-[7px]' : 'h-2.5 w-2.5'
             }`}
             style={{ left: screen.x, top: screen.y, borderColor: '#78bde8' }}

@@ -5,6 +5,7 @@ import { AssetRefSchema, DocumentSchema, type AssetRef, type Document, type Node
 import { EditorStoreProvider, CanvasProvider, type CanvasContextValue } from './EditorContext';
 import { EditorUIProvider, type DevMenuConfig } from './EditorUIContext';
 import { CanvasHost } from './CanvasHost';
+import { EditorErrorBoundary } from './EditorErrorBoundary';
 import { SelectionOverlay } from './SelectionOverlay';
 import { StageOutline } from './StageOutline';
 import { FloatingContextToolbar } from './FloatingContextToolbar';
@@ -83,6 +84,8 @@ export interface EditorProps {
   onNodeDoubleClick?: (nodeId: string, nodeType: Node['type']) => boolean | void;
   /** Fires after every history change: a new edit ('push'), undo, redo, or loadDocument ('reset'). */
   onHistoryChange?: (history: HistoryState) => void;
+  /** Called when the editor UI throws while rendering (also console.error'd; a fallback with Retry is shown). */
+  onError?: (error: Error) => void;
 }
 
 export interface HistoryState {
@@ -281,9 +284,12 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
           setCanvasValue(value);
         }}
       />
-      {staged && <StageOutline />}
-      <SelectionOverlay />
-      {chrome && <FloatingContextToolbar />}
+      {/* Overlays fail alone: the canvas keeps showing the design. */}
+      <EditorErrorBoundary onError={props.onError} className="absolute left-0 top-0">
+        {staged && <StageOutline />}
+        <SelectionOverlay />
+        {chrome && <FloatingContextToolbar />}
+      </EditorErrorBoundary>
     </div>
   );
 
@@ -295,22 +301,26 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
         onNodeDoubleClick={props.onNodeDoubleClick ?? null}
       >
         <CanvasProvider value={canvasValue}>
-          {chrome ? (
-            <div
-              className={`df-editor grid h-full w-full overflow-hidden ${props.className ?? ''}`}
-              style={{ gridTemplateColumns: '44px minmax(0, 1fr) 250px', background: 'var(--app-bg)' }}
-            >
-              <LeftSidebar />
-              <Workspace>{canvasArea}</Workspace>
-              <InspectorPanel />
-            </div>
-          ) : (
-            <div
-              className={`df-editor relative ${staged ? 'block h-full w-full overflow-hidden' : 'inline-block align-top'} ${props.className ?? ''}`}
-            >
-              {canvasArea}
-            </div>
-          )}
+          <EditorErrorBoundary onError={props.onError}>
+            {chrome ? (
+              <div
+                className={`df-editor grid h-full w-full overflow-hidden ${props.className ?? ''}`}
+                style={{ gridTemplateColumns: '44px minmax(0, 1fr) 250px', background: 'var(--app-bg)' }}
+              >
+                <LeftSidebar />
+                <Workspace>{canvasArea}</Workspace>
+                <EditorErrorBoundary onError={props.onError}>
+                  <InspectorPanel />
+                </EditorErrorBoundary>
+              </div>
+            ) : (
+              <div
+                className={`df-editor relative ${staged ? 'block h-full w-full overflow-hidden' : 'inline-block align-top'} ${props.className ?? ''}`}
+              >
+                {canvasArea}
+              </div>
+            )}
+          </EditorErrorBoundary>
         </CanvasProvider>
       </EditorUIProvider>
     </EditorStoreProvider>

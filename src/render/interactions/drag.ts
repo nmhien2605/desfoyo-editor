@@ -4,6 +4,7 @@ import type { Node } from '../../schema';
 import { findNodeInTree } from '../../core/tree';
 import { applyGroupMove, computeSelectionBounds, nodeBounds } from './groupTransformMath';
 import { computeSnap } from './snapping';
+import { onPointerCancel } from './pointerGesture';
 
 const SNAP_THRESHOLD_PX = 6;
 
@@ -98,6 +99,7 @@ export function attachDrag(
     };
 
     const onUp = () => {
+      detachCancel();
       stage.off('pointermove', onMove);
       stage.off('pointerup', onUp);
       stage.off('pointerupoutside', onUp);
@@ -105,6 +107,8 @@ export function attachDrag(
       store.getState().endGesture();
     };
 
+    // A cancelled drag keeps (commits) what was dragged so far, like a pointerup.
+    const detachCancel = onPointerCancel(event.pointerId, onUp);
     stage.on('pointermove', onMove);
     stage.on('pointerup', onUp);
     stage.on('pointerupoutside', onUp);

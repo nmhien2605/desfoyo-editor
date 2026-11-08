@@ -205,7 +205,7 @@ function SingleSelectionOverlay({
         patch: { x: result.transform.x, y: result.transform.y } as Partial<Transform>,
       });
     };
-    startPointerGesture(store, `resize:${node.id}`, onMove);
+    startPointerGesture(store, `resize:${node.id}`, onMove, downEvent.pointerId);
   };
 
   const startRotate = (downEvent: ReactPointerEvent) => {
@@ -224,7 +224,7 @@ function SingleSelectionOverlay({
         patch: { rotation },
       });
     };
-    startPointerGesture(store, `rotate:${node.id}`, onMove);
+    startPointerGesture(store, `rotate:${node.id}`, onMove, downEvent.pointerId);
   };
 
   // 24 screen px above the box: worldPoint applies scaleY, so divide it back out.
@@ -270,7 +270,7 @@ function SingleSelectionOverlay({
             }),
           );
         }}
-        className={`df-sel-box absolute ${node.type === 'image' || node.type === 'text' ? 'pointer-events-auto' : ''}`}
+        className={`df-sel-box absolute ${node.type === 'image' || node.type === 'text' ? 'pointer-events-auto touch-none' : ''}`}
         style={{
           left: topLeftScreen.x,
           top: topLeftScreen.y,
@@ -301,7 +301,7 @@ function SingleSelectionOverlay({
             <div
               key={handle}
               onPointerDown={startResize(handle)}
-              className="pointer-events-auto absolute df-handle -translate-x-1/2 -translate-y-1/2"
+              className="pointer-events-auto touch-none absolute df-handle -translate-x-1/2 -translate-y-1/2"
               style={{ left: pos.x, top: pos.y, cursor: `${handle}-resize` }}
             />
           );
@@ -309,7 +309,7 @@ function SingleSelectionOverlay({
       {!isCropping && !isEditingText && (
         <div
           onPointerDown={startRotate}
-          className="pointer-events-auto absolute df-handle -translate-x-1/2 -translate-y-1/2 cursor-grab"
+          className="pointer-events-auto touch-none absolute df-handle -translate-x-1/2 -translate-y-1/2 cursor-grab"
           style={{ left: rotateHandlePos.x, top: rotateHandlePos.y }}
         />
       )}
@@ -407,7 +407,7 @@ function ImageCropHandles({
         patch: { crop: nextCrop },
       });
     };
-    startPointerGesture(store, `crop:${node.id}:${handle}`, onMove);
+    startPointerGesture(store, `crop:${node.id}:${handle}`, onMove, downEvent.pointerId);
   };
 
   return (
@@ -422,7 +422,7 @@ function ImageCropHandles({
           <div
             key={handle}
             onPointerDown={startDrag(handle)}
-            className="pointer-events-auto absolute df-handle -translate-x-1/2 -translate-y-1/2"
+            className="pointer-events-auto touch-none absolute df-handle -translate-x-1/2 -translate-y-1/2"
             style={{ left: pos.x, top: pos.y, cursor: `${handle}-resize` }}
           />
         );
@@ -466,7 +466,7 @@ function MultiSelectionOverlay({ nodes, activePageId }: { nodes: Node[]; activeP
         });
       }
     };
-    startPointerGesture(store, 'group-rotate', onMove);
+    startPointerGesture(store, 'group-rotate', onMove, downEvent.pointerId);
   };
 
   const rotateHandlePos = viewport.toScreen({
@@ -488,7 +488,7 @@ function MultiSelectionOverlay({ nodes, activePageId }: { nodes: Node[]; activeP
       />
       <div
         onPointerDown={startRotate}
-        className="pointer-events-auto absolute df-handle -translate-x-1/2 -translate-y-1/2 cursor-grab"
+        className="pointer-events-auto touch-none absolute df-handle -translate-x-1/2 -translate-y-1/2 cursor-grab"
         style={{ left: rotateHandlePos.x, top: rotateHandlePos.y }}
       />
     </div>

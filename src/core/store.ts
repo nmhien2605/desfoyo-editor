@@ -280,6 +280,13 @@ function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }
 
+// Assets are append-only refs added outside history (addAssetRef), while a
+// gesture entry is a root `replace` patch holding a whole document snapshot:
+// undo/redo/cancel would roll assets back and orphan image/svg nodes.
+function keepAssets(next: Document, current: Document): Document {
+  return next.assets === current.assets ? next : { ...next, assets: current.assets };
+}
+
 export function createEditorStore(initialDocument: Document) {
   return create<EditorStore>()((set, get) => ({
     document: initialDocument,
@@ -331,7 +338,7 @@ export function createEditorStore(initialDocument: Document) {
         if (s.past.length === 0) return {};
         const entry = s.past[s.past.length - 1];
         return {
-          document: applyPatches(s.document, entry.inversePatches),
+          document: keepAssets(applyPatches(s.document, entry.inversePatches), s.document),
           lastCommand: null,
           past: s.past.slice(0, -1),
           future: [...s.future, entry],
@@ -343,7 +350,7 @@ export function createEditorStore(initialDocument: Document) {
         if (s.future.length === 0) return {};
         const entry = s.future[s.future.length - 1];
         return {
-          document: applyPatches(s.document, entry.patches),
+          document: keepAssets(applyPatches(s.document, entry.patches), s.document),
           lastCommand: null,
           past: [...s.past, entry],
           future: s.future.slice(0, -1),
@@ -376,7 +383,7 @@ export function createEditorStore(initialDocument: Document) {
       set((s) => ({
         // lastCommand null: CanvasHost rebuilds the scene from the restored document, as for undo.
         ...(s.gestureStartDocument && s.gestureStartDocument !== s.document
-          ? { document: s.gestureStartDocument, lastCommand: null }
+          ? { document: keepAssets(s.gestureStartDocument, s.document), lastCommand: null }
           : {}),
         activeGestureId: null,
         gestureStartDocument: null,

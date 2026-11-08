@@ -1,6 +1,7 @@
 import type { Container, FederatedPointerEvent } from 'pixi.js';
 import { activePage, type EditorStoreApi } from '../../core/store';
 import { nodeBounds } from './groupTransformMath';
+import { onPointerCancel } from './pointerGesture';
 
 export interface Rect {
   x: number;
@@ -43,6 +44,7 @@ export function attachMarquee(stage: Container, pageContainer: Container, store:
     };
 
     const onUp = () => {
+      detachCancel();
       stage.off('pointermove', onMove);
       stage.off('pointerup', onUp);
       stage.off('pointerupoutside', onUp);
@@ -58,6 +60,11 @@ export function attachMarquee(stage: Container, pageContainer: Container, store:
       }
     };
 
+    // Cancelled: drop the rect first so onUp tears down without selecting.
+    const detachCancel = onPointerCancel(event.pointerId, () => {
+      store.getState().setMarqueeRect(null);
+      onUp();
+    });
     stage.on('pointermove', onMove);
     stage.on('pointerup', onUp);
     stage.on('pointerupoutside', onUp);

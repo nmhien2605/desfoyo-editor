@@ -1304,6 +1304,8 @@ interface EditorProps {
     onNodeDoubleClick?: (nodeId: string, nodeType: Node['type']) => boolean | void;
     /** Fires after every history change: a new edit ('push'), undo, redo, or loadDocument ('reset'). */
     onHistoryChange?: (history: HistoryState) => void;
+    /** Called when the editor UI throws while rendering (also console.error'd; a fallback with Retry is shown). */
+    onError?: (error: Error) => void;
 }
 interface HistoryState {
     canUndo: boolean;

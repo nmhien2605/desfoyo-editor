@@ -117,6 +117,19 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
         });
       };
       unsubscribeRender = [store.subscribe(requestRender), onLoadSettled(requestRender), onFontLoaded(requestRender)];
+      // The ticker is stopped, so after a context loss (iOS background, GPU
+      // pressure) nothing redraws until the next edit. Pixi re-creates GPU
+      // resources on restore (its own listener runs first); we just draw.
+      const canvas = app.canvas as HTMLCanvasElement;
+      const onVisible = () => {
+        if (document.visibilityState === 'visible') requestRender();
+      };
+      canvas.addEventListener('webglcontextrestored', requestRender);
+      document.addEventListener('visibilitychange', onVisible);
+      unsubscribeRender.push(
+        () => canvas.removeEventListener('webglcontextrestored', requestRender),
+        () => document.removeEventListener('visibilitychange', onVisible),
+      );
       app.stage.addChild(world);
       app.stage.eventMode = 'static';
       app.stage.hitArea = app.screen;
