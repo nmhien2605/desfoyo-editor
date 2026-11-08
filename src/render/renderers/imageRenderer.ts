@@ -2,7 +2,6 @@ import { BlurFilter, Container, type Filter, Graphics, Sprite, Texture } from 'p
 import { AdjustmentFilter } from 'pixi-filters';
 import type { Document, ImageNode, Node } from '../../schema';
 import { applyTransform } from '../applyTransform';
-import { buildFilters } from '../../effects/buildFilters';
 import { resolveAsset } from '../../services/assetResolver';
 import { findNodeInPage } from '../../core/tree';
 import { drawPath } from './shapeRenderer';
@@ -319,13 +318,10 @@ export const imageRenderer = {
     }
     applyCrop(sprite, node);
     applyMask(wrapper, node, doc);
-    applyTransform(wrapper, node);
-    // applyTransform just set wrapper.filters from node.effects (the
-    // generic shadow/glow/outline/blur/extrude3d/custom union every node
-    // type can have) — combined here with ImageNode.filters' separate flat
-    // brightness/contrast/saturation/blur knobs instead of one clobbering
-    // the other.
-    wrapper.filters = [...buildFilters(node.effects), ...buildImageFilters(node.filters)];
+    // node.effects' filters plus ImageNode.filters' separate flat
+    // brightness/contrast/saturation/blur knobs, combined instead of one
+    // clobbering the other.
+    applyTransform(wrapper, node, { key: node.filters, build: () => buildImageFilters(node.filters) });
     applySizeAndCrop(sprite, node);
   },
 };

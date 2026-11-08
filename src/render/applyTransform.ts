@@ -1,4 +1,4 @@
-import { Matrix, type Container } from 'pixi.js';
+import { Matrix, type Container, type Filter } from 'pixi.js';
 import type { Node, Size, Transform } from '../schema';
 import { buildFilters } from '../effects/buildFilters';
 
@@ -8,7 +8,9 @@ import { buildFilters } from '../effects/buildFilters';
 // pivot's position, originX/originY (0..1) locate the pivot inside the
 // node's own bounding box. No extra math is needed — that's why the schema
 // convention was chosen to mirror Pixi's own model.
-export function applyTransform(obj: Container, node: Node): void {
+// Only the matrix inputs — what a drag/rotate/scale (UpdateTransform) can
+// change. No geometry, fills, filters or asset loads.
+export function applyTransformOnly(obj: Container, node: Node): void {
   const { transform, size } = node;
   const originX = transform.originX ?? 0;
   const originY = transform.originY ?? 0;
@@ -18,10 +20,28 @@ export function applyTransform(obj: Container, node: Node): void {
   obj.scale.set(transform.scaleX, transform.scaleY);
   obj.rotation = transform.rotation;
   obj.skew.set(transform.skewX ?? 0, transform.skewY ?? 0);
+}
+
+// Filters per display object with the inputs they were built from: immer
+// keeps unchanged `effects`/`filters` by reference, so an update that didn't
+// touch them reuses the same Filter objects instead of rebuilding per call.
+const builtFilters = new WeakMap<Container, { key: unknown[]; filters: Filter[] }>();
+
+// `extra`: imageRenderer's ImageNode.filters (brightness/contrast/...),
+// appended after node.effects' filters and keyed alongside them.
+export function applyTransform(obj: Container, node: Node, extra?: { key: unknown; build: () => Filter[] }): void {
+  applyTransformOnly(obj, node);
   obj.alpha = node.opacity;
   obj.visible = node.visible;
   obj.blendMode = node.blendMode ?? 'normal';
-  obj.filters = buildFilters(node.effects, node.type === 'text' ? node.font.size : undefined);
+
+  const key = [node.effects, node.type === 'text' ? node.font.size : undefined, extra?.key];
+  const prev = builtFilters.get(obj);
+  if (prev && prev.key.every((k, i) => k === key[i])) return;
+  const filters = [...buildFilters(node.effects, key[1] as number | undefined), ...(extra?.build() ?? [])];
+  obj.filters = filters;
+  for (const f of prev?.filters ?? []) f.destroy();
+  builtFilters.set(obj, { key, filters });
 }
 
 function transformToMatrix(t: Transform, size: Size): Matrix {

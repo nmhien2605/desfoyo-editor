@@ -298,9 +298,14 @@ export function createEditorStore(initialDocument: Document) {
       });
 
       set((s) => {
-        const selectedNodeIds = new Set(s.selectedNodeIds);
-        if (cmd.type === 'RemoveNode') selectedNodeIds.delete(cmd.nodeId);
-        if (cmd.type === 'UngroupNode') selectedNodeIds.delete(cmd.groupId);
+        // Same Set unless an id actually leaves it: subscribers compare by
+        // reference, and a drag dispatches on every pointer move.
+        const removedId = cmd.type === 'RemoveNode' ? cmd.nodeId : cmd.type === 'UngroupNode' ? cmd.groupId : undefined;
+        let selectedNodeIds = s.selectedNodeIds;
+        if (removedId !== undefined && selectedNodeIds.has(removedId)) {
+          selectedNodeIds = new Set(selectedNodeIds);
+          selectedNodeIds.delete(removedId);
+        }
 
         // If the active page no longer exists (RemovePage removed it, or a
         // no-op left it in place — either way this check is cheap and
@@ -464,10 +469,10 @@ export function activePage(state: Pick<EditorStore, 'document' | 'activePageId'>
   return state.document.pages.find((p) => p.id === state.activePageId);
 }
 
-// dispatch() always rebuilds selectedNodeIds as a fresh Set (see dispatch
-// above), even when it isn't touched by the command — so subscribers that
-// care about *actual* selection changes (Editor.tsx's onSelectionChange)
-// can't rely on reference inequality and need this instead.
+// select() builds a fresh Set even when the selection ends up unchanged
+// (e.g. re-selecting the same node), so subscribers that care about
+// *actual* selection changes (Editor.tsx's onSelectionChange) compare
+// contents rather than references.
 export function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
   if (a === b) return true;
   if (a.size !== b.size) return false;

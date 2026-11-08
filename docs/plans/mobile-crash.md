@@ -30,7 +30,7 @@ The v2 editor on a phone stays within a sane memory budget (no tab kill on iPhon
 |---|---|---|---|---|---|---|
 | 1 | mcrash-1 | lib | code | Opus (user: Opus for all) | memory: CanvasHost resolution/antialias, stageLayers backdrop, imageRenderer cap + cache release, buildFilters, fillToColor | done |
 | 2 | mcrash-2 | lib | code | Opus | correctness: pointerGesture + sliders cancel, undo/asset, error boundary, context restored | done |
-| 3 | mcrash-3 | lib | code | Opus | perf: transform-only drag path, stable selection | todo |
+| 3 | mcrash-3 | lib | code | Opus | perf: transform-only drag path, stable selection | done |
 | 4 | mcrash-4 | web | code | Opus | atlas cap, lazy Model3D on mobile | todo |
 | 5 | mcrash-5 | both | qa | Opus | measure + functional check in browser | todo |
 

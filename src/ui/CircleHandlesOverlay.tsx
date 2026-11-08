@@ -4,9 +4,28 @@ import type { Viewport } from '../render/viewport';
 import { rotateVector } from '../render/interactions/resizeMath';
 import { startPointerGesture } from '../render/interactions/pointerGesture';
 import { getLoadedFont } from '../text/fontService';
-import { resolveCircleParams, textGeometry } from '../text/textGeometry';
+import { resolveCircleParams, textGeometry, type TextGeometry } from '../text/textGeometry';
 import { projectLocalPoint } from './WarpHandlesOverlay';
+import type { Font } from 'opentype.js';
 import type { CircleParams, Node, TextNode } from '../schema';
+
+// textGeometry is far too slow to rerun on every React render (each drag
+// move re-renders the overlays). A move only replaces node.transform; immer
+// keeps every other field by reference, so those fields are the cache key.
+const geometryCache = new Map<string, { node: TextNode; font: Font; geometry: TextGeometry }>();
+
+function sameExceptTransform(a: TextNode, b: TextNode): boolean {
+  const keys = Object.keys(a) as (keyof TextNode)[];
+  return keys.length === Object.keys(b).length && keys.every((k) => k === 'transform' || a[k] === b[k]);
+}
+
+export function memoTextGeometry(node: TextNode, font: Font): TextGeometry {
+  const hit = geometryCache.get(node.id);
+  if (hit && hit.font === font && sameExceptTransform(hit.node, node)) return hit.geometry;
+  const geometry = textGeometry(node, font);
+  geometryCache.set(node.id, { node, font, geometry });
+  return geometry;
+}
 
 export type CircleHandleRef = 'N' | 'S' | 'W' | 'E';
 
@@ -56,7 +75,7 @@ export function CircleHandlesOverlay({
   const font = getLoadedFont(node.font.family)?.font;
   if (!font) return null;
 
-  const geometry = textGeometry(node, font);
+  const geometry = memoTextGeometry(node, font);
   if (geometry.height <= 0) return null;
   const params = resolveCircleParams(node, geometry);
   if (!params) return null;

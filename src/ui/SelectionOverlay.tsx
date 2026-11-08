@@ -21,10 +21,9 @@ import type { Rect } from '../render/interactions/marquee';
 import type { SnapGuide } from '../render/interactions/snapping';
 import type { Document, ImageNode, Node, Transform } from '../schema';
 import { getLoadedFont } from '../text/fontService';
-import { textGeometry } from '../text/textGeometry';
 import { TextEditOverlay } from './TextEditOverlay';
 import { WarpHandlesOverlay } from './WarpHandlesOverlay';
-import { CircleHandlesOverlay } from './CircleHandlesOverlay';
+import { CircleHandlesOverlay, memoTextGeometry } from './CircleHandlesOverlay';
 
 const HANDLES: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
@@ -42,7 +41,7 @@ export function selectionBox(node: Node): { x: number; y: number; width: number;
   if (node.type === 'text') {
     const font = getLoadedFont(node.font.family)?.font;
     if (font) {
-      const { bounds } = textGeometry(node, font);
+      const { bounds } = memoTextGeometry(node, font);
       if (bounds.maxX > bounds.minX) {
         return {
           x: bounds.minX,

@@ -7,6 +7,7 @@ import { imageRenderer } from './renderers/imageRenderer';
 import { svgRenderer } from './renderers/svgRenderer';
 import { groupRenderer } from './renderers/groupRenderer';
 import { textRenderer } from './renderers/textRenderer';
+import { applyTransformOnly } from './applyTransform';
 
 function createDisplayObject(node: Node, doc: Document): Container {
   switch (node.type) {
@@ -41,6 +42,16 @@ function updateDisplayObject(obj: Container, node: Node, doc: Document): void {
       groupRenderer.update(obj as never, node);
       break;
   }
+}
+
+// UpdateTransform only changes node.transform, which every renderer applies
+// as the container's own matrix (text/shape/image geometry is drawn in
+// node.size units, independent of transform) — so a drag move skips
+// geometry, fills, filters and asset loads. SVG folds transform.scale into
+// its bounds-derived scale, hence its own path.
+function updateTransformOnly(obj: Container, node: Node): void {
+  if (node.type === 'svg') svgRenderer.updateTransform(obj as never, node);
+  else applyTransformOnly(obj, node);
 }
 
 function findPage(doc: Document, pageId: string): Page | undefined {
@@ -145,7 +156,8 @@ export class SceneReconciler {
         const obj = this.displayObjects.get(cmd.nodeId);
         const location = findNodeInTree(page.children, cmd.nodeId);
         if (!obj || !location) return;
-        updateDisplayObject(obj, location.node, doc);
+        if (cmd.type === 'UpdateTransform') updateTransformOnly(obj, location.node);
+        else updateDisplayObject(obj, location.node, doc);
         break;
       }
       case 'Reorder': {

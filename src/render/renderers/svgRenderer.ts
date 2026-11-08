@@ -1,6 +1,6 @@
 import { Graphics } from 'pixi.js';
 import type { Document, Fill, SvgNode } from '../../schema';
-import { applyTransform } from '../applyTransform';
+import { applyTransform, applyTransformOnly } from '../applyTransform';
 import { resolveAsset } from '../../services/assetResolver';
 import { trackLoad } from '../pendingLoads';
 
@@ -64,12 +64,34 @@ function applySizeAndOrigin(obj: Graphics, node: SvgNode): void {
   obj.pivot.set(bounds.x + originX * bounds.width, bounds.y + originY * bounds.height);
 }
 
+// Per-object SVG state. `node` is always the latest node, so a build that
+// resolves after later updates applies the current transform, not the one
+// captured when it started. `seq` drops builds superseded by a newer one
+// (async completions can land out of order). `src`/`overrides` are what the
+// current (or in-flight) build was made from; `text` caches the decode.
+interface SvgState {
+  node: SvgNode;
+  seq: number;
+  src?: string;
+  overrides?: SvgNode['overrides'];
+  text?: Promise<string>;
+}
+const svgState = new WeakMap<Graphics, SvgState>();
+
+function stateFor(obj: Graphics, node: SvgNode): SvgState {
+  let state = svgState.get(obj);
+  if (!state) svgState.set(obj, (state = { node, seq: 0 }));
+  state.node = node;
+  return state;
+}
+
 // SVG parsing/rendering is fully async (decodeSvgText fetches the data URI),
 // but SceneReconciler's create()/update() are synchronous — create() starts
 // as an empty Graphics and fills in once the async build resolves, same
 // "start empty, fill in later" shape imageRenderer.ts's texture loading
-// already uses. update() always clears and rebuilds rather than diffing,
-// same "just redraw" approach shapeRenderer.ts/stroke layers use.
+// already uses. update() rebuilds only when the asset source or overrides
+// changed (immer keeps both by reference otherwise); anything else is just
+// the transform/filters.
 export const svgRenderer = {
   create(node: SvgNode, doc: Document): Graphics {
     const obj = new Graphics();
@@ -77,25 +99,43 @@ export const svgRenderer = {
     return obj;
   },
   update(obj: Graphics, node: SvgNode, doc: Document): void {
+    const state = stateFor(obj, node);
     let src: string;
     try {
       src = resolveAsset(node.assetId, doc);
     } catch (err) {
       // Missing asset must not throw out of mount/remount: leave it empty.
       console.warn(`SVG asset ${node.assetId} unavailable:`, err);
+      state.seq++;
+      state.src = state.text = undefined;
       obj.clear();
       applyTransform(obj, node);
       return;
     }
+    applyTransform(obj, node);
+    if (src === state.src && node.overrides === state.overrides) {
+      applySizeAndOrigin(obj, node);
+      return;
+    }
+    if (src !== state.src) state.text = decodeSvgText(src);
+    state.src = src;
+    state.overrides = node.overrides;
+    const seq = ++state.seq;
+    const text = state.text!;
     trackLoad(
-      decodeSvgText(src).then((svgText) => {
-        if (obj.destroyed) return;
+      text.then((svgText) => {
+        if (obj.destroyed || seq !== state.seq) return;
         obj.clear();
-        obj.svg(applyOverrides(svgText, node.overrides));
-        applyTransform(obj, node);
-        applySizeAndOrigin(obj, node);
+        obj.svg(applyOverrides(svgText, state.overrides));
+        applyTransform(obj, state.node);
+        applySizeAndOrigin(obj, state.node);
       }),
     );
-    applyTransform(obj, node);
+  },
+  // UpdateTransform path: no decode/parse, just the matrix.
+  updateTransform(obj: Graphics, node: SvgNode): void {
+    stateFor(obj, node);
+    applyTransformOnly(obj, node);
+    applySizeAndOrigin(obj, node);
   },
 };
