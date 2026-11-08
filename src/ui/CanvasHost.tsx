@@ -75,6 +75,10 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
         return { width: size.width * s, height: size.height * s };
       };
       const initialSize = scaledSize(page.size);
+      // Capped at 2: DPR 3 phones would otherwise pay 2.25× the GPU memory per
+      // editor for no visible gain. MSAA only below DPR 2 — at ≥ 2 aliasing is
+      // invisible and the ×4 framebuffer is the biggest per-context cost.
+      const resolution = Math.min(window.devicePixelRatio || 1, 2);
 
       await app.init({
         width: initialSize.width,
@@ -83,13 +87,13 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
         // Always init transparent-capable, then set the real alpha per page —
         // Pixi can't switch an opaque-initialised canvas to transparent later.
         backgroundAlpha: 0,
-        antialias: true,
+        antialias: resolution < 2,
         // Thiếu hai dòng này thì backing store chỉ bằng số CSS pixel: trên màn
         // retina (devicePixelRatio = 2) mọi thứ được vẽ ở nửa độ phân giải rồi
         // để trình duyệt phóng to — đó là nguồn gốc chữ bị mờ. autoDensity giữ
         // canvas.style bằng đúng page.size nên toạ độ CSS (viewport.ts,
         // SelectionOverlay, ruler) không phải đổi gì.
-        resolution: window.devicePixelRatio || 1,
+        resolution,
         autoDensity: true,
       });
       if (cancelled) {

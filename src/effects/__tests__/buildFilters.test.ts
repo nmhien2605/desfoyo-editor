@@ -66,9 +66,9 @@ describe('buildFilters', () => {
     expect(filters[0]).toBeInstanceOf(DropShadowFilter);
     const f = filters[0] as DropShadowFilter;
     expect(f.blur).toBe(6);
-    expect(f.antialias).toBe('inherit');
+    expect(f.antialias).toBe('off');
     expect(f.resolution).toBe('inherit');
-    expect(f.quality).toBe(12);
+    expect(f.quality).toBe(6);
   });
 
   it('text-shadow style=line/block/3d builds NO filter — geometry handles it, not buildFilters', () => {

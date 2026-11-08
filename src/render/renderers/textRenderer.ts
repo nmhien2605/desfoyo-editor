@@ -1,7 +1,7 @@
 import { Graphics, Rectangle } from 'pixi.js';
 import type { Fill, TextNode } from '../../schema';
 import { applyTransform } from '../applyTransform';
-import { resolveFill } from '../fillToColor';
+import { gradientCacheFor, resolveFill, type GradientCache } from '../fillToColor';
 import { getLoadedFont, loadFont, onFontLoaded } from '../../text/fontService';
 import { textGeometry } from '../../text/textGeometry';
 import type { GlyphShape } from '../../text/glyphOutlines';
@@ -54,8 +54,9 @@ export function drawTextShapes(
   shapes: GlyphShape[],
   fill: Fill,
   box?: { width: number; height: number },
+  gradients?: GradientCache,
 ): void {
-  const style = resolveFill(fill, box);
+  const style = resolveFill(fill, box, gradients);
   for (const shape of shapes) {
     trace(target, shape.outer);
     target.fill(style);
@@ -95,6 +96,7 @@ type TextGraphics = Graphics & { textNode?: TextNode; offFontLoaded?: () => void
 
 function draw(obj: TextGraphics, node: TextNode): void {
   obj.clear();
+  const gradients = gradientCacheFor(obj);
   // Biến thể khớp nhất với weight/style của node (fontService.bestFile).
   const loaded = getLoadedFont(node.font.family, node.font);
   if (!loaded) {
@@ -102,6 +104,7 @@ function draw(obj: TextGraphics, node: TextNode): void {
     // create() sẽ vẽ lại khi font sẵn sàng.
     obj.hitArea = null;
     void loadFont(node.font.family, node.font);
+    gradients.commit();
     return;
   }
   const geometry = textGeometry(node, loaded.font);
@@ -119,7 +122,8 @@ function draw(obj: TextGraphics, node: TextNode): void {
   drawTextShapes(obj as unknown as TextDrawTarget, geometry.shapes, node.fill, {
     width: geometry.pivotWidth,
     height: geometry.height,
-  });
+  }, gradients);
+  gradients.commit();
 
   // Hit-test mặc định của Graphics là hit-test từng path đã tô, nên chỉ đúng
   // phần MỰC của chữ mới bấm được: bấm vào khoảng trắng giữa hai ký tự (hay

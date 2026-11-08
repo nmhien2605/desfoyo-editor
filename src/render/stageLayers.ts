@@ -2,7 +2,7 @@ import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 import { DropShadowFilter } from 'pixi-filters';
 import type { Page } from '../schema';
 import { backgroundAlpha, backgroundColor } from './backgroundColor';
-import { decodeImage } from './renderers/imageRenderer';
+import { acquireImage, releaseImage } from './renderers/imageRenderer';
 import { backdropRect, type EditorStage, type WorldRect } from './stage';
 
 // Display-only layers around pageContainer for EditorProps.stage, in world
@@ -34,11 +34,14 @@ export function createStageLayers(world: Container, pageContainer: Container, on
     backdrop.setSize(rect.width, rect.height);
   };
 
-  const setTexture = (texture: Texture) => {
-    const old = backdrop.texture;
+  // Decoded backdrops are shared (refcounted) with every editor showing the
+  // same URL. The shown one is released only when replaced, so a case-colour
+  // switch keeps the old backdrop on screen until the new one has decoded.
+  let shownUrl: string | null = null;
+  const setTexture = (texture: Texture, src: string | null) => {
     backdrop.texture = texture;
-    // decodeImage hands out a fresh, unshared texture per call.
-    if (old !== Texture.EMPTY) old.destroy(true);
+    if (shownUrl !== null) releaseImage(shownUrl);
+    shownUrl = src;
   };
 
   return {
@@ -50,7 +53,7 @@ export function createStageLayers(world: Container, pageContainer: Container, on
       mask.clear();
       if (!stage) {
         url = null;
-        setTexture(Texture.EMPTY);
+        setTexture(Texture.EMPTY, null);
         rect = null;
         return;
       }
@@ -64,10 +67,10 @@ export function createStageLayers(world: Container, pageContainer: Container, on
       if (stage.backdropUrl !== url) {
         url = stage.backdropUrl;
         const requested = url;
-        decodeImage(requested)
+        acquireImage(requested)
           .then((texture) => {
-            if (url !== requested) return texture.destroy(true);
-            setTexture(texture);
+            if (url !== requested) return releaseImage(requested);
+            setTexture(texture, requested);
             place();
             onBackdropLoad();
           })
@@ -79,7 +82,7 @@ export function createStageLayers(world: Container, pageContainer: Container, on
     backdropRect: () => rect,
     destroy() {
       url = null;
-      setTexture(Texture.EMPTY);
+      setTexture(Texture.EMPTY, null);
       shadow.destroy();
     },
   };

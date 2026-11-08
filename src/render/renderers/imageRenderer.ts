@@ -29,30 +29,40 @@ const maskChild = new WeakMap<Container, Container>();
 
 const SVG_SRC = /^data:image\/svg\+xml|\.svg([?#]|$)/i;
 const SVG_RASTER_SCALE = 2;
-const SVG_MAX_SIDE = 4096;
-// ponytail: never evicts (same as Pixi's own Assets cache); add LRU if hosts
-// churn through many large images.
-const textureCache = new Map<string, Promise<Texture>>();
+// shortcut: 2048 keeps a 4-side editor inside a phone's GPU budget, but a
+// photo shown bigger than 2048 px on screen (deep zoom) gets soft; raise it
+// (or pick it per device) if hosts zoom far into large photos.
+export const MAX_TEXTURE_SIDE = 2048;
+
+// Raster size for a decoded image: SVG at 2× natural, bitmaps at natural,
+// both scaled uniformly so the longest side ≤ MAX_TEXTURE_SIDE. Uniform, so
+// node.crop fractions of source.width/height stay valid.
+export function rasterSize(width: number, height: number, svg: boolean): { width: number; height: number } {
+  const k = Math.min(svg ? SVG_RASTER_SCALE : 1, MAX_TEXTURE_SIDE / Math.max(width, height));
+  return { width: Math.max(1, Math.round(width * k)), height: Math.max(1, Math.round(height * k)) };
+}
 
 // Decodes through an <img> rather than Pixi Assets: Assets picks a parser
 // from the URL extension (extension-less CDN/blob: URLs fail) and its
 // texture parser uses createImageBitmap, which rejects SVG. SVG is drawn to a
-// canvas at 2× its natural size so it stays sharp when the node is scaled up.
-// Mipmaps on: sources are often ~4000 px drawn at a few hundred px, and plain
+// canvas at 2× its natural size so it stays sharp when the node is scaled up;
+// anything over MAX_TEXTURE_SIDE is drawn down to it the same way.
+// Mipmaps on: sources are often ~2000 px drawn at a few hundred px, and plain
 // linear sampling at that ratio skips thin strokes (they render dotted).
 export async function decodeImage(src: string): Promise<Texture> {
   const img = new Image();
   img.crossOrigin = 'anonymous';
   img.src = src;
   await img.decode();
-  if (!SVG_SRC.test(src)) return withMipmaps(Texture.from(img));
+  const svg = SVG_SRC.test(src);
   // An SVG without width/height has no natural size in some browsers.
-  const w = img.naturalWidth || 512;
-  const h = img.naturalHeight || 512;
-  const k = Math.min(SVG_RASTER_SCALE, SVG_MAX_SIDE / Math.max(w, h));
+  const w = img.naturalWidth || (svg ? 512 : 0);
+  const h = img.naturalHeight || (svg ? 512 : 0);
+  const size = rasterSize(w, h, svg);
+  if (!svg && size.width === w && size.height === h) return withMipmaps(Texture.from(img));
   const canvas = document.createElement('canvas');
-  canvas.width = Math.round(w * k);
-  canvas.height = Math.round(h * k);
+  canvas.width = size.width;
+  canvas.height = size.height;
   canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
   return withMipmaps(Texture.from(canvas));
 }
@@ -62,26 +72,70 @@ function withMipmaps(texture: Texture): Texture {
   return texture;
 }
 
-function loadImage(src: string): Promise<Texture> {
-  let p = textureCache.get(src);
-  if (!p) {
-    p = decodeImage(src);
-    textureCache.set(src, p);
-    p.catch(() => textureCache.delete(src)); // allow a retry
+// One decode per src, shared by every sprite and stage backdrop (all editors
+// on the page) using it. Refcounted: the last release destroys the source.
+const textureCache = new Map<string, { texture: Promise<Texture>; refs: number }>();
+
+export function acquireImage(src: string): Promise<Texture> {
+  let entry = textureCache.get(src);
+  if (!entry) {
+    const created = { texture: decodeImage(src), refs: 0 };
+    created.texture.catch(() => {
+      if (textureCache.get(src) === created) textureCache.delete(src); // allow a retry
+    });
+    textureCache.set(src, created);
+    entry = created;
   }
-  return p;
+  entry.refs++;
+  return entry.texture;
+}
+
+export function releaseImage(src: string): void {
+  const entry = textureCache.get(src);
+  if (!entry) return;
+  entry.refs--;
+  // Destroyed only once the decode settles, a microtask later at the earliest:
+  // remountPage (undo/redo) releases then re-acquires synchronously, and must
+  // keep the decode instead of paying for it again.
+  entry.texture
+    .then((texture) => {
+      if (entry.refs > 0 || textureCache.get(src) !== entry) return;
+      textureCache.delete(src);
+      texture.destroy(true);
+    })
+    .catch(() => {});
+}
+
+/** Number of cached decodes (tests/diagnostics). */
+export function cachedImageCount(): number {
+  return textureCache.size;
+}
+
+// src each sprite currently holds a reference on (released on asset change / destroy).
+const acquiredSrc = new WeakMap<Sprite, string>();
+
+function releaseSprite(sprite: Sprite): void {
+  const src = acquiredSrc.get(sprite);
+  if (src === undefined) return;
+  acquiredSrc.delete(sprite);
+  releaseImage(src);
 }
 
 function loadTexture(sprite: Sprite, node: ImageNode, doc: Document): void {
   loadedAssetId.set(sprite, node.assetId);
   const src = resolveAsset(node.assetId, doc);
+  releaseSprite(sprite);
+  acquiredSrc.set(sprite, src);
   trackLoad(
-    loadImage(src)
+    acquireImage(src)
       .then((texture: Texture) => {
-        if (sprite.destroyed) return;
+        // Destroyed, or switched to another asset while this one decoded.
+        if (sprite.destroyed || acquiredSrc.get(sprite) !== src) return;
         // Own Texture per sprite over the shared source: applyCrop mutates
         // texture.frame, which must not leak to other nodes using this asset.
+        const old = sprite.texture;
         sprite.texture = new Texture({ source: texture.source });
+        if (old !== Texture.EMPTY) old.destroy();
         applyCrop(sprite, node);
         applySizeAndCrop(sprite, node);
       })
@@ -231,6 +285,17 @@ export const imageRenderer = {
     const wrapper = new Container();
     const sprite = new Sprite(Texture.EMPTY);
     wrapper.addChild(sprite);
+    // Fires before Sprite.destroy drops its texture: free the sprite's own
+    // Texture (not the shared source) and its cache reference.
+    sprite.once('destroyed', () => {
+      releaseSprite(sprite);
+      if (sprite.texture !== Texture.EMPTY) sprite.texture.destroy();
+    });
+    // SceneReconciler.destroy destroys the wrapper without its children.
+    wrapper.once('destroyed', () => {
+      if (!sprite.destroyed) sprite.destroy();
+      maskChild.get(wrapper)?.destroy();
+    });
     loadTexture(sprite, node, doc);
     this.update(wrapper, node, doc);
     return wrapper;

@@ -1,7 +1,7 @@
 import { Graphics } from 'pixi.js';
 import type { ShapeNode, Stroke } from '../../schema';
 import { applyTransform } from '../applyTransform';
-import { resolveFill, strokeColorFields } from '../fillToColor';
+import { gradientCacheFor, resolveFill, strokeColorFields } from '../fillToColor';
 
 const STROKE_ALIGNMENT: Record<Stroke['align'], number> = { inside: 1, center: 0.5, outside: 0 };
 
@@ -40,6 +40,7 @@ export function drawPath(obj: Graphics, node: ShapeNode, [dx, dy]: [number, numb
 
 function draw(obj: Graphics, node: ShapeNode): void {
   obj.clear();
+  const gradients = gradientCacheFor(obj);
 
   const layers = node.stroke?.layers ?? (node.stroke ? [{ width: node.stroke.width, fill: node.stroke.fill }] : []);
   for (const layer of layers) {
@@ -47,16 +48,17 @@ function draw(obj: Graphics, node: ShapeNode): void {
     obj.stroke({
       width: layer.width,
       alignment: node.stroke ? STROKE_ALIGNMENT[node.stroke.align] : 0.5,
-      ...strokeColorFields(layer.fill),
+      ...strokeColorFields(layer.fill, gradients),
     });
   }
 
   drawPath(obj, node, [0, 0]);
   if (node.shape === 'line') {
-    if (layers.length === 0) obj.stroke({ width: 1, ...strokeColorFields(node.fill) });
+    if (layers.length === 0) obj.stroke({ width: 1, ...strokeColorFields(node.fill, gradients) });
   } else {
-    obj.fill(resolveFill(node.fill));
+    obj.fill(resolveFill(node.fill, undefined, gradients));
   }
+  gradients.commit();
 }
 
 export const shapeRenderer = {

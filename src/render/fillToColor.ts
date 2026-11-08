@@ -1,5 +1,46 @@
-import { FillGradient, type ColorSource, type StrokeStyle } from 'pixi.js';
+import { FillGradient, type ColorSource, type Container, type StrokeStyle } from 'pixi.js';
 import type { Fill } from '../schema';
+
+// Each FillGradient owns a canvas + GPU texture that Graphics.clear() never
+// frees, so a renderer that redraws per pointermove leaked one per frame.
+// One cache per display object: a redraw reuses gradients with the same key
+// (fill + box) and commit() destroys the ones the redraw no longer used —
+// only ever this object's own gradients, so nothing still drawn is freed.
+export class GradientCache {
+  private live = new Map<string, FillGradient>();
+  private next = new Map<string, FillGradient>();
+
+  get(key: string, make: () => FillGradient): FillGradient {
+    const gradient = this.next.get(key) ?? this.live.get(key) ?? make();
+    this.next.set(key, gradient);
+    return gradient;
+  }
+
+  // Call after a full redraw (clear() + every fill/stroke).
+  commit(): void {
+    for (const [key, gradient] of this.live) if (this.next.get(key) !== gradient) gradient.destroy();
+    this.live = this.next;
+    this.next = new Map();
+  }
+
+  destroy(): void {
+    this.commit();
+    this.commit();
+  }
+}
+
+const caches = new WeakMap<Container, GradientCache>();
+
+export function gradientCacheFor(owner: Container): GradientCache {
+  let cache = caches.get(owner);
+  if (!cache) {
+    const created = new GradientCache();
+    caches.set(owner, created);
+    owner.once('destroyed', () => created.destroy());
+    cache = created;
+  }
+  return cache;
+}
 
 // Approximate-solid-color version, kept for call sites that need a plain
 // ColorSource (e.g. Application background, which isn't a Graphics fill and
@@ -27,7 +68,14 @@ export function fillToColor(fill: Fill): ColorSource {
 // bắt đầu lại ở mỗi chữ. Cùng một gradient như 'local' trên hộp đó (toạ độ
 // chuẩn hoá 0..1, quy ước chung với svgSerializer), viết lại thành toạ độ px
 // 'global' (xem boxGradient).
-export function resolveFill(fill: Fill, box?: { width: number; height: number }): ColorSource | FillGradient {
+export function resolveFill(
+  fill: Fill,
+  box?: { width: number; height: number },
+  cache?: GradientCache,
+): ColorSource | FillGradient {
+  if (cache && (fill.type === 'linear-gradient' || fill.type === 'radial-gradient')) {
+    return cache.get(JSON.stringify([fill, box]), () => resolveFill(fill, box) as FillGradient);
+  }
   if (box && box.width > 0 && box.height > 0 && (fill.type === 'linear-gradient' || fill.type === 'radial-gradient')) {
     return boxGradient(fill, box.width, box.height);
   }
@@ -113,8 +161,8 @@ function boxGradient(
 // is correct, this just routes it to the matching StrokeStyle field. Shared
 // by shapeRenderer.ts and textRenderer.ts (both stroke via Pixi's
 // FillStyle/StrokeStyle shape).
-export function strokeColorFields(fill: Fill): Pick<StrokeStyle, 'color' | 'fill'> {
-  const resolved = resolveFill(fill);
+export function strokeColorFields(fill: Fill, cache?: GradientCache): Pick<StrokeStyle, 'color' | 'fill'> {
+  const resolved = resolveFill(fill, undefined, cache);
   return resolved instanceof FillGradient ? { fill: resolved } : { color: resolved };
 }
 

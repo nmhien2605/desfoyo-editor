@@ -54,14 +54,18 @@ export function buildFilters(effects: Effect[] | undefined, fontSize?: number): 
           blur: effect.blur ?? 4,
           offset: { x: Math.cos(effect.angle) * offsetPx, y: Math.sin(effect.angle) * offsetPx },
           alpha: 1,
-          quality: 12, // quality:3 mac dinh bi bac thang khi blur
+          // quality:3 mac dinh bi bac thang khi blur; 12 ton GPU tren mobile, 6 du muot.
+          quality: 6,
         });
         // DropShadowFilterOptions khong forward 'antialias'/'resolution' tu
         // constructor toi Filter goc (chi 'resolution' duoc forward, nhung
         // typed sai la number) — phai gan sau khi tao instance. Thieu 2 dong
         // nay: Filter.defaultOptions khien filter luon tat AA va render o
         // resolution:1 bat ke devicePixelRatio.
-        dropShadowFilter.antialias = 'inherit';
+        // 'inherit' = do phan giai renderer (CanvasHost gioi han <= 2) hoac
+        // scale cua ban export. AA tat: MSAA x4 cho texture filter ton GPU
+        // nhieu nhat, mat blur cua shadow khong can khu rang cua.
+        dropShadowFilter.antialias = 'off';
         dropShadowFilter.resolution = 'inherit';
         filters.push(dropShadowFilter);
         break;
