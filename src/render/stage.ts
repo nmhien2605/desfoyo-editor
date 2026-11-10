@@ -18,6 +18,22 @@ export interface EditorStage {
   outline?: { color: string; corners?: boolean; dashed?: boolean };
   /** Max zoom as a multiple of the fit zoom. Default 4. */
   maxZoom?: number;
+  /**
+   * CSS px kept free around the backdrop at the fit view (and kept covered/centred by the pan clamp);
+   * the canvas itself still fills its box, so zoomed content draws up to its edges. Default 0.
+   */
+  fitInset?: number | Inset;
+}
+
+export interface Inset {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export function toInset(inset: EditorStage['fitInset'] = 0): Inset {
+  return typeof inset === 'number' ? { top: inset, right: inset, bottom: inset, left: inset } : inset;
 }
 
 export const DEFAULT_STAGE_MAX_ZOOM = 4;
@@ -50,13 +66,15 @@ export function backdropRect(page: Size, image: Size, stage: Pick<EditorStage, '
   };
 }
 
-// Camera that shows `rect` whole (contain) and centred in a canvas of `canvas` CSS px.
-export function fitCamera(canvas: Size, rect: WorldRect): Camera {
-  const zoom = Math.min(canvas.width / rect.width, canvas.height / rect.height);
+// Camera that shows `rect` whole (contain) and centred in a canvas of `canvas` CSS px, minus `inset`.
+export function fitCamera(canvas: Size, rect: WorldRect, inset: Inset = toInset()): Camera {
+  const width = Math.max(1, canvas.width - inset.left - inset.right);
+  const height = Math.max(1, canvas.height - inset.top - inset.bottom);
+  const zoom = Math.min(width / rect.width, height / rect.height);
   return {
     zoom,
-    panX: (canvas.width - rect.width * zoom) / 2 - rect.x * zoom,
-    panY: (canvas.height - rect.height * zoom) / 2 - rect.y * zoom,
+    panX: inset.left + (width - rect.width * zoom) / 2 - rect.x * zoom,
+    panY: inset.top + (height - rect.height * zoom) / 2 - rect.y * zoom,
   };
 }
 
@@ -64,24 +82,26 @@ export function clampStageZoom(zoom: number, fitZoom: number, maxZoom = DEFAULT_
   return Math.min(fitZoom * maxZoom, Math.max(fitZoom, zoom));
 }
 
-// What the pan clamp needs: canvas CSS size and the backdrop in world units.
+// What the pan clamp needs: canvas CSS size, the backdrop in world units and the fit inset.
 export interface StageBounds {
   canvas: Size;
   backdrop: WorldRect;
+  inset?: Inset;
 }
 
-// Per axis: a backdrop wider than the canvas must keep covering it, a narrower one stays centred.
-export function clampStagePan(camera: Camera, { canvas, backdrop }: StageBounds): Camera {
-  const axis = (pan: number, view: number, start: number, length: number) => {
+// Per axis, against the canvas minus the inset: a larger backdrop must keep covering it, a smaller one stays centred.
+export function clampStagePan(camera: Camera, { canvas, backdrop, inset = toInset() }: StageBounds): Camera {
+  const axis = (pan: number, from: number, to: number, start: number, length: number) => {
+    const view = Math.max(1, to - from);
     const size = length * camera.zoom;
     const offset = start * camera.zoom;
-    if (size <= view) return (view - size) / 2 - offset;
-    return Math.min(-offset, Math.max(view - size - offset, pan));
+    if (size <= view) return from + (view - size) / 2 - offset;
+    return Math.min(from - offset, Math.max(from + view - size - offset, pan));
   };
   return {
     zoom: camera.zoom,
-    panX: axis(camera.panX, canvas.width, backdrop.x, backdrop.width),
-    panY: axis(camera.panY, canvas.height, backdrop.y, backdrop.height),
+    panX: axis(camera.panX, inset.left, canvas.width - inset.right, backdrop.x, backdrop.width),
+    panY: axis(camera.panY, inset.top, canvas.height - inset.bottom, backdrop.y, backdrop.height),
   };
 }
 

@@ -1223,6 +1223,17 @@ interface EditorStage {
     };
     /** Max zoom as a multiple of the fit zoom. Default 4. */
     maxZoom?: number;
+    /**
+     * CSS px kept free around the backdrop at the fit view (and kept covered/centred by the pan clamp);
+     * the canvas itself still fills its box, so zoomed content draws up to its edges. Default 0.
+     */
+    fitInset?: number | Inset;
+}
+interface Inset {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
 }
 
 type HistoryAction = 'push' | 'undo' | 'redo' | 'reset';

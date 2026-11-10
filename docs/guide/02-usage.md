@@ -181,6 +181,19 @@ Khi app đã có toolbar/modal riêng và chỉ cần vùng vẽ (vd đặt canv
 
 Handle của warp/circle text vẫn dùng màu cố định, chưa theo các biến này.
 
+### Stage mode: `fitInset` (canvas tràn viền)
+
+Với `stage={{ backdropUrl, pageCenter, pageBox, ... }}` canvas lấp đầy box cha và camera fit ảnh mockup. Nếu host có UI đè lên mép (header, toolbar…) nhưng vẫn muốn khi zoom nội dung vẽ tới sát mép, cho canvas lấp cả vùng và truyền khoảng chừa ra (px CSS) cho lúc fit:
+
+```tsx
+<div className="absolute inset-0">
+  <Editor chrome={false} stage={{ ...stage, fitInset: { top: 24, right: 16, bottom: 78, left: 16 } }} />
+</div>
+```
+
+- `fitInset: number | { top, right, bottom, left }`, mặc định 0. Fit (lúc đầu, `resetView`, double-tap) đặt ảnh vào giữa canvas trừ inset; pan bị kẹp theo box đó (ảnh lớn hơn box thì phải phủ box, nhỏ hơn thì căn giữa box). Canvas vẫn là cả vùng nên khi zoom không bị cắt trong box.
+- Chỉ ảnh hưởng hiển thị: document, `exportCanvas`, PNG/SVG export không đổi. Đổi inset lúc runtime → refit (giữ zoom nếu đang zoom).
+
 ## 4. Custom font
 
 Mặc định editor không có font nào ngoài font hệ thống. Đăng ký font trước khi render `Editor` (thường ở entry point app), rồi dùng đúng `family` name đó trong `TextNode.font.family` của document:

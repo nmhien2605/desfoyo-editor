@@ -9,7 +9,7 @@ import { backgroundAlpha, backgroundColor } from '../render/backgroundColor';
 import { onLoadSettled } from '../render/pendingLoads';
 import { onFontLoaded } from '../text/fontService';
 import { createStageLayers } from '../render/stageLayers';
-import { fitCamera } from '../render/stage';
+import { fitCamera, toInset } from '../render/stage';
 import { useEditorStore, useEditorStoreApi } from './EditorContext';
 import { activePage, type GridSettings } from '../core/store';
 import type { Document, Page, Size } from '../schema';
@@ -157,10 +157,11 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
         const bounds = {
           canvas: { width: app.screen.width, height: app.screen.height },
           backdrop: stageLayers?.backdropRect() ?? { x: 0, y: 0, ...page.size },
+          inset: toInset(state.stage.fitInset),
         };
         // Undo/redo and loadDocument also land here; same bounds must keep the user's zoom.
         if (JSON.stringify(bounds) === JSON.stringify(state.stageBounds)) return;
-        state.setStageFit(fitCamera(bounds.canvas, bounds.backdrop), bounds);
+        state.setStageFit(fitCamera(bounds.canvas, bounds.backdrop, bounds.inset), bounds);
       };
       // Stage mode keeps the renderer clear so the backdrop shows; the page background is a stage layer instead.
       const syncStage = () => {

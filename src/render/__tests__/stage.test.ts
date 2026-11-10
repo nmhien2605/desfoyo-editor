@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backdropRect, fitCamera } from '../stage';
+import { backdropRect, clampStagePan, fitCamera } from '../stage';
 import { createEditorStore } from '../../core/store';
 import { DocumentSchema } from '../../schema';
 
@@ -32,6 +32,21 @@ describe('fitCamera', () => {
     expect(-100 * cam.zoom + cam.panY).toBe(100);
     expect(150 * cam.zoom + cam.panX).toBe(400);
     expect(0 * cam.zoom + cam.panY).toBe(300);
+  });
+
+  it('fits into the canvas minus fitInset, and the pan clamp centres/covers that box', () => {
+    const inset = { top: 20, right: 10, bottom: 80, left: 30 };
+    const rect = { x: 0, y: 0, width: 100, height: 100 };
+    // 400×400 canvas → 360×300 box at (30,20): same camera as a 360×300 canvas, shifted by the inset.
+    const cam = fitCamera({ width: 400, height: 400 }, rect, inset);
+    const plain = fitCamera({ width: 360, height: 300 }, rect);
+    expect(cam).toEqual({ zoom: plain.zoom, panX: plain.panX + 30, panY: plain.panY + 20 });
+    const bounds = { canvas: { width: 400, height: 400 }, backdrop: rect, inset };
+    expect(clampStagePan(cam, bounds)).toEqual(cam);
+    // Zoomed past the box: edges may not move inside it.
+    const zoomed = clampStagePan({ zoom: 5, panX: 1000, panY: -1000 }, bounds);
+    expect(zoomed.panX).toBe(30);
+    expect(zoomed.panY + 100 * 5).toBe(320);
   });
 });
 
