@@ -15,3 +15,5 @@ export {
 export type { LoadedFont, FontVariant, FontStyle } from './text/fontService';
 export { measureText } from './text/textGeometry';
 export { renderPageToPng, renderPageToSvg } from './services/headlessRender';
+export { setImageSrcResolver } from './render/renderers/imageRenderer';
+export type { ImageSrcResolver } from './render/renderers/imageRenderer';

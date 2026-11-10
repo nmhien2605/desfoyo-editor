@@ -20,6 +20,9 @@ import {
   // headless render (không cần mount <Editor>)
   renderPageToPng,
   renderPageToSvg,
+  // URL ảnh hiển thị (bản thu nhỏ) cho asset image-url (xem mục 5)
+  setImageSrcResolver,
+  type ImageSrcResolver,
 } from '@desfoyo/editor';
 import '@desfoyo/editor/styles.css';
 ```
@@ -225,6 +228,19 @@ editorRef.current?.addNode({ id: nodeId, type: 'image', assetId, /* transform, s
 Với document chưa mount (lưu DB, `loadDocument`, headless render) thì cứ ghi thẳng vào `document.assets`. URL không cần có đuôi file (`.png`/`.jpg`). URL `.svg` (hoặc `data:image/svg+xml`) cũng dùng được: editor rasterize SVG ở 2× kích thước gốc để vẫn nét khi phóng to.
 
 Node ảnh (`ImageNode.assetId`) trỏ tới asset này y hệt như với `image` — không cần đổi gì ở phía node. Lưu ý: ảnh remote cross-origin cần server ảnh set CORS header đúng (editor load với `crossOrigin="anonymous"`), nếu không ảnh sẽ không hiển thị — đây là việc phía hạ tầng ảnh, không phải của editor. Hiện chỉ `image` có biến thể URL; `svg` vẫn chỉ nhúng base64 (SVG thường đã nhỏ, chưa cần).
+
+### Ảnh rất lớn: decode từ bản thu nhỏ (`setImageSrcResolver`)
+
+Editor luôn hạ texture về tối đa `maxSide` (2048) px, nhưng trình duyệt vẫn phải decode ảnh gốc full-size trước (ảnh 11037×14648 ≈ 650 MB RGBA → iOS kill tab). Nếu host có dịch vụ resize, đăng ký 1 resolver **một lần, trước khi editor/headless render ảnh đầu tiên**:
+
+```ts
+setImageSrcResolver((src, maxSide) => `/_next/image?url=${encodeURIComponent(src)}&w=${maxSide}&q=75`);
+```
+
+- Chỉ dùng để **hiển thị**: document/JSON, `ref.export('svg')`, `renderPageToSvg` vẫn giữ `src` gốc; resolver không bao giờ được ghi vào document.
+- Áp dụng global cho mọi `<Editor>`, `renderPageToPng` (thumbnail/preview 3D) và `stage.backdropUrl`. PNG export (`ref.export('png')`, `renderPageToPng`) vốn đã dùng texture ≤ 2048 px nên không mất chi tiết so với trước — không dùng PNG này cho file in.
+- Chỉ URL ảnh raster remote: `data:`/`blob:` và SVG (`.svg`, `data:image/svg+xml`) không qua resolver.
+- URL resolve lỗi (load/decode fail) hoặc resolver throw → tự fallback về `src` gốc. `setImageSrcResolver(null)` để tắt. Ảnh đã decode (cache theo `src`) giữ nguyên nguồn cũ.
 
 ## 6. Render ảnh không cần mount `<Editor>` (headless)
 

@@ -49,6 +49,42 @@ export function rasterSize(width: number, height: number, svg: boolean): { width
 // Mipmaps on: sources are often ~2000 px drawn at a few hundred px, and plain
 // linear sampling at that ratio skips thin strokes (they render dotted).
 export async function decodeImage(src: string): Promise<Texture> {
+  const display = displaySrc(src);
+  if (display === src) return decodeFrom(src);
+  try {
+    return await decodeFrom(display);
+  } catch (err) {
+    // An optimizer error must not blank the image: decode the original instead.
+    console.warn(`[desfoyo/editor] resolved image ${display} failed, using ${src}`, err);
+    return decodeFrom(src);
+  }
+}
+
+/** Maps a stored image URL to the URL decoded for display (e.g. a resized copy). */
+export type ImageSrcResolver = (src: string, maxSide: number) => string;
+
+let imageSrcResolver: ImageSrcResolver | null = null;
+
+// Global, not per-<Editor>: decodes are cached per src for every editor and
+// headless render on the page (textureCache below), so one resolver serves all.
+// Set it before the first image decodes; already-cached decodes keep their source.
+export function setImageSrcResolver(resolver: ImageSrcResolver | null): void {
+  imageSrcResolver = resolver;
+}
+
+// data:/blob: are already local and SVG is rasterised from its vector source,
+// so only remote raster URLs go through the resolver.
+function displaySrc(src: string): string {
+  if (!imageSrcResolver || /^(data|blob):/i.test(src) || SVG_SRC.test(src)) return src;
+  try {
+    return imageSrcResolver(src, MAX_TEXTURE_SIDE) || src;
+  } catch (err) {
+    console.warn('[desfoyo/editor] image src resolver threw', err);
+    return src;
+  }
+}
+
+async function decodeFrom(src: string): Promise<Texture> {
   const img = new Image();
   img.crossOrigin = 'anonymous';
   img.src = src;
