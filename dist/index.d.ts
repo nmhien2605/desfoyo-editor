@@ -1223,6 +1223,13 @@ interface EditorStage {
     };
     /** Max zoom as a multiple of the fit zoom. Default 4. */
     maxZoom?: number;
+    /** Min zoom as a multiple of the fit zoom. Default 0.5. */
+    minZoom?: number;
+    /**
+     * Don't clip page content to the page rect on screen, so elements partly outside the print area stay
+     * visible (still drawn above the backdrop). Exports always crop to the page. Default false.
+     */
+    pasteboard?: boolean;
     /**
      * CSS px kept free around the backdrop at the fit view (and kept covered/centred by the pan clamp);
      * the canvas itself still fills its box, so zoomed content draws up to its edges. Default 0.
@@ -1290,6 +1297,14 @@ interface EditorHandle {
     pasteClipboard(): void;
     /** Stage mode: back to the camera that fits the whole backdrop. No-op otherwise. */
     resetView(): void;
+    /** Stage mode: next zoom step up, around the view centre. No-op otherwise. */
+    zoomIn(): void;
+    /** Stage mode: next zoom step down, around the view centre. No-op otherwise. */
+    zoomOut(): void;
+    /** Stage mode: zoom level relative to the fit view (1 = fit), clamped to [minZoom, maxZoom], around the view centre. No-op otherwise. */
+    setZoom(level: number): void;
+    /** Stage mode: current zoom relative to the fit view (1 = fit). 1 when not in stage mode or not fitted yet. */
+    getZoom(): number;
 }
 interface EditorProps {
     document: Document;
@@ -1311,6 +1326,8 @@ interface EditorProps {
      * without viewScale. Live-updatable.
      */
     stage?: EditorStage;
+    /** Stage mode: fires when the zoom level (relative to the fit view, 1 = fit) changes — gestures, zoom calls, resetView, resize refit. */
+    onZoomChange?: (level: number) => void;
     /** Called on double-click of a selected node. When provided, the built-in behaviour (inline text edit, image crop) runs only if it returns true. */
     onNodeDoubleClick?: (nodeId: string, nodeType: Node['type']) => boolean | void;
     /** Fires after every history change: a new edit ('push'), undo, redo, or loadDocument ('reset'). */
