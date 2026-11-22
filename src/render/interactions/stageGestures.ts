@@ -1,5 +1,5 @@
 import type { Container, FederatedPointerEvent } from 'pixi.js';
-import type { EditorStoreApi } from '../../core/store';
+import type { EditorStore, EditorStoreApi } from '../../core/store';
 import { anchoredCamera, clampStageZoom } from '../stage';
 import type { Camera, Point } from '../viewport';
 
@@ -9,6 +9,42 @@ const DOUBLE_TAP_PX = 20;
 export function resetStageView(store: EditorStoreApi): void {
   const { stageFit, setCamera } = store.getState();
   if (stageFit) setCamera(stageFit);
+}
+
+// Zoom levels are relative to the fit view (1 = fit = "100%").
+export const STAGE_ZOOM_STEPS = [0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8];
+
+export function stageZoomLevel(state: Pick<EditorStore, 'camera' | 'stageFit'>): number {
+  return state.stageFit ? state.camera.zoom / state.stageFit.zoom : 1;
+}
+
+// Zooms around the centre of the visible box (canvas minus fitInset). setCamera clamps zoom and pan.
+export function setStageZoom(store: EditorStoreApi, level: number): void {
+  const { camera, stage, stageFit, stageBounds, setCamera } = store.getState();
+  if (!stage || !stageFit || !Number.isFinite(level)) return;
+  const zoom = clampStageZoom(stageFit.zoom * level, stageFit.zoom, stage.maxZoom, stage.minZoom);
+  const inset = stageBounds?.inset ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  const canvas = stageBounds?.canvas ?? { width: 0, height: 0 };
+  const centre = { x: (inset.left + canvas.width - inset.right) / 2, y: (inset.top + canvas.height - inset.bottom) / 2 };
+  setCamera(anchoredCamera(camera, centre, centre, zoom));
+}
+
+// EditorProps.onZoomChange: calls back whenever the fit-relative level changes (first fit included).
+export function watchStageZoom(store: EditorStoreApi, onChange: (level: number) => void): () => void {
+  return store.subscribe((state, prev) => {
+    if (!state.stageFit || (state.camera === prev.camera && state.stageFit === prev.stageFit)) return;
+    const level = stageZoomLevel(state);
+    if (!prev.stageFit || level !== stageZoomLevel(prev)) onChange(level);
+  });
+}
+
+// Next step above (dir 1) / below (dir -1) the current level; the clamp stops it at minZoom/maxZoom.
+export function stepStageZoom(store: EditorStoreApi, dir: 1 | -1): void {
+  const level = stageZoomLevel(store.getState());
+  const next = dir > 0
+    ? STAGE_ZOOM_STEPS.find((s) => s > level * 1.001) ?? STAGE_ZOOM_STEPS[STAGE_ZOOM_STEPS.length - 1]
+    : [...STAGE_ZOOM_STEPS].reverse().find((s) => s < level / 1.001) ?? STAGE_ZOOM_STEPS[0];
+  setStageZoom(store, next);
 }
 
 function isEditable(target: EventTarget | null): boolean {
@@ -100,7 +136,7 @@ export function attachStageGestures(area: HTMLElement, store: EditorStoreApi): (
     const [a, b] = twoTouches();
     // One finger left after a pinch: pan only.
     const ratio = b && pinch.dist > 0 ? Math.hypot(b.x - a.x, b.y - a.y) / pinch.dist : 1;
-    const zoom = clampStageZoom(pinch.camera.zoom * ratio, stageFit.zoom, stage.maxZoom);
+    const zoom = clampStageZoom(pinch.camera.zoom * ratio, stageFit.zoom, stage.maxZoom, stage.minZoom);
     setCamera(anchoredCamera(pinch.camera, pinch.mid, midpoint(a, b), zoom));
   };
 
@@ -122,7 +158,7 @@ export function attachStageGestures(area: HTMLElement, store: EditorStoreApi): (
     event.preventDefault();
     // Capped so one mouse-wheel notch (deltaY ~100) is a step, not a jump; trackpad deltas are small.
     const step = Math.min(25, Math.max(-25, event.deltaY)) * 0.01;
-    const zoom = clampStageZoom(camera.zoom * Math.exp(-step), stageFit.zoom, stage.maxZoom);
+    const zoom = clampStageZoom(camera.zoom * Math.exp(-step), stageFit.zoom, stage.maxZoom, stage.minZoom);
     const cursor = local(event);
     setCamera(anchoredCamera(camera, cursor, cursor, zoom));
   };

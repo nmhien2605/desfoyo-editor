@@ -75,7 +75,7 @@ export interface EditorStore {
   viewScale: number | null;
   // EditorProps.stage. While set, the canvas fills its host and stageFit is
   // the camera that fits the backdrop (the page until it loads); setCamera
-  // clamps zoom to [stageFit.zoom, stageFit.zoom × maxZoom], and pan to
+  // clamps zoom to stageFit.zoom × [minZoom, maxZoom], and pan to
   // stageBounds once known (see clampStagePan).
   stage: EditorStage | null;
   stageFit: Camera | null;
@@ -431,7 +431,7 @@ export function createEditorStore(initialDocument: Document) {
         if (s.viewScale != null) return {};
         if (s.stage && s.stageFit) {
           const camera = { ...s.camera, ...partial };
-          camera.zoom = clampStageZoom(camera.zoom, s.stageFit.zoom, s.stage.maxZoom);
+          camera.zoom = clampStageZoom(camera.zoom, s.stageFit.zoom, s.stage.maxZoom, s.stage.minZoom);
           return { camera: s.stageBounds ? clampStagePan(camera, s.stageBounds) : camera };
         }
         let zoom = partial.zoom;
@@ -451,10 +451,10 @@ export function createEditorStore(initialDocument: Document) {
         if (!stageFit) return { stageFit, stageBounds: null };
         const bounds = stageBounds ?? null;
         // Only the canvas resized (mobile URL bar, keyboard): keep the user's zoom, re-clamped. At fit, follow the new fit.
-        const zoomed = s.stageFit && s.stageBounds && bounds && s.camera.zoom > s.stageFit.zoom * 1.001
+        const zoomed = s.stageFit && s.stageBounds && bounds && Math.abs(s.camera.zoom / s.stageFit.zoom - 1) > 0.001
           && JSON.stringify(s.stageBounds.backdrop) === JSON.stringify(bounds.backdrop);
         if (!zoomed) return { stageFit, stageBounds: bounds, camera: stageFit };
-        const zoom = clampStageZoom(s.camera.zoom, stageFit.zoom, s.stage?.maxZoom);
+        const zoom = clampStageZoom(s.camera.zoom, stageFit.zoom, s.stage?.maxZoom, s.stage?.minZoom);
         return { stageFit, stageBounds: bounds, camera: clampStagePan({ ...s.camera, zoom }, bounds) };
       }),
   }));

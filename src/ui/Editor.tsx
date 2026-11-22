@@ -18,7 +18,7 @@ import { decodeSvgText } from '../render/renderers/svgRenderer';
 import { createViewport } from '../render/viewport';
 import type { SceneReconciler } from '../render/SceneReconciler';
 import type { EditorStage } from '../render/stage';
-import { attachStageGestures, resetStageView } from '../render/interactions/stageGestures';
+import { attachStageGestures, resetStageView, setStageZoom, stageZoomLevel, stepStageZoom, watchStageZoom } from '../render/interactions/stageGestures';
 import { exportCanvas, exportPng, exportSvg } from '../services/exportService';
 import { attachShortcuts } from '../services/shortcuts';
 import { deleteSelection, groupSelection, ungroupSelection, replaceSelection, moveNode } from '../core/actions';
@@ -58,6 +58,14 @@ export interface EditorHandle {
   pasteClipboard(): void;
   /** Stage mode: back to the camera that fits the whole backdrop. No-op otherwise. */
   resetView(): void;
+  /** Stage mode: next zoom step up, around the view centre. No-op otherwise. */
+  zoomIn(): void;
+  /** Stage mode: next zoom step down, around the view centre. No-op otherwise. */
+  zoomOut(): void;
+  /** Stage mode: zoom level relative to the fit view (1 = fit), clamped to [minZoom, maxZoom], around the view centre. No-op otherwise. */
+  setZoom(level: number): void;
+  /** Stage mode: current zoom relative to the fit view (1 = fit). 1 when not in stage mode or not fitted yet. */
+  getZoom(): number;
 }
 
 export interface EditorProps {
@@ -80,6 +88,8 @@ export interface EditorProps {
    * without viewScale. Live-updatable.
    */
   stage?: EditorStage;
+  /** Stage mode: fires when the zoom level (relative to the fit view, 1 = fit) changes — gestures, zoom calls, resetView, resize refit. */
+  onZoomChange?: (level: number) => void;
   /** Called on double-click of a selected node. When provided, the built-in behaviour (inline text edit, image crop) runs only if it returns true. */
   onNodeDoubleClick?: (nodeId: string, nodeType: Node['type']) => boolean | void;
   /** Fires after every history change: a new edit ('push'), undo, redo, or loadDocument ('reset'). */
@@ -131,6 +141,8 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   const areaRef = useRef<HTMLDivElement>(null);
   const staged = props.stage != null;
   useEffect(() => (staged && areaRef.current ? attachStageGestures(areaRef.current, store) : undefined), [store, staged]);
+
+  useEffect(() => watchStageZoom(store, (level) => propsRef.current.onZoomChange?.(level)), [store]);
 
   useEffect(
     () =>
@@ -244,6 +256,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
       cutSelection: () => cutSelection(store),
       pasteClipboard: () => pasteClipboard(store),
       resetView: () => resetStageView(store),
+      zoomIn: () => stepStageZoom(store, 1),
+      zoomOut: () => stepStageZoom(store, -1),
+      setZoom: (level) => setStageZoom(store, level),
+      getZoom: () => stageZoomLevel(store.getState()),
     }),
     [store],
   );

@@ -123,6 +123,10 @@ function App() {
 | `deleteSelection(): void` | Xoá các node đang chọn. |
 | `duplicateSelection(): void` | Nhân đôi các node đang chọn (giống `mod+d`). |
 | `copySelection(): void` / `cutSelection(): void` / `pasteClipboard(): void` | Copy/cut/paste nội bộ (clipboard riêng của editor, không dùng OS clipboard). |
+| `resetView(): void` | Stage mode: về camera fit cả ảnh mockup. Ngoài stage mode không làm gì. |
+| `zoomIn(): void` / `zoomOut(): void` | Stage mode: zoom lên/xuống mức kế tiếp trong `10/25/50/75/100/125/150/200/300/400/600/800%` (kẹp trong `[minZoom, maxZoom]`), quanh tâm vùng nhìn (canvas trừ `fitInset`). Ngoài stage mode không làm gì. |
+| `setZoom(level: number): void` | Stage mode: đặt zoom theo **mức so với fit** (`1` = fit = "100%"), kẹp trong `[minZoom, maxZoom]`, quanh tâm vùng nhìn. |
+| `getZoom(): number` | Stage mode: mức zoom hiện tại so với fit (`1` = fit). Trả `1` khi không ở stage mode hoặc chưa fit xong. |
 
 Tất cả method add/update/remove/reorder ở trên đi qua cùng hệ thống undo/redo của editor (mỗi lệnh là 1 history entry) — không cần tự quản lý riêng.
 
@@ -149,6 +153,7 @@ Tất cả method add/update/remove/reorder ở trên đi qua cùng hệ thống
 | `chrome` | `boolean` | | Mặc định `true` (UI đầy đủ: sidebar, inspector, toolbar). `false` = chỉ render canvas + khung chọn, không có gì khác — xem mục 3b. |
 | `viewScale` | `number` | | Zoom cố định do host quyết định: canvas có kích thước CSS = `page.size × viewScale`, tắt wheel-zoom, pan (Space/chuột giữa), phím tắt zoom và "Fit". Đổi giá trị lúc runtime sẽ resize canvas tại chỗ (không remount, giữ history). Không truyền = hành vi zoom/pan bình thường. |
 | `onNodeDoubleClick` | `(nodeId, nodeType) => boolean \| void` | | Gọi khi double-click node đang chọn. Khi có prop này, hành vi mặc định (sửa text inline, crop ảnh) **chỉ chạy nếu callback trả `true`** — dùng để mở modal sửa text của host. |
+| `onZoomChange` | `(level: number) => void` | | Stage mode: bắn khi mức zoom so với fit (`1` = fit) đổi — cử chỉ (pinch, ctrl/meta+wheel), `zoomIn/zoomOut/setZoom`, `resetView`/double-tap, và khi canvas resize làm fit đổi lúc đang zoom. Bắn `1` lần fit đầu tiên. Pan thuần không bắn. |
 | `onHistoryChange` | `(h: HistoryState) => void` | | Bắn sau mỗi thay đổi history: `{ canUndo, canRedo, pastLength, reason }`, `reason` là `'push'` (edit mới), `'undo'`, `'redo'` hoặc `'reset'` (`loadDocument`). Một lần kéo/resize/rotate = đúng 1 `'push'` lúc thả chuột. |
 
 ## 3b. Nhúng chỉ canvas (host tự làm UI)
@@ -201,6 +206,17 @@ Với `stage={{ backdropUrl, pageCenter, pageBox, ... }}` canvas lấp đầy bo
 
 - `fitInset: number | { top, right, bottom, left }`, mặc định 0. Fit (lúc đầu, `resetView`, double-tap) đặt ảnh vào giữa canvas trừ inset; pan bị kẹp theo box đó (ảnh lớn hơn box thì phải phủ box, nhỏ hơn thì căn giữa box). Canvas vẫn là cả vùng nên khi zoom không bị cắt trong box.
 - Chỉ ảnh hưởng hiển thị: document, `exportCanvas`, PNG/SVG export không đổi. Đổi inset lúc runtime → refit (giữ zoom nếu đang zoom).
+
+### Stage mode: zoom và `pasteboard`
+
+- Zoom tính theo **mức so với fit** (`1` = fit = "100%"): `stage.minZoom` (mặc định `0.5`) … `stage.maxZoom` (mặc định `4`). Dưới fit, ảnh mockup nằm giữa vùng nhìn (canvas trừ `fitInset`).
+- Nút zoom của host: `ref.zoomIn()` / `ref.zoomOut()` / `ref.setZoom(level)`, hiển thị `%` từ `onZoomChange` (hoặc `ref.getZoom()`). Cử chỉ vẫn zoom quanh con trỏ / trung điểm 2 ngón; double-tap vẫn về fit.
+- `stage.pasteboard: true` (mặc định `false`): nội dung page **không bị cắt** theo khung page trên màn hình — phần node thò ra ngoài vùng in vẫn thấy (vẽ trên ảnh mockup) và bấm/kéo được. Export (`export`, `exportCanvas`, `renderPageToPng`) vẫn cắt đúng khung page như cũ.
+
+```tsx
+<Editor ref={ref} chrome={false} stage={{ ...stage, pasteboard: true }} onZoomChange={(l) => setPct(Math.round(l * 100))} />
+<button onClick={() => ref.current?.zoomOut()}>−</button> {pct}% <button onClick={() => ref.current?.zoomIn()}>+</button>
+```
 
 ## 4. Custom font
 

@@ -59,13 +59,13 @@ describe('store stage state', () => {
     assets: {},
   });
 
-  it('setStageFit jumps to the fit and setCamera clamps zoom to [fit, fit × maxZoom]', () => {
+  it('setStageFit jumps to the fit and setCamera clamps zoom to fit × [minZoom (0.5), maxZoom]', () => {
     const store = createEditorStore(doc);
     store.getState().setStage({ ...stage, maxZoom: 3 });
     store.getState().setStageFit({ zoom: 0.5, panX: 10, panY: 20 });
     expect(store.getState().camera).toEqual({ zoom: 0.5, panX: 10, panY: 20 });
     store.getState().setCamera({ zoom: 0.1 });
-    expect(store.getState().camera.zoom).toBe(0.5);
+    expect(store.getState().camera.zoom).toBe(0.25);
     store.getState().setCamera({ zoom: 100 });
     expect(store.getState().camera.zoom).toBe(1.5);
   });
@@ -90,7 +90,7 @@ describe('store stage state', () => {
     store.getState().setCamera({ zoom: 2, panX: -50, panY: -50 });
     store.getState().setStageFit(fitCamera({ width: 100, height: 80 }, backdrop), { canvas: { width: 100, height: 80 }, backdrop });
     expect(store.getState().camera.zoom).toBe(2);
-    store.getState().setCamera({ zoom: 0 }); // back to fit
+    store.getState().setCamera(store.getState().stageFit!); // back to fit
     const fit = fitCamera({ width: 100, height: 60 }, backdrop);
     store.getState().setStageFit(fit, { canvas: { width: 100, height: 60 }, backdrop });
     expect(store.getState().camera).toEqual(fit);

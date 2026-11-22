@@ -47,8 +47,10 @@ export function createStageLayers(world: Container, pageContainer: Container, on
   return {
     sync(stage: EditorStage | null, page: Page) {
       current = stage ? { stage, page } : null;
-      backdrop.visible = pageFill.visible = mask.visible = !!stage;
-      clip.mask = stage ? mask : null;
+      backdrop.visible = pageFill.visible = !!stage;
+      // pasteboard: content outside the page stays visible; exports crop via their own frame, not this mask.
+      clip.mask = stage && !stage.pasteboard ? mask : null;
+      mask.visible = !!clip.mask;
       pageFill.clear();
       mask.clear();
       if (!stage) {

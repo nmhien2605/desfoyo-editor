@@ -57,8 +57,9 @@ describe('cancelGesture', () => {
 });
 
 describe('stage camera clamps', () => {
-  it('clampStageZoom keeps zoom in [fit, fit × maxZoom]', () => {
-    expect(clampStageZoom(0.1, 0.5)).toBe(0.5);
+  it('clampStageZoom keeps zoom in fit × [minZoom, maxZoom]', () => {
+    expect(clampStageZoom(0.1, 0.5)).toBe(0.25);
+    expect(clampStageZoom(0.1, 0.5, 4, 1)).toBe(0.5);
     expect(clampStageZoom(9, 0.5)).toBe(2);
     expect(clampStageZoom(9, 0.5, 3)).toBe(1.5);
     expect(clampStageZoom(1, 0.5)).toBe(1);

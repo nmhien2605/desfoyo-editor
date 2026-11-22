@@ -18,6 +18,13 @@ export interface EditorStage {
   outline?: { color: string; corners?: boolean; dashed?: boolean };
   /** Max zoom as a multiple of the fit zoom. Default 4. */
   maxZoom?: number;
+  /** Min zoom as a multiple of the fit zoom. Default 0.5. */
+  minZoom?: number;
+  /**
+   * Don't clip page content to the page rect on screen, so elements partly outside the print area stay
+   * visible (still drawn above the backdrop). Exports always crop to the page. Default false.
+   */
+  pasteboard?: boolean;
   /**
    * CSS px kept free around the backdrop at the fit view (and kept covered/centred by the pan clamp);
    * the canvas itself still fills its box, so zoomed content draws up to its edges. Default 0.
@@ -37,6 +44,7 @@ export function toInset(inset: EditorStage['fitInset'] = 0): Inset {
 }
 
 export const DEFAULT_STAGE_MAX_ZOOM = 4;
+export const DEFAULT_STAGE_MIN_ZOOM = 0.5;
 
 export interface WorldRect {
   x: number;
@@ -78,8 +86,13 @@ export function fitCamera(canvas: Size, rect: WorldRect, inset: Inset = toInset(
   };
 }
 
-export function clampStageZoom(zoom: number, fitZoom: number, maxZoom = DEFAULT_STAGE_MAX_ZOOM): number {
-  return Math.min(fitZoom * maxZoom, Math.max(fitZoom, zoom));
+export function clampStageZoom(
+  zoom: number,
+  fitZoom: number,
+  maxZoom = DEFAULT_STAGE_MAX_ZOOM,
+  minZoom = DEFAULT_STAGE_MIN_ZOOM,
+): number {
+  return Math.min(fitZoom * maxZoom, Math.max(fitZoom * minZoom, zoom));
 }
 
 // What the pan clamp needs: canvas CSS size, the backdrop in world units and the fit inset.
