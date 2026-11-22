@@ -8,6 +8,13 @@ import { onPointerCancel } from './pointerGesture';
 
 const SNAP_THRESHOLD_PX = 6;
 
+// A locked node takes no canvas hits at all (eventMode 'none' also covers a
+// group's children), so a tap or drag falls through to what's underneath.
+export function setLockedInteraction(obj: Container, locked: boolean): void {
+  obj.eventMode = locked ? 'none' : 'static';
+  obj.cursor = 'move';
+}
+
 // Raw Pixi v8 pointer events — no @pixi/react. pointerdown resolves
 // selection (plain click vs shift-click toggle) and starts the drag;
 // pointermove/pointerup are listened on `stage` (not the object) so the
@@ -24,8 +31,7 @@ export function attachDrag(
   stage: Container,
   pageContainer: Container,
 ): void {
-  obj.eventMode = 'static';
-  obj.cursor = node.locked ? 'default' : 'move';
+  setLockedInteraction(obj, node.locked);
 
   obj.on('pointerdown', (event: FederatedPointerEvent) => {
     event.stopPropagation();
@@ -39,15 +45,15 @@ export function attachDrag(
       // click on anything else replaces the selection.
       store.getState().select(node.id, 'replace');
     }
-    if (node.locked) return;
 
     const state = store.getState();
     const pageId = state.activePageId;
     const page = activePage(state);
     const selectedIds = Array.from(store.getState().selectedNodeIds);
     const startNodes: Node[] = page
-      ? selectedIds.map((id) => findNodeInTree(page.children, id)?.node).filter((n): n is Node => !!n)
+      ? selectedIds.map((id) => findNodeInTree(page.children, id)?.node).filter((n): n is Node => !!n && !n.locked)
       : [];
+    // Only unlocked objects get pointerdown (setLockedInteraction), so `node` is draggable.
     if (startNodes.length === 0) startNodes.push(node);
 
     const startWorld = event.getLocalPosition(pageContainer);

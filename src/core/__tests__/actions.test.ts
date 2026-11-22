@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createEditorStore } from '../store';
-import { alignSelection, distributeSelection, moveNode, replaceSelection } from '../actions';
+import { alignSelection, deleteSelection, distributeSelection, groupSelection, moveNode, nudgeSelection, replaceSelection } from '../actions';
+import { cutSelection } from '../../services/clipboard';
 import type { Document, Node, ShapeNode } from '../../schema';
 
 function shapeNode(id: string, x: number, y: number, width = 20, height = 20): ShapeNode {
@@ -144,5 +145,46 @@ describe('moveNode', () => {
     moveNode(store, 'a', 1);
     moveNode(store, 'zzz', 0);
     expect(store.getState().past.length).toBe(1);
+  });
+});
+
+describe('locked nodes', () => {
+  const locked = (id: string, x: number) => ({ ...shapeNode(id, x, 0), locked: true });
+  const ids = (store: ReturnType<typeof createEditorStore>) => store.getState().document.pages[0].children.map((n) => n.id);
+
+  it('can still be selected programmatically and unlocked via UpdateProps', () => {
+    const store = createEditorStore(makeDocument([locked('a', 0)]));
+    replaceSelection(store, ['a']);
+    expect([...store.getState().selectedNodeIds]).toEqual(['a']);
+    store.getState().dispatch({ type: 'UpdateProps', pageId: 'page-1', nodeId: 'a', patch: { locked: false } });
+    nudgeSelection(store, 5, 0);
+    expect(xOf(store, 'a')).toBe(5);
+  });
+
+  it('delete and cut skip locked members but remove the others', () => {
+    const store = createEditorStore(makeDocument([locked('a', 0), shapeNode('b', 50, 0), shapeNode('c', 90, 0)]));
+    replaceSelection(store, ['a', 'b']);
+    deleteSelection(store);
+    expect(ids(store)).toEqual(['a', 'c']);
+    replaceSelection(store, ['a', 'c']);
+    cutSelection(store);
+    expect(ids(store)).toEqual(['a']);
+    replaceSelection(store, ['a']);
+    deleteSelection(store);
+    expect(ids(store)).toEqual(['a']);
+    expect(store.getState().past).toHaveLength(2);
+  });
+
+  it('nudge, align and group skip locked members', () => {
+    const store = createEditorStore(makeDocument([locked('a', 0), shapeNode('b', 50, 0), shapeNode('c', 100, 0)]));
+    replaceSelection(store, ['a', 'b', 'c']);
+    nudgeSelection(store, 10, 0);
+    expect([xOf(store, 'a'), xOf(store, 'b'), xOf(store, 'c')]).toEqual([0, 60, 110]);
+    alignSelection(store, 'left');
+    expect([xOf(store, 'a'), xOf(store, 'b'), xOf(store, 'c')]).toEqual([0, 60, 60]);
+    groupSelection(store);
+    const children = store.getState().document.pages[0].children;
+    expect(children.map((n) => n.type)).toEqual(['shape', 'group']);
+    expect(children[0].id).toBe('a');
   });
 });

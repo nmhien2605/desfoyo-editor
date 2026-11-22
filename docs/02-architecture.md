@@ -62,6 +62,7 @@
 
 - **Quyết định**: không tự viết bộ diff cây JSON tổng quát. Mọi thay đổi đi qua command bus, và mỗi command đã biết chính xác `nodeId` bị ảnh hưởng (`UpdateProps(nodeId, ...)`, `AddNode(parentId, node)`...). Store phát thông báo theo `nodeId`, reconciler subscribe theo id và cập nhật/tạo/xóa đúng `DisplayObject` đó — không cần diff lại từ đầu.
 - Mỗi node type có một **renderer adapter** (`TextRenderer`, `ShapeRenderer`, `ImageRenderer`, `GroupRenderer`).
+- Node `locked`: display object có `eventMode = 'none'` (`setLockedInteraction` trong `src/render/interactions/drag.ts`, CanvasHost gọi lại khi `UpdateProps` đổi `locked`) nên không nhận hit; các action sửa selection (`src/core/actions.ts`, cut, rotate multi-select) lọc node khoá qua `editableSelectedIds`/lọc `!locked`.
 - **Không dùng `@pixi/react`**: viết binding thủ công quanh Pixi để reconciler này là điểm diff duy nhất, giữ render layer độc lập với React (đúng nguyên tắc headless core).
 
 ### 5. Effect Pipeline

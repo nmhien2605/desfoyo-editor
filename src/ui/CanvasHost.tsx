@@ -1,7 +1,7 @@
 import { useEffect, useRef, type MutableRefObject } from 'react';
 import { Application, Container, Graphics } from 'pixi.js';
 import { SceneReconciler } from '../render/SceneReconciler';
-import { attachDrag } from '../render/interactions/drag';
+import { attachDrag, setLockedInteraction } from '../render/interactions/drag';
 import { attachViewportControls, attachPan } from '../render/interactions/viewportControls';
 import { attachMarquee } from '../render/interactions/marquee';
 import { attachDoubleTapReset } from '../render/interactions/stageGestures';
@@ -242,8 +242,14 @@ export function CanvasHost({ onReady, reconcilerRef }: CanvasHostProps) {
           remountPage(newPage, state.document);
           return;
         }
-        if (state.lastCommand && state.lastCommand !== prevState.lastCommand) {
-          reconciler?.apply(state.lastCommand, state.document);
+        const cmd = state.lastCommand;
+        if (cmd && cmd !== prevState.lastCommand) {
+          reconciler?.apply(cmd, state.document);
+          // attachDrag runs only on mount, so a lock toggle re-syncs hit-testing here.
+          if (cmd.type === 'UpdateProps' && cmd.patch.locked !== undefined) {
+            const obj = reconciler?.getDisplayObject(cmd.nodeId);
+            if (obj) setLockedInteraction(obj, cmd.patch.locked);
+          }
         }
       });
 

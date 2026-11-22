@@ -56,7 +56,7 @@ export function attachMarquee(stage: Container, pageContainer: Container, store:
       const page = activePage(store.getState());
       if (!page) return;
       for (const node of page.children) {
-        if (intersects(rect, nodeBounds(node))) store.getState().select(node.id, 'toggle');
+        if (!node.locked && intersects(rect, nodeBounds(node))) store.getState().select(node.id, 'toggle');
       }
     };
 

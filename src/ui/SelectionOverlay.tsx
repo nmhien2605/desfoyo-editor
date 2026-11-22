@@ -126,7 +126,6 @@ export function SelectionOverlay() {
   }
 
   const node = selectedNodes[0];
-  if (node.locked) return <div className="pointer-events-none absolute inset-0">{extras}</div>;
   return (
     <SingleSelectionOverlay
       node={node}
@@ -164,6 +163,8 @@ function SingleSelectionOverlay({
   const isCropping = node.type === 'image' && croppingNodeId === node.id;
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const isEditingText = node.type === 'text' && editingNodeId === node.id;
+  // Locked: just the box, so the user sees what's selected; taps pass through it.
+  const interactive = (node.type === 'image' || node.type === 'text') && !node.locked;
   const originX = node.transform.originX ?? 0;
   const originY = node.transform.originY ?? 0;
   const { scaleX, scaleY } = node.transform;
@@ -246,7 +247,7 @@ function SingleSelectionOverlay({
         onDoubleClick={() => {
           // Host-owned double-click (EditorProps.onNodeDoubleClick): built-in
           // crop / inline text edit only runs if the host returns true.
-          if (onNodeDoubleClick && !onNodeDoubleClick(node.id, node.type)) return;
+          if (node.locked || (onNodeDoubleClick && !onNodeDoubleClick(node.id, node.type))) return;
           if (node.type === 'image') setCroppingNodeId(isCropping ? null : node.id);
           if (node.type === 'text') setEditingNodeId(isEditingText ? null : node.id);
         }}
@@ -264,7 +265,7 @@ function SingleSelectionOverlay({
         // initial pointerdown needs manually forwarding to the canvas
         // element so Pixi's own hit-test and attachDrag take over from there.
         onPointerDown={(e) => {
-          if ((node.type !== 'image' && node.type !== 'text') || !canvas) return;
+          if (!interactive || !canvas) return;
           canvas.dispatchEvent(
             new PointerEvent('pointerdown', {
               bubbles: true,
@@ -279,7 +280,7 @@ function SingleSelectionOverlay({
             }),
           );
         }}
-        className={`df-sel-box absolute ${node.type === 'image' || node.type === 'text' ? 'pointer-events-auto touch-none' : ''}`}
+        className={`df-sel-box absolute ${interactive ? 'pointer-events-auto touch-none' : ''}`}
         style={{
           left: topLeftScreen.x,
           top: topLeftScreen.y,
@@ -299,7 +300,8 @@ function SingleSelectionOverlay({
           transform: `rotate(${rotationDeg}deg)`,
         }}
       />
-      {!isCropping &&
+      {!node.locked &&
+        !isCropping &&
         !isEditingText &&
         HANDLES.map((handle) => {
           // Text handles sit on the (warped) selection box, not node.size.
@@ -315,7 +317,7 @@ function SingleSelectionOverlay({
             />
           );
         })}
-      {!isCropping && !isEditingText && (
+      {!node.locked && !isCropping && !isEditingText && (
         <div
           onPointerDown={startRotate}
           className={`${HANDLE_CLASS} cursor-grab`}
@@ -333,10 +335,11 @@ function SingleSelectionOverlay({
           onClose={() => setEditingNodeId(null)}
         />
       )}
-      {!isEditingText && node.type === 'text' && node.warp?.type === 'circle' && (
+      {!node.locked && !isEditingText && node.type === 'text' && node.warp?.type === 'circle' && (
         <CircleHandlesOverlay node={node} activePageId={activePageId} viewport={viewport} handleHit={hit} />
       )}
-      {!isEditingText &&
+      {!node.locked &&
+        !isEditingText &&
         node.type === 'text' &&
         node.warp &&
         node.warp.type !== 'none' &&
@@ -456,6 +459,8 @@ function MultiSelectionOverlay({ nodes, activePageId }: { nodes: Node[]; activeP
   const viewport = createViewport(canvas, () => camera);
   const bounds = computeSelectionBounds(nodes);
   const screenMin = viewport.toScreen(bounds.min);
+  // Locked members stay in the outline but don't rotate.
+  const movable = nodes.filter((n) => !n.locked);
 
   const startRotate = (downEvent: ReactPointerEvent) => {
     downEvent.stopPropagation();
@@ -468,7 +473,7 @@ function MultiSelectionOverlay({ nodes, activePageId }: { nodes: Node[]; activeP
       const angle = angleBetween(pivotWorld, pointerWorld);
       const deltaRotation = angle - lastAngle;
       lastAngle = angle;
-      for (const patch of applyGroupRotate(nodes, pivotWorld, deltaRotation)) {
+      for (const patch of applyGroupRotate(movable, pivotWorld, deltaRotation)) {
         store.getState().dispatch({
           type: 'UpdateTransform',
           pageId: activePageId,
@@ -497,7 +502,7 @@ function MultiSelectionOverlay({ nodes, activePageId }: { nodes: Node[]; activeP
           borderStyle: 'dashed',
         }}
       />
-      <div
+      {movable.length > 0 && <div
         onPointerDown={startRotate}
         className={`${HANDLE_CLASS} cursor-grab`}
         style={handleStyle(
@@ -505,7 +510,7 @@ function MultiSelectionOverlay({ nodes, activePageId }: { nodes: Node[]; activeP
           rotateHandlePos.y,
           handleHitSize(7, Math.min(bounds.max.x - bounds.min.x, bounds.max.y - bounds.min.y) * camera.zoom, isCoarsePointer()),
         )}
-      />
+      />}
     </div>
   );
 }

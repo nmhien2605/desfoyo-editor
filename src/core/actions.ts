@@ -30,7 +30,13 @@ function selectedTopLevelNodes(store: EditorStoreApi): Node[] {
   if (!page) return [];
   return Array.from(selectedNodeIds)
     .map((id) => findNodeInTree(page.children, id)?.node)
-    .filter((n): n is Node => !!n);
+    .filter((n): n is Node => !!n && !n.locked);
+}
+
+// Locked nodes stay selectable (layers panel, selectNode) but every edit
+// action skips them without blocking the other selected nodes.
+export function editableSelectedIds(store: EditorStoreApi): string[] {
+  return selectedTopLevelNodes(store).map((n) => n.id);
 }
 
 // Aligns each selected node's own bbox edge/center to the whole selection's
@@ -94,23 +100,24 @@ export function distributeSelection(store: EditorStoreApi, axis: 'horizontal' | 
 // Composed actions shared by Toolbar buttons and keyboard shortcuts — one
 // place for "what a batch of dispatches means as a single undo step."
 export function deleteSelection(store: EditorStoreApi): void {
-  const { selectedNodeIds, activePageId } = store.getState();
-  if (selectedNodeIds.size === 0) return;
+  const ids = editableSelectedIds(store);
+  if (ids.length === 0) return;
+  const { activePageId } = store.getState();
   store.getState().beginGesture('multi-delete');
-  for (const id of selectedNodeIds) {
+  for (const id of ids) {
     store.getState().dispatch({ type: 'RemoveNode', pageId: activePageId, nodeId: id });
   }
   store.getState().endGesture();
 }
 
 export function groupSelection(store: EditorStoreApi): void {
-  const { selectedNodeIds, activePageId } = store.getState();
-  if (selectedNodeIds.size < 2) return;
+  const nodeIds = editableSelectedIds(store);
+  if (nodeIds.length < 2) return;
   const groupId = nanoid();
   store.getState().dispatch({
     type: 'GroupNodes',
-    pageId: activePageId,
-    nodeIds: Array.from(selectedNodeIds),
+    pageId: store.getState().activePageId,
+    nodeIds,
     groupId,
   });
   store.getState().select(groupId);
@@ -172,20 +179,16 @@ export function moveNode(store: EditorStoreApi, nodeId: string, toIndex: number,
 }
 
 export function nudgeSelection(store: EditorStoreApi, dx: number, dy: number): void {
-  const state = store.getState();
-  const { selectedNodeIds } = state;
-  if (selectedNodeIds.size === 0) return;
-  const page = activePage(state);
-  if (!page) return;
+  const nodes = selectedTopLevelNodes(store);
+  if (nodes.length === 0) return;
+  const pageId = store.getState().activePageId;
   store.getState().beginGesture('nudge');
-  for (const id of selectedNodeIds) {
-    const location = findNodeInTree(page.children, id);
-    if (!location) continue;
+  for (const node of nodes) {
     store.getState().dispatch({
       type: 'UpdateTransform',
-      pageId: page.id,
-      nodeId: id,
-      patch: { x: location.node.transform.x + dx, y: location.node.transform.y + dy },
+      pageId,
+      nodeId: node.id,
+      patch: { x: node.transform.x + dx, y: node.transform.y + dy },
     });
   }
   store.getState().endGesture();

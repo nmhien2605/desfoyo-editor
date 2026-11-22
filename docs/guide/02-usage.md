@@ -115,7 +115,7 @@ function App() {
 | `addAsset(assetId: string, asset: AssetRef): void` | Thêm/ghi đè 1 asset (`image`, `svg`, `image-url`), validate bằng `AssetRefSchema` (sai shape sẽ throw). **Không** tạo history entry — undo `addNode` dùng asset đó chỉ xoá node, asset vẫn giữ để redo được. Xem mục 5. |
 | `addNode(node: Node, opts?: { pageId?, parentId?, index? }): void` | Thêm node vào document. `node` phải khớp `NodeSchema` (build tay hoặc validate bằng `NodeSchema.parse`). `pageId` mặc định là page đang active. |
 | `removeNode(nodeId, opts?: { pageId?, parentId? }): void` | Xoá node theo id. |
-| `updateNodeProps(nodeId, patch: Partial<Node>, opts?: { pageId? }): void` | Patch field bất kỳ của node (fill, opacity, font...). |
+| `updateNodeProps(nodeId, patch: Partial<Node>, opts?: { pageId? }): void` | Patch field bất kỳ của node (fill, opacity, font...). Khoá/mở khoá node: `updateNodeProps(id, { locked: true \| false })` — xem "Khoá node" bên dưới. |
 | `updateNodeTransform(nodeId, patch: Partial<Transform>, opts?: { pageId? }): void` | Patch riêng `transform` (x/y/scale/rotation) — tách khỏi `updateNodeProps` vì đây là thao tác hay lặp lại khi kéo/resize/rotate bằng code. |
 | `reorderNode(nodeId, to: 'up' \| 'down' \| 'top' \| 'bottom', opts?: { pageId?, parentId? }): void` | Đổi thứ tự layer (z-index) trong page/group. |
 | `selectNode(nodeIds: string[]): void` | Thay toàn bộ selection bằng danh sách này. Mảng rỗng `[]` = clear selection. |
@@ -125,6 +125,14 @@ function App() {
 | `copySelection(): void` / `cutSelection(): void` / `pasteClipboard(): void` | Copy/cut/paste nội bộ (clipboard riêng của editor, không dùng OS clipboard). |
 
 Tất cả method add/update/remove/reorder ở trên đi qua cùng hệ thống undo/redo của editor (mỗi lệnh là 1 history entry) — không cần tự quản lý riêng.
+
+### Khoá node (`locked: true`)
+
+- Trên canvas node khoá **không nhận hit**: tap/kéo/hover rơi xuống node bên dưới (hoặc vùng trống → bỏ chọn/marquee). Marquee cũng bỏ qua node khoá.
+- Không bị di chuyển/resize/rotate/nudge bằng phím/xoá (`deleteSelection`, Delete, cut)/align/distribute/group. Khi nằm trong multi-selection thì chỉ node khoá bị bỏ qua, các node còn lại vẫn đổi bình thường.
+- Vẫn chọn được bằng code (`selectNode`) hoặc layers panel; khi được chọn chỉ hiện khung chọn, không có handle.
+- Mở khoá: `updateNodeProps(id, { locked: false })` (có undo như mọi lệnh). `locked` được lưu trong JSON như cũ.
+- Các method `EditorHandle` theo id (`removeNode`, `updateNodeTransform`...) **không** chặn node khoá — host gọi trực tiếp thì vẫn đổi.
 
 ## 3. Props đầy đủ (`EditorProps`)
 

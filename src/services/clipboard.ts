@@ -1,6 +1,7 @@
 import { activePage, type EditorStoreApi } from '../core/store';
 import { deepCloneNode, findNodeInTree } from '../core/tree';
 import type { Node } from '../schema';
+import { editableSelectedIds } from '../core/actions';
 
 const PASTE_OFFSET = 10;
 
@@ -48,7 +49,7 @@ export function copySelection(store: EditorStoreApi): void {
 
 export function cutSelection(store: EditorStoreApi): void {
   copySelection(store);
-  const ids = Array.from(store.getState().selectedNodeIds);
+  const ids = editableSelectedIds(store); // copies everything, removes only unlocked
   if (ids.length === 0) return;
   const pageId = store.getState().activePageId;
   store.getState().beginGesture('cut');
