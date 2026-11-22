@@ -94,3 +94,29 @@ describe('releaseGradient', () => {
     expect(group.resources).not.toBeNull();
   });
 });
+
+describe('LinearGradient — mixed-sign directions', () => {
+  // Pixi's own build mirrors ↗/↙ (swaps x and y separately); ours must map
+  // texture 0 → start and texture end → end for every direction.
+  it.each([-Math.PI / 4, (3 * Math.PI) / 4, Math.PI / 4, 0])('angle %f: texture runs start → end', (angle) => {
+    const seen: unknown[] = [];
+    const spy = vi.spyOn(FillGradient.prototype, 'buildLinearGradient').mockImplementation(function (this: FillGradient) {
+      seen.push({ ...this.start, ex: this.end.x, ey: this.end.y });
+      this.texture = Texture.WHITE;
+    });
+    const fill: Fill = { type: 'linear-gradient', angle, stops: radial.stops };
+    for (const g of [resolveFill(fill, box), resolveFill(fill)] as FillGradient[]) {
+      g.buildGradient();
+      const size = FillGradient.defaultLinearOptions.textureSize!;
+      const scale = g.textureSpace === 'local' ? size : 1;
+      const a = g.transform.apply({ x: 0, y: 0 });
+      const b = g.transform.apply({ x: size, y: 0 });
+      expect(a.x / scale).toBeCloseTo(g.start.x, 6);
+      expect(a.y / scale).toBeCloseTo(g.start.y, 6);
+      expect(b.x / scale).toBeCloseTo(g.end.x, 6);
+      expect(b.y / scale).toBeCloseTo(g.end.y, 6);
+    }
+    expect(seen).toEqual([{ x: 0, y: 0, ex: 1, ey: 0 }, { x: 0, y: 0, ex: 1, ey: 0 }]);
+    spy.mockRestore();
+  });
+});

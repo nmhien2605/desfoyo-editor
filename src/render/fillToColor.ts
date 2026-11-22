@@ -1,4 +1,4 @@
-import { FillGradient, type ColorSource, type Container, type StrokeStyle } from 'pixi.js';
+import { FillGradient, Matrix, type ColorSource, type Container, type StrokeStyle } from 'pixi.js';
 import type { Fill } from '../schema';
 
 // Each FillGradient owns a canvas + GPU texture that Graphics.clear() never
@@ -71,6 +71,29 @@ export function fillToColor(fill: Fill): ColorSource {
   }
 }
 
+// Pixi 8.19 buildLinearGradient (clamp-to-edge) swaps x0/x1 and y0/y1
+// independently when dx < 0 or dy < 0, so a direction with mixed signs (↗ or ↙
+// in y-down: the web's default 45°) is drawn mirrored. Build the texture along
+// +x, where Pixi swaps nothing, then aim it at the real start → end with the
+// same matrix Pixi would use.
+export class LinearGradient extends FillGradient {
+  override buildLinearGradient(): void {
+    if (this.texture) return;
+    const { start, end } = this;
+    this.start = { x: 0, y: 0 };
+    this.end = { x: 1, y: 0 };
+    super.buildLinearGradient();
+    this.start = start;
+    this.end = end;
+    const size = FillGradient.defaultLinearOptions.textureSize!;
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const m = new Matrix().scale(Math.hypot(dx, dy) / size, 1).rotate(Math.atan2(dy, dx)).translate(start.x, start.y);
+    if (this.textureSpace === 'local') m.scale(size, size);
+    this.transform = m;
+  }
+}
+
 // Resolves a schema Fill to a real Pixi FillInput for Graphics.fill()/
 // .stroke() and Text `fill`/`stroke` style — uses Pixi v8's native
 // FillGradient for linear/radial gradients instead of a custom shader.
@@ -102,7 +125,7 @@ export function resolveFill(
     case 'linear-gradient': {
       const dx = Math.cos(fill.angle) * 0.5;
       const dy = Math.sin(fill.angle) * 0.5;
-      const gradient = new FillGradient({
+      const gradient = new LinearGradient({
         type: 'linear',
         start: { x: 0.5 - dx, y: 0.5 - dy },
         end: { x: 0.5 + dx, y: 0.5 + dy },
@@ -147,7 +170,7 @@ function boxGradient(
     const gy = dy / h;
     const g2 = gx * gx + gy * gy;
     const start = { x: (0.5 - dx / 2) * w, y: (0.5 - dy / 2) * h };
-    gradient = new FillGradient({
+    gradient = new LinearGradient({
       type: 'linear',
       start,
       end: { x: start.x + gx / g2, y: start.y + gy / g2 },
