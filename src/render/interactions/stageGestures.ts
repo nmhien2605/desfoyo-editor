@@ -1,5 +1,6 @@
 import type { Container, FederatedPointerEvent } from 'pixi.js';
 import type { EditorStore, EditorStoreApi } from '../../core/store';
+import { replaceSelection } from '../../core/actions';
 import { anchoredCamera, clampStageZoom } from '../stage';
 import type { Camera, Point } from '../viewport';
 
@@ -59,6 +60,8 @@ const midpoint = (a: Point, b: Point = a): Point => ({ x: (a.x + b.x) / 2, y: (a
 // pointerdown, document pointermove), the overlays' React handlers and
 // startPointerGesture's window listeners, so they can keep events from them.
 // Normal mode keeps attachViewportControls/attachPan; those skip stage mode.
+const sameIds = (set: Set<string>, ids: string[]) => set.size === ids.length && ids.every((id) => set.has(id));
+
 export function attachStageGestures(area: HTMLElement, store: EditorStoreApi): () => void {
   let space = false;
   // Space is only swallowed over this editor: elsewhere it still scrolls the page / presses the focused button.
@@ -67,6 +70,9 @@ export function attachStageGestures(area: HTMLElement, store: EditorStoreApi): (
   const touches = new Map<number, Point>();
   // Set from the 2nd touch until every finger lifts; meanwhile touch moves never reach the editor.
   let pinch: { camera: Camera; mid: Point; dist: number } | null = null;
+  // Selection when the first finger went down: its tap on empty canvas (marquee) or on a node
+  // changes the selection at once, but a pinch/pan that follows must not.
+  let selectionAtFirstTouch: string[] = [];
 
   const local = (event: { clientX: number; clientY: number }): Point => {
     // Stage mode: the canvas fills `area`, so area-local = canvas-local.
@@ -113,9 +119,14 @@ export function attachStageGestures(area: HTMLElement, store: EditorStoreApi): (
       return;
     }
     touches.set(event.pointerId, local(event));
+    // Capture phase: runs before the canvas handlers that change the selection.
+    if (touches.size === 1) selectionAtFirstTouch = Array.from(store.getState().selectedNodeIds);
     if (touches.size < 2) return; // one finger selects/drags as usual
     event.stopImmediatePropagation(); // the extra finger must not select or start its own drag
-    if (!pinch) store.getState().cancelGesture();
+    if (!pinch) {
+      store.getState().cancelGesture();
+      if (!sameIds(store.getState().selectedNodeIds, selectionAtFirstTouch)) replaceSelection(store, selectionAtFirstTouch);
+    }
     restartPinch();
   };
 

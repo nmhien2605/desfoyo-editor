@@ -145,6 +145,36 @@ describe('attachStageGestures', () => {
     area.remove();
   });
 
+  it('a pinch that starts on empty canvas keeps the selection the first finger cleared', () => {
+    const store = createEditorStore(doc);
+    store.getState().setStage({ backdropUrl: 'x', pageCenter: { x: 0.5, y: 0.5 }, pageBox: { width: 1, height: 1 } });
+    store.getState().setStageFit({ zoom: 1, panX: 0, panY: 0 });
+    store.getState().select('a');
+    const area = document.createElement('div');
+    const child = document.createElement('div');
+    area.appendChild(child);
+    document.body.appendChild(area);
+    const detach = attachStageGestures(area, store);
+    // Stand-in for marquee.ts: an empty-canvas pointerdown deselects.
+    const deselect = () => store.getState().select(null);
+    child.addEventListener('pointerdown', deselect);
+
+    touch('pointerdown', 1, 10, 10, child);
+    expect(store.getState().selectedNodeIds.size).toBe(0);
+    touch('pointerdown', 2, 30, 10, child);
+    expect(Array.from(store.getState().selectedNodeIds)).toEqual(['a']);
+    touch('pointerup', 1, 10, 10, child);
+    touch('pointerup', 2, 30, 10, child);
+
+    // A lone tap on empty canvas still deselects.
+    touch('pointerdown', 4, 10, 10, child);
+    touch('pointerup', 4, 10, 10, child);
+    expect(store.getState().selectedNodeIds.size).toBe(0);
+    child.removeEventListener('pointerdown', deselect);
+    detach();
+    area.remove();
+  });
+
   it('swallows Space only while the pointer is over the editor, but always arms Space-pan', () => {
     const store = createEditorStore(doc);
     const area = document.createElement('div');
