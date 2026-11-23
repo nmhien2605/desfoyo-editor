@@ -19,6 +19,7 @@ import { createViewport } from '../render/viewport';
 import type { SceneReconciler } from '../render/SceneReconciler';
 import type { EditorStage } from '../render/stage';
 import { attachStageGestures, resetStageView, setStageZoom, stageZoomLevel, stepStageZoom, watchStageZoom } from '../render/interactions/stageGestures';
+import { selectionRect, watchSelectionRect, type SelectionRect } from './selectionRect';
 import { exportCanvas, exportPng, exportSvg } from '../services/exportService';
 import { attachShortcuts } from '../services/shortcuts';
 import { deleteSelection, groupSelection, ungroupSelection, replaceSelection, moveNode } from '../core/actions';
@@ -66,6 +67,8 @@ export interface EditorHandle {
   setZoom(level: number): void;
   /** Stage mode: current zoom relative to the fit view (1 = fit). 1 when not in stage mode or not fitted yet. */
   getZoom(): number;
+  /** Selection box in CSS px relative to the Editor's host element (see EditorProps.onSelectionRectChange). */
+  getSelectionRect(): SelectionRect | null;
 }
 
 export interface EditorProps {
@@ -90,6 +93,13 @@ export interface EditorProps {
   stage?: EditorStage;
   /** Stage mode: fires when the zoom level (relative to the fit view, 1 = fit) changes — gestures, zoom calls, resetView, resize refit. */
   onZoomChange?: (level: number) => void;
+  /**
+   * Axis-aligned box of the selection (single or multi, locked nodes included) in CSS px relative to
+   * the Editor's host element, plus the node's rotation in degrees (0 for multi); null when nothing
+   * on the current page is selected. Fires on selection / node / camera / host-size changes, at most
+   * once per animation frame and only when the rect changed.
+   */
+  onSelectionRectChange?: (rect: SelectionRect | null) => void;
   /** Called on double-click of a selected node. When provided, the built-in behaviour (inline text edit, image crop) runs only if it returns true. */
   onNodeDoubleClick?: (nodeId: string, nodeType: Node['type']) => boolean | void;
   /** Fires after every history change: a new edit ('push'), undo, redo, or loadDocument ('reset'). */
@@ -143,6 +153,11 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   useEffect(() => (staged && areaRef.current ? attachStageGestures(areaRef.current, store) : undefined), [store, staged]);
 
   useEffect(() => watchStageZoom(store, (level) => propsRef.current.onZoomChange?.(level)), [store]);
+
+  useEffect(
+    () => watchSelectionRect(store, (rect) => propsRef.current.onSelectionRectChange?.(rect), areaRef.current),
+    [store],
+  );
 
   useEffect(
     () =>
@@ -260,6 +275,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
       zoomOut: () => stepStageZoom(store, -1),
       setZoom: (level) => setStageZoom(store, level),
       getZoom: () => stageZoomLevel(store.getState()),
+      getSelectionRect: () => selectionRect(store.getState()),
     }),
     [store],
   );

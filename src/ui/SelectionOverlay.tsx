@@ -60,7 +60,7 @@ export function selectionBox(node: Node): { x: number; y: number; width: number;
   return { x: 0, y: 0, width: node.size.width, height: node.size.height };
 }
 
-function worldPoint(node: Node, local: Point): Point {
+export function worldPoint(node: Node, local: Point): Point {
   const { transform, size } = node;
   const pivotLocal = {
     x: (transform.originX ?? 0) * size.width,

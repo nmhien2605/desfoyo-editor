@@ -127,6 +127,7 @@ function App() {
 | `zoomIn(): void` / `zoomOut(): void` | Stage mode: zoom lên/xuống mức kế tiếp trong `10/25/50/75/100/125/150/200/300/400/600/800%` (kẹp trong `[minZoom, maxZoom]`), quanh tâm vùng nhìn (canvas trừ `fitInset`). Ngoài stage mode không làm gì. |
 | `setZoom(level: number): void` | Stage mode: đặt zoom theo **mức so với fit** (`1` = fit = "100%"), kẹp trong `[minZoom, maxZoom]`, quanh tâm vùng nhìn. |
 | `getZoom(): number` | Stage mode: mức zoom hiện tại so với fit (`1` = fit). Trả `1` khi không ở stage mode hoặc chưa fit xong. |
+| `getSelectionRect(): SelectionRect \| null` | Vị trí vùng chọn hiện tại trên màn hình (cùng giá trị với `onSelectionRectChange`), lấy tức thì. |
 
 Tất cả method add/update/remove/reorder ở trên đi qua cùng hệ thống undo/redo của editor (mỗi lệnh là 1 history entry) — không cần tự quản lý riêng.
 
@@ -154,7 +155,28 @@ Tất cả method add/update/remove/reorder ở trên đi qua cùng hệ thống
 | `viewScale` | `number` | | Zoom cố định do host quyết định: canvas có kích thước CSS = `page.size × viewScale`, tắt wheel-zoom, pan (Space/chuột giữa), phím tắt zoom và "Fit". Đổi giá trị lúc runtime sẽ resize canvas tại chỗ (không remount, giữ history). Không truyền = hành vi zoom/pan bình thường. |
 | `onNodeDoubleClick` | `(nodeId, nodeType) => boolean \| void` | | Gọi khi double-click node đang chọn. Khi có prop này, hành vi mặc định (sửa text inline, crop ảnh) **chỉ chạy nếu callback trả `true`** — dùng để mở modal sửa text của host. |
 | `onZoomChange` | `(level: number) => void` | | Stage mode: bắn khi mức zoom so với fit (`1` = fit) đổi — cử chỉ (pinch, ctrl/meta+wheel), `zoomIn/zoomOut/setZoom`, `resetView`/double-tap, và khi canvas resize làm fit đổi lúc đang zoom. Bắn `1` lần fit đầu tiên. Pan thuần không bắn. |
+| `onSelectionRectChange` | `(rect: SelectionRect \| null) => void` | | Vị trí vùng chọn trên màn hình — xem "Vị trí vùng chọn" bên dưới. |
 | `onHistoryChange` | `(h: HistoryState) => void` | | Bắn sau mỗi thay đổi history: `{ canUndo, canRedo, pastLength, reason }`, `reason` là `'push'` (edit mới), `'undo'`, `'redo'` hoặc `'reset'` (`loadDocument`). Một lần kéo/resize/rotate = đúng 1 `'push'` lúc thả chuột. |
+
+### Vị trí vùng chọn (`onSelectionRectChange` / `getSelectionRect`)
+
+Dùng để đặt UI của host cạnh node đang chọn (vd nút khoá/mở khoá tròn kiểu Figma/Canva):
+
+```ts
+type SelectionRect = { x: number; y: number; width: number; height: number; rotation: number };
+```
+
+- `x/y/width/height`: hộp **thẳng trục** (axis-aligned) bao vùng chọn (1 hay nhiều node, gồm cả node khoá), px CSS **tương đối với phần tử host** mà `<Editor>` render vào — host đặt UI `position: absolute` trong cùng box đó. `rotation`: góc của node (độ) khi chọn 1 node, `0` khi chọn nhiều.
+- `null` khi không chọn gì hoặc node đang chọn không nằm trên page hiện tại.
+- Bắn khi selection đổi, node đang chọn di chuyển/resize/xoay (cả lúc đang kéo), camera đổi (zoom/pan/fit, stage và mode thường) và host resize. Tối đa 1 lần mỗi animation frame, không bắn lại khi rect y hệt lần trước.
+
+```tsx
+const [rect, setRect] = useState<SelectionRect | null>(null);
+<div className="relative">
+  <Editor chrome={false} stage={stage} onSelectionRectChange={setRect} />
+  {rect && <button style={{ position: 'absolute', left: rect.x + rect.width + 8, top: rect.y }}>Lock</button>}
+</div>
+```
 
 ## 3b. Nhúng chỉ canvas (host tự làm UI)
 

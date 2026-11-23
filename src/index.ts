@@ -5,6 +5,7 @@ export * from './schema';
 export { Editor } from './ui/Editor';
 export type { EditorProps, EditorHandle, HistoryState } from './ui/Editor';
 export type { EditorStage } from './render/stage';
+export type { SelectionRect } from './ui/selectionRect';
 export {
   registerFont,
   loadFont,
