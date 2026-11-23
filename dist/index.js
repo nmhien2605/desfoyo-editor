@@ -22243,15 +22243,74 @@ function N_() {
 	});
 }
 //#endregion
+//#region src/ui/selectionRect.ts
+function P_(e) {
+	let t = gh(e);
+	if (t.length === 0) return null;
+	let n, r;
+	if (t.length === 1) {
+		let e = mh(t[0]), i = [
+			{
+				x: e.x,
+				y: e.y
+			},
+			{
+				x: e.x + e.width,
+				y: e.y
+			},
+			{
+				x: e.x,
+				y: e.y + e.height
+			},
+			{
+				x: e.x + e.width,
+				y: e.y + e.height
+			}
+		].map((e) => hh(t[0], e));
+		n = {
+			x: Math.min(...i.map((e) => e.x)),
+			y: Math.min(...i.map((e) => e.y))
+		}, r = {
+			x: Math.max(...i.map((e) => e.x)),
+			y: Math.max(...i.map((e) => e.y))
+		};
+	} else ({min: n, max: r} = lu(t));
+	let { zoom: i, panX: a, panY: o } = e.camera;
+	return {
+		x: n.x * i + a,
+		y: n.y * i + o,
+		width: (r.x - n.x) * i,
+		height: (r.y - n.y) * i,
+		rotation: t.length === 1 ? t[0].transform.rotation * 180 / Math.PI : 0
+	};
+}
+function F_(e, t) {
+	return !e || !t ? e === t : e.x === t.x && e.y === t.y && e.width === t.width && e.height === t.height && e.rotation === t.rotation;
+}
+function I_(e, t, n) {
+	let r = null, i = 0, a = () => {
+		i = 0;
+		let n = P_(e.getState());
+		F_(n, r) || (r = n, t(n));
+	}, o = () => {
+		i ||= requestAnimationFrame(a);
+	}, s = e.subscribe((e, t) => {
+		(e.document !== t.document || e.selectedNodeIds !== t.selectedNodeIds || e.camera !== t.camera || e.activePageId !== t.activePageId) && o();
+	}), c = n && typeof ResizeObserver < "u" ? new ResizeObserver(o) : null;
+	return n && c?.observe(n), o(), () => {
+		s(), c?.disconnect(), i && cancelAnimationFrame(i);
+	};
+}
+//#endregion
 //#region src/services/svgSerializer.ts
-var P_ = 0;
-function F_(e, t, n) {
+var L_ = 0;
+function R_(e, t, n) {
 	if (e.type === "solid") {
 		let t = e.alpha === void 0 ? "" : ` fill-opacity="${e.alpha}"`;
 		return `fill="${e.color}"${t}`;
 	}
 	if (e.type === "texture") return "fill=\"#888888\"";
-	let r = `grad-${P_++}`, i = e.stops.map((e) => `<stop offset="${e.offset}" stop-color="${e.color}"${e.alpha === void 0 ? "" : ` stop-opacity="${e.alpha}"`}/>`).join(""), a = n && n.width > 0 && n.height > 0 ? ` gradientUnits="userSpaceOnUse" gradientTransform="matrix(${n.width} 0 0 ${n.height} 0 0)"` : "";
+	let r = `grad-${L_++}`, i = e.stops.map((e) => `<stop offset="${e.offset}" stop-color="${e.color}"${e.alpha === void 0 ? "" : ` stop-opacity="${e.alpha}"`}/>`).join(""), a = n && n.width > 0 && n.height > 0 ? ` gradientUnits="userSpaceOnUse" gradientTransform="matrix(${n.width} 0 0 ${n.height} 0 0)"` : "";
 	if (e.type === "linear-gradient") {
 		let n = e.angle, o = .5 + Math.cos(n) * .5, s = .5 + Math.sin(n) * .5, c = .5 - Math.cos(n) * .5, l = .5 - Math.sin(n) * .5;
 		t.push(`<linearGradient id="${r}" x1="${c}" y1="${l}" x2="${o}" y2="${s}"${a}>${i}</linearGradient>`);
@@ -22261,7 +22320,7 @@ function F_(e, t, n) {
 	}
 	return `fill="url(#${r})"`;
 }
-function I_(e, t, n, r) {
+function z_(e, t, n, r) {
 	let i = r / 2, a = [];
 	for (let o = 0; o < n * 2; o++) {
 		let s = o % 2 == 0 ? r : i, c = Math.PI * o / n - Math.PI / 2;
@@ -22269,8 +22328,8 @@ function I_(e, t, n, r) {
 	}
 	return a.join(" ");
 }
-function L_(e, t) {
-	let { width: n, height: r } = e.size, i = F_(e.fill, t);
+function B_(e, t) {
+	let { width: n, height: r } = e.size, i = R_(e.fill, t);
 	switch (e.shape) {
 		case "rect": return e.cornerRadius ? `<rect width="${n}" height="${r}" rx="${e.cornerRadius}" ${i}/>` : `<rect width="${n}" height="${r}" ${i}/>`;
 		case "ellipse": return `<ellipse cx="${n / 2}" cy="${r / 2}" rx="${n / 2}" ry="${r / 2}" ${i}/>`;
@@ -22282,84 +22341,84 @@ function L_(e, t) {
 			n / 2,
 			r
 		]).reduce((e, t, n) => (n % 2 == 0 ? e.push(`${t}`) : e[e.length - 1] += `,${t}`, e), []).join(" ")}" ${i}/>`;
-		case "star": return `<polygon points="${I_(n / 2, r / 2, 5, Math.min(n, r) / 2)}" ${i}/>`;
+		case "star": return `<polygon points="${z_(n / 2, r / 2, 5, Math.min(n, r) / 2)}" ${i}/>`;
 		case "line": return `<line x1="0" y1="0" x2="${n}" y2="${r}" stroke="${e.fill.type === "solid" ? e.fill.color : "#000000"}"/>`;
 		case "path": return `<rect width="${n}" height="${r}" ${i}/>`;
 	}
 }
-function R_(e) {
+function V_(e) {
 	let { transform: t, size: n } = e, r = t.originX ?? 0, i = t.originY ?? 0, a = r * n.width, o = i * n.height, s = t.rotation * 180 / Math.PI;
 	return `translate(${t.x} ${t.y}) rotate(${s}) scale(${t.scaleX} ${t.scaleY}) translate(${-a} ${-o})`;
 }
-function z_(e) {
+function H_(e) {
 	let t = e.opacity === 1 ? "" : ` opacity="${e.opacity}"`, n = e.blendMode && e.blendMode !== "normal" ? ` style="mix-blend-mode:${e.blendMode}"` : "";
-	return ` transform="${R_(e)}"${t}${n}`;
+	return ` transform="${V_(e)}"${t}${n}`;
 }
-function B_(e) {
+function U_(e) {
 	let t = [`M ${e[0]} ${e[1]}`];
 	for (let n = 2; n + 5 < e.length; n += 6) t.push(`C ${e[n]} ${e[n + 1]} ${e[n + 2]} ${e[n + 3]} ${e[n + 4]} ${e[n + 5]}`);
 	return t.push("Z"), t.join(" ");
 }
-var V_ = 0;
-function H_(e, t, n) {
-	let r = `text-shadow-${V_++}`, i = e.distance * t, a = Math.cos(e.angle) * i, o = Math.sin(e.angle) * i, s = e.blur ?? 4;
+var W_ = 0;
+function G_(e, t, n) {
+	let r = `text-shadow-${W_++}`, i = e.distance * t, a = Math.cos(e.angle) * i, o = Math.sin(e.angle) * i, s = e.blur ?? 4;
 	return n.push(`<filter id="${r}" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur in="SourceAlpha" stdDeviation="${s / 2}"/><feOffset dx="${a}" dy="${o}" result="offsetblur"/><feFlood flood-color="${e.color}"/><feComposite in2="offsetblur" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>`), r;
 }
-function U_(e, t, n) {
+function K_(e, t, n) {
 	return Vp(t, e, n).map((t) => {
-		let n = t.shapes.map((e) => [e.outer, ...e.holes].map(B_).join(" ")).join(" ");
+		let n = t.shapes.map((e) => [e.outer, ...e.holes].map(U_).join(" ")).join(" ");
 		return t.mode === "stroke" ? `<path d="${n}" fill="none" stroke="${e.color}" stroke-width="${e.thickness ?? 2}"/>` : `<path d="${n}" fill="${e.color}" fill-rule="nonzero"/>`;
 	}).join("");
 }
-function W_(e, t) {
+function q_(e, t) {
 	let n = tf(e.font.family, e.font);
 	if (!n) return "";
 	let r = Pp(e, n.font), i = r.shapes;
 	if (i.length === 0) return "";
-	let a = i.map((e) => [e.outer, ...e.holes].map(B_).join(" ")).join(" "), o = zp(e.effects), s = "", c = "";
-	return o?.style === "drop" ? c = ` filter="url(#${H_(o, e.font.size, t)})"` : o && (s = U_(o, i, e.font.size)), `${s}<path d="${a}" fill-rule="nonzero" ${F_(e.fill, t, {
+	let a = i.map((e) => [e.outer, ...e.holes].map(U_).join(" ")).join(" "), o = zp(e.effects), s = "", c = "";
+	return o?.style === "drop" ? c = ` filter="url(#${G_(o, e.font.size, t)})"` : o && (s = K_(o, i, e.font.size)), `${s}<path d="${a}" fill-rule="nonzero" ${R_(e.fill, t, {
 		width: r.pivotWidth,
 		height: r.height
 	})}${c}/>`;
 }
-function G_(e, t, n, r) {
+function J_(e, t, n, r) {
 	if (!e.visible) return "";
 	if (e.type === "svg") {
 		let t = r?.[e.id];
-		return t ? `<image${z_(e)} width="${e.size.width}" height="${e.size.height}" href="${t}"/>` : "";
+		return t ? `<image${H_(e)} width="${e.size.width}" height="${e.size.height}" href="${t}"/>` : "";
 	}
 	if (e.type === "image") {
 		let n = rd(e.assetId, t);
-		return `<image${z_(e)} width="${e.size.width}" height="${e.size.height}" href="${n}"/>`;
+		return `<image${H_(e)} width="${e.size.width}" height="${e.size.height}" href="${n}"/>`;
 	}
 	if (e.type === "text") {
-		let t = W_(e, n);
-		return t ? `<g${z_(e)}>${t}</g>` : "";
+		let t = q_(e, n);
+		return t ? `<g${H_(e)}>${t}</g>` : "";
 	}
 	if (e.type === "group") {
-		let i = e.children.map((e) => G_(e, t, n, r)).join("");
-		return `<g${z_(e)}>${i}</g>`;
+		let i = e.children.map((e) => J_(e, t, n, r)).join("");
+		return `<g${H_(e)}>${i}</g>`;
 	}
-	return `<g${z_(e)}>${L_(e, n)}</g>`;
+	return `<g${H_(e)}>${B_(e, n)}</g>`;
 }
 //#endregion
 //#region src/services/exportService.ts
-async function K_(e, t, n, r = 1) {
+async function Y_(e, t, n, r = 1) {
 	return await cd(), e.renderer.extract.canvas({
 		target: t,
 		frame: new x(0, 0, n.width, n.height),
 		resolution: r
 	});
 }
-async function q_(e, t, n, r = 1) {
-	let i = await K_(e, t, n, r);
+async function X_(e, t, n, r = 1) {
+	let i = await Y_(e, t, n, r);
 	return new Promise((e, t) => {
 		i.toBlob((n) => {
 			n ? e(n) : t(/* @__PURE__ */ Error("Failed to export PNG"));
 		}, "image/png");
 	});
 }
-async function J_(e, t, n) {
+async function Z_(e, t, n) {
 	let r = {}, i = [];
 	return el(t.children, (t) => {
 		if (t.type !== "svg") return;
@@ -22372,14 +22431,14 @@ async function J_(e, t, n) {
 		}));
 	}), await Promise.all(i), r;
 }
-async function Y_(e, t, n, r) {
+async function Q_(e, t, n, r) {
 	await cd();
-	let i = await J_(e, t, r), a = [], o = t.children.map((e) => G_(e, n, a, i)).join(""), s = a.length > 0 ? `<defs>${a.join("")}</defs>` : "";
+	let i = await Z_(e, t, r), a = [], o = t.children.map((e) => J_(e, n, a, i)).join(""), s = a.length > 0 ? `<defs>${a.join("")}</defs>` : "";
 	return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${t.size.width} ${t.size.height}" width="${t.size.width}" height="${t.size.height}">${s}${o}</svg>`;
 }
 //#endregion
 //#region src/services/shortcuts.ts
-var X_ = 1, Z_ = 10, Q_ = 1.2, $_ = {
+var $_ = 1, ev = 10, tv = 1.2, nv = {
 	"mod+z": (e) => e.getState().undo(),
 	"mod+shift+z": (e) => e.getState().redo(),
 	"mod+y": (e) => e.getState().redo(),
@@ -22393,46 +22452,46 @@ var X_ = 1, Z_ = 10, Q_ = 1.2, $_ = {
 	"mod+g": (e) => lg(e),
 	"mod+shift+g": (e) => dg(e),
 	arrowup: (e) => hg(e, 0, -1),
-	arrowdown: (e) => hg(e, 0, X_),
+	arrowdown: (e) => hg(e, 0, $_),
 	arrowleft: (e) => hg(e, -1, 0),
-	arrowright: (e) => hg(e, X_, 0),
+	arrowright: (e) => hg(e, $_, 0),
 	"shift+arrowup": (e) => hg(e, 0, -10),
-	"shift+arrowdown": (e) => hg(e, 0, Z_),
+	"shift+arrowdown": (e) => hg(e, 0, ev),
 	"shift+arrowleft": (e) => hg(e, -10, 0),
-	"shift+arrowright": (e) => hg(e, Z_, 0),
-	"mod+=": (e) => ev(e, Q_),
-	"mod++": (e) => ev(e, Q_),
-	"mod+-": (e) => ev(e, 1 / Q_)
+	"shift+arrowright": (e) => hg(e, ev, 0),
+	"mod+=": (e) => rv(e, tv),
+	"mod++": (e) => rv(e, tv),
+	"mod+-": (e) => rv(e, 1 / tv)
 };
-function ev(e, t) {
+function rv(e, t) {
 	if (e.getState().stage) return;
 	let { camera: n } = e.getState();
 	e.getState().setCamera({ zoom: n.zoom * t });
 }
-function tv(e) {
+function iv(e) {
 	return e instanceof HTMLElement ? e.tagName === "INPUT" || e.tagName === "TEXTAREA" || e.isContentEditable : !1;
 }
-function nv(e) {
+function av(e) {
 	let t = [];
 	return (e.metaKey || e.ctrlKey) && t.push("mod"), e.shiftKey && t.push("shift"), e.altKey && t.push("alt"), t.push(e.key.toLowerCase()), t.join("+");
 }
-function rv(e, t) {
+function ov(e, t) {
 	if (t === !1) return () => {};
 	let n = t ? new Set(t) : null, r = (t) => {
-		if (tv(t.target)) return;
-		let r = nv(t);
+		if (iv(t.target)) return;
+		let r = av(t);
 		if (n && !n.has(r)) return;
-		let i = $_[r];
+		let i = nv[r];
 		i && (t.preventDefault(), i(e));
 	};
 	return window.addEventListener("keydown", r), () => window.removeEventListener("keydown", r);
 }
 //#endregion
 //#region src/ui/Editor.tsx
-function iv(e) {
+function sv(e) {
 	return [e.width, e.height];
 }
-var av = i(function(e, t) {
+var cv = i(function(e, t) {
 	let [n] = l(() => {
 		let t = Mu(_s.parse(e.document));
 		return e.viewScale != null && t.getState().setViewScale(e.viewScale), e.stage && t.getState().setStage(e.stage), e.initialSelectedNodeIds?.length && pg(t, e.initialSelectedNodeIds), t;
@@ -22441,13 +22500,13 @@ var av = i(function(e, t) {
 		pageContainer: null,
 		canvas: null
 	}), [i, a] = l(r.current), u = c(null), d = c(e);
-	d.current = e, o(() => rv(n, e.shortcuts), [n, e.shortcuts]), o(() => {
+	d.current = e, o(() => ov(n, e.shortcuts), [n, e.shortcuts]), o(() => {
 		n.getState().setViewScale(e.viewScale ?? null);
 	}, [n, e.viewScale]), o(() => {
 		n.getState().setStage(e.stage ?? null);
 	}, [n, e.stage]);
 	let f = c(null), p = e.stage != null;
-	o(() => p && f.current ? Dm(f.current, n) : void 0, [n, p]), o(() => Cm(n, (e) => d.current.onZoomChange?.(e)), [n]), o(() => n.subscribe((e, t) => {
+	o(() => p && f.current ? Dm(f.current, n) : void 0, [n, p]), o(() => Cm(n, (e) => d.current.onZoomChange?.(e)), [n]), o(() => I_(n, (e) => d.current.onSelectionRectChange?.(e), f.current), [n]), o(() => n.subscribe((e, t) => {
 		let { onChange: n, onSelectionChange: r, onHistoryChange: i } = d.current;
 		e.document !== t.document && n?.(e.document), Pu(e.selectedNodeIds, t.selectedNodeIds) || r?.(Array.from(e.selectedNodeIds)), (e.past !== t.past || e.future !== t.future) && e.lastHistoryAction && i?.({
 			canUndo: e.past.length > 0,
@@ -22473,16 +22532,16 @@ var av = i(function(e, t) {
 			let { app: t, pageContainer: i } = r.current;
 			if (!t || !i) throw Error("Editor is not mounted yet");
 			let a = n.getState();
-			return K_(t, i, (Nu(a) ?? a.document.pages[0]).size, e);
+			return Y_(t, i, (Nu(a) ?? a.document.pages[0]).size, e);
 		},
 		export: async (e, t = 1) => {
 			let { app: i, pageContainer: a } = r.current;
 			if (!i || !a) throw Error("Editor is not mounted yet");
 			let o = n.getState(), s = o.document, c = Nu(o) ?? s.pages[0];
-			if (e === "png") return q_(i, a, c.size, t);
+			if (e === "png") return X_(i, a, c.size, t);
 			let l = u.current;
 			if (!l) throw Error("Editor is not mounted yet");
-			let d = await Y_(i, c, s, l);
+			let d = await Q_(i, c, s, l);
 			return new Blob([d], { type: "image/svg+xml" });
 		},
 		undo: () => n.getState().undo(),
@@ -22535,7 +22594,8 @@ var av = i(function(e, t) {
 		zoomIn: () => wm(n, 1),
 		zoomOut: () => wm(n, -1),
 		setZoom: (e) => Sm(n, e),
-		getZoom: () => xm(n.getState())
+		getZoom: () => xm(n.getState()),
+		getSelectionRect: () => P_(n.getState())
 	}), [n]);
 	let m = async (e) => {
 		e.preventDefault();
@@ -22544,7 +22604,7 @@ var av = i(function(e, t) {
 		let o = Vm(i, () => n.getState().camera).toWorld({
 			x: e.clientX,
 			y: e.clientY
-		}), s = a.type === "svg" ? kg(t, ...iv(Ag(await Fd(a.dataUri)))) : Eg(t, ...iv(await Og(a.dataUri)));
+		}), s = a.type === "svg" ? kg(t, ...sv(Ag(await Fd(a.dataUri)))) : Eg(t, ...sv(await Og(a.dataUri)));
 		s.transform.x = o.x, s.transform.y = o.y, n.getState().dispatch({
 			type: "AddNode",
 			pageId: n.getState().activePageId,
@@ -22611,7 +22671,7 @@ var av = i(function(e, t) {
 });
 //#endregion
 //#region src/services/headlessRender.ts
-async function ov(e, t, n) {
+async function lv(e, t, n) {
 	let r = new u();
 	await r.init({
 		width: e.size.width,
@@ -22627,17 +22687,17 @@ async function ov(e, t, n) {
 	try {
 		return await n(r, i, a);
 	} finally {
-		a.destroy(), sv(r), r.destroy({ removeView: !0 });
+		a.destroy(), uv(r), r.destroy({ removeView: !0 });
 	}
 }
-function sv(e) {
+function uv(e) {
 	(e.renderer?.filter)?._globalFilterBindGroup?.destroy();
 }
-function cv(e, t, n = 1) {
-	return ov(e, t, (t, r) => q_(t, r, e.size, n));
+function dv(e, t, n = 1) {
+	return lv(e, t, (t, r) => X_(t, r, e.size, n));
 }
-function lv(e, t) {
-	return ov(e, t, (n, r, i) => Y_(n, e, t, i));
+function fv(e, t) {
+	return lv(e, t, (n, r, i) => Q_(n, e, t, i));
 }
 //#endregion
-export { hs as AssetRefSchema, Qo as BaseNodeSchema, Zo as BaseNodeShape, Jo as BlendModeSchema, os as CircleParamsSchema, gs as DocumentMetaSchema, _s as DocumentSchema, av as Editor, qo as EffectSchema, es as FillSchema, $o as GradientStopSchema, fs as GroupNodeSchema, ls as ImageNodeSchema, ps as NodeSchema, ms as PageBackgroundSchema, J as PageSchema, cs as ShapeNodeSchema, Xo as SizeSchema, ts as StrokeSchema, us as SvgNodeSchema, ds as TextNodeSchema, Yo as TransformSchema, rs as WarpAnchorSchema, is as WarpPathSchema, ss as WarpSchema, as as WarpTypeSchema, tf as getLoadedFont, of as loadFont, Rp as measureText, af as onFontLoaded, Qd as registerFont, $d as registeredFamilies, cv as renderPageToPng, lv as renderPageToSvg, vd as setImageSrcResolver };
+export { hs as AssetRefSchema, Qo as BaseNodeSchema, Zo as BaseNodeShape, Jo as BlendModeSchema, os as CircleParamsSchema, gs as DocumentMetaSchema, _s as DocumentSchema, cv as Editor, qo as EffectSchema, es as FillSchema, $o as GradientStopSchema, fs as GroupNodeSchema, ls as ImageNodeSchema, ps as NodeSchema, ms as PageBackgroundSchema, J as PageSchema, cs as ShapeNodeSchema, Xo as SizeSchema, ts as StrokeSchema, us as SvgNodeSchema, ds as TextNodeSchema, Yo as TransformSchema, rs as WarpAnchorSchema, is as WarpPathSchema, ss as WarpSchema, as as WarpTypeSchema, tf as getLoadedFont, of as loadFont, Rp as measureText, af as onFontLoaded, Qd as registerFont, $d as registeredFamilies, dv as renderPageToPng, fv as renderPageToSvg, vd as setImageSrcResolver };

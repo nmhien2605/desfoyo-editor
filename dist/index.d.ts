@@ -1251,6 +1251,15 @@ type DevMenuConfig = {
     onSampleChange: (name: string) => void;
 };
 
+/** Selection box in CSS px relative to the Editor's host element; rotation (deg) is 0 for multi-select. */
+interface SelectionRect {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    rotation: number;
+}
+
 interface EditorHandle {
     getDocument(): Document;
     loadDocument(doc: Document): void;
@@ -1305,6 +1314,8 @@ interface EditorHandle {
     setZoom(level: number): void;
     /** Stage mode: current zoom relative to the fit view (1 = fit). 1 when not in stage mode or not fitted yet. */
     getZoom(): number;
+    /** Selection box in CSS px relative to the Editor's host element (see EditorProps.onSelectionRectChange). */
+    getSelectionRect(): SelectionRect | null;
 }
 interface EditorProps {
     document: Document;
@@ -1328,6 +1339,13 @@ interface EditorProps {
     stage?: EditorStage;
     /** Stage mode: fires when the zoom level (relative to the fit view, 1 = fit) changes — gestures, zoom calls, resetView, resize refit. */
     onZoomChange?: (level: number) => void;
+    /**
+     * Axis-aligned box of the selection (single or multi, locked nodes included) in CSS px relative to
+     * the Editor's host element, plus the node's rotation in degrees (0 for multi); null when nothing
+     * on the current page is selected. Fires on selection / node / camera / host-size changes, at most
+     * once per animation frame and only when the rect changed.
+     */
+    onSelectionRectChange?: (rect: SelectionRect | null) => void;
     /** Called on double-click of a selected node. When provided, the built-in behaviour (inline text edit, image crop) runs only if it returns true. */
     onNodeDoubleClick?: (nodeId: string, nodeType: Node['type']) => boolean | void;
     /** Fires after every history change: a new edit ('push'), undo, redo, or loadDocument ('reset'). */
@@ -1372,4 +1390,4 @@ declare function renderPageToSvg(page: Page, doc: Document): Promise<string>;
 type ImageSrcResolver = (src: string, maxSide: number) => string;
 declare function setImageSrcResolver(resolver: ImageSrcResolver | null): void;
 
-export { type AssetRef, AssetRefSchema, type BaseNode, BaseNodeSchema, BaseNodeShape, type BlendMode, BlendModeSchema, type CircleParams, CircleParamsSchema, type Document, type DocumentMeta, DocumentMetaSchema, DocumentSchema, Editor, type EditorHandle, type EditorProps, type EditorStage, type Effect, EffectSchema, type Fill, FillSchema, type FontStyle, type FontVariant, type GradientStop, GradientStopSchema, type GroupNode, GroupNodeSchema, type HistoryState, type ImageNode, ImageNodeSchema, type ImageSrcResolver, type LoadedFont, type Node, NodeSchema, type Page, type PageBackground, PageBackgroundSchema, PageSchema, type ShapeNode, ShapeNodeSchema, type Size, SizeSchema, type Stroke, StrokeSchema, type SvgNode, SvgNodeSchema, type TextNode, TextNodeSchema, type Transform, TransformSchema, type Warp, type WarpAnchor, WarpAnchorSchema, type WarpPath, WarpPathSchema, WarpSchema, type WarpType, WarpTypeSchema, getLoadedFont, loadFont, measureText, onFontLoaded, registerFont, registeredFamilies, renderPageToPng, renderPageToSvg, setImageSrcResolver };
+export { type AssetRef, AssetRefSchema, type BaseNode, BaseNodeSchema, BaseNodeShape, type BlendMode, BlendModeSchema, type CircleParams, CircleParamsSchema, type Document, type DocumentMeta, DocumentMetaSchema, DocumentSchema, Editor, type EditorHandle, type EditorProps, type EditorStage, type Effect, EffectSchema, type Fill, FillSchema, type FontStyle, type FontVariant, type GradientStop, GradientStopSchema, type GroupNode, GroupNodeSchema, type HistoryState, type ImageNode, ImageNodeSchema, type ImageSrcResolver, type LoadedFont, type Node, NodeSchema, type Page, type PageBackground, PageBackgroundSchema, PageSchema, type SelectionRect, type ShapeNode, ShapeNodeSchema, type Size, SizeSchema, type Stroke, StrokeSchema, type SvgNode, SvgNodeSchema, type TextNode, TextNodeSchema, type Transform, TransformSchema, type Warp, type WarpAnchor, WarpAnchorSchema, type WarpPath, WarpPathSchema, WarpSchema, type WarpType, WarpTypeSchema, getLoadedFont, loadFont, measureText, onFontLoaded, registerFont, registeredFamilies, renderPageToPng, renderPageToSvg, setImageSrcResolver };
